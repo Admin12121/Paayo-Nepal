@@ -1,0 +1,77 @@
+[package]
+name = "tour_backend"
+version = "0.1.0"
+edition = "2021"
+description = "Nepal Tourism API Backend"
+authors = ["Paayo Nepal Team"]
+
+[dependencies]
+# Web Framework
+axum = { version = "0.7", features = ["multipart", "macros"] }
+axum-extra = { version = "0.9", features = ["typed-header", "cookie"] }
+tokio = { version = "1.0", features = ["full"] }
+tower = { version = "0.4", features = ["full"] }
+tower-http = { version = "0.5", features = ["cors", "trace", "compression-gzip", "limit", "timeout"] }
+
+# Database
+sqlx = { version = "0.7", features = ["runtime-tokio", "mysql", "chrono", "uuid", "json"] }
+
+# Redis
+redis = { version = "0.25", features = ["tokio-comp", "connection-manager"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Validation
+validator = { version = "0.18", features = ["derive"] }
+
+# Date/Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# UUID
+uuid = { version = "1.0", features = ["v4", "serde"] }
+
+# Password hashing (BetterAuth compatible)
+bcrypt = "0.15"
+
+# Image Processing - AVIF support
+image = { version = "0.25", features = ["avif", "jpeg", "png", "webp"] }
+blurhash = "0.2"
+ravif = "0.11" # High-quality AVIF encoding
+
+# Async utilities
+futures = "0.3"
+async-trait = "0.1"
+async-stream = "0.3"
+tokio-stream = "0.1"
+
+# Environment & Config
+dotenvy = "0.15"
+config = "0.14"
+
+# Logging & Tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Rate limiting
+governor = "0.6"
+
+# Slug generation
+slug = "0.1"
+
+# MIME type detection
+mime_guess = "2.0"
+
+[dev-dependencies]
+tokio-test = "0.4"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
