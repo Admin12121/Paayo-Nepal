@@ -3,33 +3,48 @@
 import { useState, useEffect } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
-import type { Post } from "@/lib/api-client";
+import { HeroSkeleton } from "@/components/ui/Skeleton";
 
-interface HeroSectionProps {
-  posts: Post[];
+export interface HeroSlideItem {
+  id: string;
+  title: string;
+  slug: string;
+  cover_image: string | null;
+  subtitle: string | null;
+  published_at: string | null;
+  like_count: number;
+  _isHeroSlide: boolean;
 }
 
-export function HeroSection({ posts }: HeroSectionProps) {
+interface HeroSectionProps {
+  slides: HeroSlideItem[];
+  loading?: boolean;
+}
+
+export function HeroSection({ slides, loading }: HeroSectionProps) {
   const [currentSlide, setCurrentSlide] = useState(0);
 
   useEffect(() => {
-    if (posts.length <= 1) return;
+    if (slides.length <= 1) return;
     const timer = setInterval(() => {
-      setCurrentSlide((prev) => (prev + 1) % posts.length);
+      setCurrentSlide((prev) => (prev + 1) % slides.length);
     }, 5000);
     return () => clearInterval(timer);
-  }, [posts.length]);
+  }, [slides.length]);
 
-  if (!posts || posts.length === 0) return null;
+  // Show skeleton while loading or when no slides
+  if (loading || !slides || slides.length === 0) {
+    return <HeroSkeleton />;
+  }
 
-  const slide = posts[currentSlide];
+  const slide = slides[currentSlide];
 
   const nextSlide = () => {
-    setCurrentSlide((prev) => (prev + 1) % posts.length);
+    setCurrentSlide((prev) => (prev + 1) % slides.length);
   };
 
   const prevSlide = () => {
-    setCurrentSlide((prev) => (prev - 1 + posts.length) % posts.length);
+    setCurrentSlide((prev) => (prev - 1 + slides.length) % slides.length);
   };
 
   const publishedDate = slide.published_at
@@ -42,20 +57,24 @@ export function HeroSection({ posts }: HeroSectionProps) {
         .toUpperCase()
     : "";
 
+  // For hero slides, the slug already contains the full link path (e.g. "/photos/some-slug").
+  // For fallback posts, slug is already prefixed with "/blogs/..." from the homepage mapper.
+  const linkHref = slide._isHeroSlide ? slide.slug || "#" : slide.slug;
+
   return (
     <section className="relative h-[500px] md:h-[700px] w-full overflow-hidden bg-gray-900">
       <div
         className="absolute inset-0 bg-cover bg-center transition-all duration-700"
         style={{
-          backgroundImage: slide.featured_image
-            ? `url(${slide.featured_image})`
+          backgroundImage: slide.cover_image
+            ? `url(${slide.cover_image})`
             : undefined,
         }}
       >
         <div className="absolute inset-0 bg-black/50"></div>
       </div>
 
-      {posts.length > 1 && (
+      {slides.length > 1 && (
         <>
           <button
             onClick={prevSlide}
@@ -77,15 +96,22 @@ export function HeroSection({ posts }: HeroSectionProps) {
 
       <div className="relative h-full flex flex-col justify-end pb-12 sm:pb-16">
         <div className="text-white px-6 sm:px-8 lg:px-12 max-w-4xl z-10">
+          {slide.subtitle && (
+            <p className="text-sm sm:text-base font-light tracking-[0.15em] uppercase text-white/80 mb-3">
+              {slide.subtitle}
+            </p>
+          )}
           <h1 className="font-display text-4xl sm:text-3xl lg:text-4xl xl:text-5xl mb-8 leading-[1.1] tracking-tight uppercase">
             {slide.title}
           </h1>
           <div className="flex items-center gap-6 mb-5 text-xs sm:text-sm font-light tracking-[0.15em] uppercase">
             {publishedDate && <span>{publishedDate}</span>}
-            <span className="text-white/80">{slide.views} Views</span>
+            {!slide._isHeroSlide && (
+              <span className="text-white/80">{slide.like_count} Likes</span>
+            )}
           </div>
           <Link
-            href={`/blogs/${slide.slug}`}
+            href={linkHref}
             className="relative inline-flex items-center justify-center gap-3 px-7 py-4 rounded-xl backdrop-blur-[18.97px] shadow-[inset_9.49px_9.49px_1.58px_-11.07px_rgba(255,255,255,0.5),inset_6.32px_6.32px_3.16px_-6.32px_#B3B3B3,inset_-6.32px_-6.32px_3.16px_-6.32px_#B3B3B3,inset_0px_0px_0px_1.35px_#999999,inset_0px_0px_69.57px_rgba(242,242,242,0.5)] hover:shadow-[inset_9.49px_9.49px_1.58px_-11.07px_rgba(255,255,255,0.7),inset_6.32px_6.32px_3.16px_-6.32px_#B3B3B3,inset_-6.32px_-6.32px_3.16px_-6.32px_#B3B3B3,inset_0px_0px_0px_1.35px_#999999,inset_0px_0px_69.57px_rgba(242,242,242,0.7)] transition-all"
           >
             <span className="text-white text-xl">View More</span>
@@ -116,9 +142,9 @@ export function HeroSection({ posts }: HeroSectionProps) {
         </div>
       </div>
 
-      {posts.length > 1 && (
+      {slides.length > 1 && (
         <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex gap-3">
-          {posts.map((_, index) => (
+          {slides.map((_, index) => (
             <button
               key={index}
               onClick={() => setCurrentSlide(index)}

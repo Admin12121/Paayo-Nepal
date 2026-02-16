@@ -1,21 +1,21 @@
-use sqlx::MySqlPool;
+use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::{
-    error::ApiError,
-    handlers::regions::UpdateRegionInput,
-    models::{attraction::Attraction, region::Region},
-    services::CacheService,
-    utils::slug::generate_slug,
+    error::ApiError, handlers::regions::UpdateRegionInput, models::region::Region,
+    services::CacheService, utils::slug::generate_slug,
 };
 
+/// Maximum slug generation attempts before returning a conflict error.
+const MAX_SLUG_RETRIES: usize = 5;
+
 pub struct RegionService {
-    db: MySqlPool,
+    db: PgPool,
     cache: CacheService,
 }
 
 impl RegionService {
-    pub fn new(db: MySqlPool, cache: CacheService) -> Self {
+    pub fn new(db: PgPool, cache: CacheService) -> Self {
         Self { db, cache }
     }
 
@@ -23,36 +23,48 @@ impl RegionService {
         &self,
         page: i32,
         limit: i32,
-        province: Option<&str>,
+        status: Option<&str>,
     ) -> Result<(Vec<Region>, i64), ApiError> {
         let offset = (page - 1) * limit;
 
-        let regions: Vec<Region> = if let Some(p) = province {
+        let regions: Vec<Region> = if let Some(s) = status {
             sqlx::query_as(
-                "SELECT * FROM regions WHERE province = ? ORDER BY display_order ASC, name ASC LIMIT ? OFFSET ?"
+                r#"
+                SELECT * FROM regions
+                WHERE status = $1::content_status AND deleted_at IS NULL
+                ORDER BY attraction_rank ASC NULLS LAST, name ASC
+                LIMIT $2 OFFSET $3
+                "#,
             )
-            .bind(p)
-            .bind(limit)
-            .bind(offset)
+            .bind(s)
+            .bind(limit as i64)
+            .bind(offset as i64)
             .fetch_all(&self.db)
             .await?
         } else {
             sqlx::query_as(
-                "SELECT * FROM regions ORDER BY display_order ASC, name ASC LIMIT ? OFFSET ?",
+                r#"
+                SELECT * FROM regions
+                WHERE deleted_at IS NULL
+                ORDER BY attraction_rank ASC NULLS LAST, name ASC
+                LIMIT $1 OFFSET $2
+                "#,
             )
-            .bind(limit)
-            .bind(offset)
+            .bind(limit as i64)
+            .bind(offset as i64)
             .fetch_all(&self.db)
             .await?
         };
 
-        let total: (i64,) = if let Some(p) = province {
-            sqlx::query_as("SELECT COUNT(*) FROM regions WHERE province = ?")
-                .bind(p)
-                .fetch_one(&self.db)
-                .await?
+        let total: (i64,) = if let Some(s) = status {
+            sqlx::query_as(
+                "SELECT COUNT(*) FROM regions WHERE status = $1::content_status AND deleted_at IS NULL",
+            )
+            .bind(s)
+            .fetch_one(&self.db)
+            .await?
         } else {
-            sqlx::query_as("SELECT COUNT(*) FROM regions")
+            sqlx::query_as("SELECT COUNT(*) FROM regions WHERE deleted_at IS NULL")
                 .fetch_one(&self.db)
                 .await?
         };
@@ -61,80 +73,63 @@ impl RegionService {
     }
 
     pub async fn get_by_slug(&self, slug: &str) -> Result<Option<Region>, ApiError> {
-        let region = sqlx::query_as::<_, Region>("SELECT * FROM regions WHERE slug = ?")
-            .bind(slug)
-            .fetch_optional(&self.db)
-            .await?;
+        let region = sqlx::query_as::<_, Region>(
+            "SELECT * FROM regions WHERE slug = $1 AND deleted_at IS NULL",
+        )
+        .bind(slug)
+        .fetch_optional(&self.db)
+        .await?;
 
         Ok(region)
     }
 
     pub async fn get_by_id(&self, id: &str) -> Result<Option<Region>, ApiError> {
-        let region = sqlx::query_as::<_, Region>("SELECT * FROM regions WHERE id = ?")
-            .bind(id)
-            .fetch_optional(&self.db)
-            .await?;
+        let region = sqlx::query_as::<_, Region>(
+            "SELECT * FROM regions WHERE id = $1 AND deleted_at IS NULL",
+        )
+        .bind(id)
+        .fetch_optional(&self.db)
+        .await?;
 
         Ok(region)
     }
 
-    pub async fn get_attractions(
-        &self,
-        region_id: &str,
-        page: i32,
-        limit: i32,
-    ) -> Result<(Vec<Attraction>, i64), ApiError> {
-        let offset = (page - 1) * limit;
-
-        let attractions: Vec<Attraction> = sqlx::query_as(
-            "SELECT * FROM attractions WHERE region_id = ? ORDER BY is_top_attraction DESC, views DESC LIMIT ? OFFSET ?"
-        )
-        .bind(region_id)
-        .bind(limit)
-        .bind(offset)
-        .fetch_all(&self.db)
-        .await?;
-
-        let total: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM attractions WHERE region_id = ?")
-            .bind(region_id)
-            .fetch_one(&self.db)
-            .await?;
-
-        Ok((attractions, total.0))
-    }
-
     pub async fn create(
         &self,
+        author_id: &str,
         name: &str,
         description: Option<&str>,
-        featured_image: Option<&str>,
-        latitude: Option<f64>,
-        longitude: Option<f64>,
+        cover_image: Option<&str>,
+        is_featured: bool,
         province: Option<&str>,
         district: Option<&str>,
-        display_order: Option<i32>,
-        created_by: &str,
+        latitude: Option<f64>,
+        longitude: Option<f64>,
     ) -> Result<Region, ApiError> {
         let id = Uuid::new_v4().to_string();
         let slug = generate_slug(name);
 
         sqlx::query(
             r#"
-            INSERT INTO regions (id, slug, name, description, featured_image, latitude, longitude, province, district, display_order, created_by, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
-            "#
+            INSERT INTO regions (
+                id, author_id, name, slug, description, cover_image,
+                is_featured, province, district, latitude, longitude,
+                status, created_at, updated_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'draft', NOW(), NOW())
+            "#,
         )
         .bind(&id)
-        .bind(&slug)
+        .bind(author_id)
         .bind(name)
+        .bind(&slug)
         .bind(description)
-        .bind(featured_image)
-        .bind(latitude)
-        .bind(longitude)
+        .bind(cover_image)
+        .bind(is_featured)
         .bind(province)
         .bind(district)
-        .bind(display_order.unwrap_or(0))
-        .bind(created_by)
+        .bind(latitude)
+        .bind(longitude)
         .execute(&self.db)
         .await?;
 
@@ -142,7 +137,7 @@ impl RegionService {
 
         self.get_by_id(&id)
             .await?
-            .ok_or_else(|| ApiError::InternalServerError)
+            .ok_or(ApiError::InternalServerError)
     }
 
     pub async fn update(&self, id: &str, input: UpdateRegionInput) -> Result<Region, ApiError> {
@@ -151,33 +146,72 @@ impl RegionService {
             .await?
             .ok_or_else(|| ApiError::NotFound("Region not found".to_string()))?;
 
-        let new_slug = input.name.as_ref().map(|n| generate_slug(n));
+        // Generate a unique slug when name changes, with collision retry loop.
+        let new_slug = if let Some(ref name) = input.name {
+            let mut slug_candidate = generate_slug(name);
+            let mut found_unique = false;
+
+            for attempt in 0..MAX_SLUG_RETRIES {
+                let conflict = sqlx::query_as::<_, (i64,)>(
+                    "SELECT COUNT(*) FROM regions WHERE slug = $1 AND id != $2 AND deleted_at IS NULL",
+                )
+                .bind(&slug_candidate)
+                .bind(id)
+                .fetch_one(&self.db)
+                .await?;
+
+                if conflict.0 == 0 {
+                    found_unique = true;
+                    break;
+                }
+
+                tracing::warn!(
+                    "Slug collision on region update attempt {} for name '{}', slug '{}'. Retrying...",
+                    attempt + 1,
+                    name,
+                    slug_candidate,
+                );
+                slug_candidate = generate_slug(name);
+            }
+
+            if !found_unique {
+                return Err(ApiError::Conflict(format!(
+                    "Could not generate a unique slug after {} attempts",
+                    MAX_SLUG_RETRIES
+                )));
+            }
+
+            Some(slug_candidate)
+        } else {
+            None
+        };
 
         sqlx::query(
             r#"
             UPDATE regions SET
-                slug = COALESCE(?, slug),
-                name = COALESCE(?, name),
-                description = COALESCE(?, description),
-                featured_image = COALESCE(?, featured_image),
-                latitude = COALESCE(?, latitude),
-                longitude = COALESCE(?, longitude),
-                province = COALESCE(?, province),
-                district = COALESCE(?, district),
-                display_order = COALESCE(?, display_order),
-                updated_at = NOW()
-            WHERE id = ?
+                slug = COALESCE($1, slug),
+                name = COALESCE($2, name),
+                description = COALESCE($3, description),
+                cover_image = COALESCE($4, cover_image),
+                is_featured = COALESCE($5, is_featured),
+                status = COALESCE($6::content_status, status),
+                province = COALESCE($7, province),
+                district = COALESCE($8, district),
+                latitude = COALESCE($9, latitude),
+                longitude = COALESCE($10, longitude)
+            WHERE id = $11 AND deleted_at IS NULL
             "#,
         )
-        .bind(new_slug)
+        .bind(new_slug.as_deref())
         .bind(input.name)
         .bind(input.description)
-        .bind(input.featured_image)
-        .bind(input.latitude)
-        .bind(input.longitude)
+        .bind(input.cover_image)
+        .bind(input.is_featured)
+        .bind(input.status)
         .bind(input.province)
         .bind(input.district)
-        .bind(input.display_order)
+        .bind(input.latitude)
+        .bind(input.longitude)
         .bind(id)
         .execute(&self.db)
         .await?;
@@ -190,13 +224,14 @@ impl RegionService {
 
         self.get_by_id(id)
             .await?
-            .ok_or_else(|| ApiError::InternalServerError)
+            .ok_or(ApiError::InternalServerError)
     }
 
     pub async fn delete(&self, id: &str) -> Result<(), ApiError> {
         let existing = self.get_by_id(id).await?;
 
-        sqlx::query("DELETE FROM regions WHERE id = ?")
+        // Soft delete
+        sqlx::query("UPDATE regions SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL")
             .bind(id)
             .execute(&self.db)
             .await?;
@@ -210,5 +245,57 @@ impl RegionService {
         }
 
         Ok(())
+    }
+
+    /// Restore a soft-deleted region.
+    pub async fn restore(&self, id: &str) -> Result<Region, ApiError> {
+        sqlx::query("UPDATE regions SET deleted_at = NULL WHERE id = $1")
+            .bind(id)
+            .execute(&self.db)
+            .await?;
+
+        let _ = self.cache.invalidate("regions:*").await;
+
+        self.get_by_id(id)
+            .await?
+            .ok_or_else(|| ApiError::NotFound("Region not found".to_string()))
+    }
+
+    /// Update attraction rank for a region (admin).
+    pub async fn update_rank(
+        &self,
+        id: &str,
+        attraction_rank: Option<i32>,
+    ) -> Result<Region, ApiError> {
+        sqlx::query("UPDATE regions SET attraction_rank = $1 WHERE id = $2 AND deleted_at IS NULL")
+            .bind(attraction_rank)
+            .bind(id)
+            .execute(&self.db)
+            .await?;
+
+        let _ = self.cache.invalidate("regions:*").await;
+
+        self.get_by_id(id)
+            .await?
+            .ok_or_else(|| ApiError::NotFound("Region not found".to_string()))
+    }
+
+    /// Get top-ranked regions (public).
+    pub async fn top_attractions(&self, limit: i32) -> Result<Vec<Region>, ApiError> {
+        let regions: Vec<Region> = sqlx::query_as(
+            r#"
+            SELECT * FROM regions
+            WHERE deleted_at IS NULL
+              AND status = 'published'
+              AND attraction_rank IS NOT NULL
+            ORDER BY attraction_rank ASC
+            LIMIT $1
+            "#,
+        )
+        .bind(limit as i64)
+        .fetch_all(&self.db)
+        .await?;
+
+        Ok(regions)
     }
 }

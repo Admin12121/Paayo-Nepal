@@ -2,53 +2,26 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum PostStatus {
-    Draft,
-    Pending,
-    Published,
-    Archived,
-}
+use super::common::ContentStatus;
 
-impl From<&str> for PostStatus {
-    fn from(s: &str) -> Self {
-        match s.to_lowercase().as_str() {
-            "draft" => PostStatus::Draft,
-            "pending" => PostStatus::Pending,
-            "published" => PostStatus::Published,
-            "archived" => PostStatus::Archived,
-            _ => PostStatus::Draft,
-        }
-    }
-}
-
-impl std::fmt::Display for PostStatus {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            PostStatus::Draft => write!(f, "draft"),
-            PostStatus::Pending => write!(f, "pending"),
-            PostStatus::Published => write!(f, "published"),
-            PostStatus::Archived => write!(f, "archived"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
+#[sqlx(type_name = "post_type", rename_all = "lowercase")]
 #[serde(rename_all = "lowercase")]
 pub enum PostType {
-    Blog,
     Article,
-    News,
+    Event,
+    Activity,
+    Explore,
 }
 
 impl From<&str> for PostType {
     fn from(s: &str) -> Self {
         match s.to_lowercase().as_str() {
-            "blog" => PostType::Blog,
             "article" => PostType::Article,
-            "news" => PostType::News,
-            _ => PostType::Blog,
+            "event" => PostType::Event,
+            "activity" => PostType::Activity,
+            "explore" => PostType::Explore,
+            _ => PostType::Article,
         }
     }
 }
@@ -56,42 +29,53 @@ impl From<&str> for PostType {
 impl std::fmt::Display for PostType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            PostType::Blog => write!(f, "blog"),
             PostType::Article => write!(f, "article"),
-            PostType::News => write!(f, "news"),
+            PostType::Event => write!(f, "event"),
+            PostType::Activity => write!(f, "activity"),
+            PostType::Explore => write!(f, "explore"),
         }
     }
 }
 
+// Keep PostStatus as an alias / re-export of ContentStatus for backward compatibility
+pub type PostStatus = ContentStatus;
+
+/// Post record — matches the `posts` table in PostgreSQL.
+/// Unified table for article, event, activity, and explore content types.
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Post {
     pub id: String,
-    pub slug: String,
-    pub title: String,
-    pub excerpt: Option<String>,
-    pub content: String,
-    pub featured_image: Option<String>,
-    pub featured_image_blur: Option<String>,
+
+    /// The content type of this post (e.g. "article", "event", "activity", "explore").
+    ///
+    /// ## Rename chain
+    ///
+    /// - **Database column:** `type` (PostgreSQL enum `post_type`)
+    /// - **Rust field:** `post_type` (because `type` is a reserved keyword in Rust)
+    /// - **JSON key:** `"type"` (via `#[serde(rename = "type")]`)
+    ///
+    /// All three layers refer to the same value. The Rust name differs only
+    /// because `type` cannot be used as an identifier. When reading JSON
+    /// responses or writing SQL, use `type`; in Rust code, use `post_type`.
     #[sqlx(rename = "type")]
-    pub post_type: String,
-    pub status: String,
+    #[serde(rename = "type")]
+    pub post_type: PostType,
     pub author_id: String,
-    pub approved_by: Option<String>,
-    pub approved_at: Option<DateTime<Utc>>,
+    pub region_id: Option<String>,
+    pub title: String,
+    pub slug: String,
+    pub short_description: Option<String>,
+    pub content: Option<sqlx::types::Json<serde_json::Value>>,
+    pub cover_image: Option<String>,
+    pub status: ContentStatus,
     pub published_at: Option<DateTime<Utc>>,
-    pub views: i32,
-    pub likes: i32,
-    pub meta_title: Option<String>,
-    pub meta_description: Option<String>,
-    pub tags: Option<serde_json::Value>,
+    pub event_date: Option<DateTime<Utc>>,
+    pub event_end_date: Option<DateTime<Utc>>,
+    pub display_order: Option<i32>,
+    pub is_featured: bool,
+    pub like_count: i32,
+    pub view_count: i32,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
-pub struct PostLike {
-    pub id: String,
-    pub post_id: String,
-    pub user_id: String,
-    pub created_at: DateTime<Utc>,
+    pub deleted_at: Option<DateTime<Utc>>,
 }

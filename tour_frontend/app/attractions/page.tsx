@@ -74,21 +74,19 @@ function AttractionCard({ attraction }: { attraction: Attraction }) {
         style={{ boxShadow: "0px 4px 20px rgba(0, 0, 0, 0.08)" }}
       >
         <div className="overflow-hidden rounded-[16px] h-[280px] relative">
-          {attraction.featured_image ? (
+          {attraction.cover_image ? (
             <Image
-              src={attraction.featured_image}
-              alt={attraction.name}
+              src={attraction.cover_image}
+              alt={attraction.title}
               fill
               className="object-cover group-hover:scale-105 transition-transform duration-500"
-              placeholder={attraction.featured_image_blur ? "blur" : "empty"}
-              blurDataURL={attraction.featured_image_blur || undefined}
             />
           ) : (
             <div className="w-full h-full bg-gray-200 flex items-center justify-center">
               <MapPin className="w-16 h-16 text-gray-400" />
             </div>
           )}
-          {attraction.is_top_attraction && (
+          {attraction.is_featured && (
             <div className="absolute top-4 right-4 px-3 py-1 bg-[#F29C72] text-white text-xs font-semibold rounded-full flex items-center gap-1">
               <Star className="w-3 h-3 fill-white" />
               Top Attraction
@@ -97,12 +95,12 @@ function AttractionCard({ attraction }: { attraction: Attraction }) {
         </div>
         <div className="p-5">
           <h3 className="font-display text-xl font-semibold text-[#1A2B49] mb-2 line-clamp-2">
-            {attraction.name}
+            {attraction.title}
           </h3>
 
-          {attraction.description && (
+          {attraction.short_description && (
             <p className="text-gray-600 text-sm leading-relaxed mb-3 line-clamp-2">
-              {attraction.description}
+              {attraction.short_description}
             </p>
           )}
 
@@ -130,10 +128,13 @@ function AttractionCard({ attraction }: { attraction: Attraction }) {
               <div className="flex items-center gap-2 text-sm text-gray-600">
                 <Clock className="w-4 h-4 text-[#0078C0] shrink-0" />
                 <span>
-                  {attraction.opening_hours.monday?.open || "Check timings"}
-                  {attraction.opening_hours.monday?.open &&
-                    attraction.opening_hours.monday?.close &&
-                    ` - ${attraction.opening_hours.monday.close}`}
+                  {(() => {
+                    const mon = attraction.opening_hours?.monday;
+                    if (mon && typeof mon === "object" && "open" in mon) {
+                      return `${mon.open}${mon.close ? ` - ${mon.close}` : ""}`;
+                    }
+                    return typeof mon === "string" ? mon : "Check timings";
+                  })()}
                 </span>
               </div>
             )}

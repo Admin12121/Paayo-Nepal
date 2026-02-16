@@ -1,15 +1,18 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
-import { activitiesApi, Activity } from "@/lib/api-client";
+import { activitiesApi } from "@/lib/api-client";
+import { apiFetch } from "@/lib/csrf";
 import Button from "@/components/ui/button";
 import Input from "@/components/ui/input";
 import Textarea from "@/components/ui/Textarea";
+import Checkbox from "@/components/ui/Checkbox";
 import ImageUpload from "@/components/ui/ImageUpload";
-import LexicalEditor from "@/components/editor/LexicalEditor";
+import NotionEditorField from "@/components/editor/NotionEditorField";
+import DashboardCard from "@/components/dashboard/DashboardCard";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { toast } from "@/lib/utils/toast";
 
@@ -20,35 +23,28 @@ export default function EditActivityPage() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [activity, setActivity] = useState<Activity | null>(null);
   const [formData, setFormData] = useState({
-    name: "",
-    description: "",
+    title: "",
+    short_description: "",
     content: "",
-    featured_image: "",
-    hero_image: "",
+    cover_image: "",
     icon: "",
-    display_order: "0",
-    is_active: true,
+    is_featured: true,
   });
 
-  useEffect(() => {
-    loadActivity();
-  }, [slug]);
-
-  const loadActivity = async () => {
+  const loadActivity = useCallback(async () => {
     try {
       const data = await activitiesApi.getBySlug(slug);
-      setActivity(data);
       setFormData({
-        name: data.name,
-        description: data.description || "",
-        content: data.content || "",
-        featured_image: data.featured_image || "",
-        hero_image: data.hero_image || "",
+        title: data.title,
+        short_description: data.short_description || "",
+        content:
+          typeof data.content === "string"
+            ? data.content
+            : JSON.stringify(data.content ?? ""),
+        cover_image: data.cover_image || "",
         icon: data.icon || "",
-        display_order: data.display_order.toString(),
-        is_active: data.is_active,
+        is_featured: data.is_featured,
       });
     } catch (error) {
       toast.error("Failed to load activity");
@@ -56,30 +52,31 @@ export default function EditActivityPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [slug]);
+
+  useEffect(() => {
+    loadActivity();
+  }, [loadActivity]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.name) {
+    if (!formData.title) {
       toast.error("Activity name is required");
       return;
     }
 
     setSaving(true);
     try {
-      const response = await fetch(`/api/activities/${slug}`, {
+      const response = await apiFetch(`/api/activities/${slug}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: formData.name,
-          description: formData.description || null,
+          title: formData.title,
+          short_description: formData.short_description || null,
           content: formData.content || null,
-          featured_image: formData.featured_image || null,
-          hero_image: formData.hero_image || null,
-          icon: formData.icon || null,
-          display_order: parseInt(formData.display_order) || 0,
-          is_active: formData.is_active,
+          cover_image: formData.cover_image || null,
+          is_featured: formData.is_featured,
         }),
       });
 
@@ -87,8 +84,10 @@ export default function EditActivityPage() {
 
       toast.success("Activity updated successfully");
       router.push("/dashboard/activities");
-    } catch (error: any) {
-      toast.error(error.message || "Failed to update activity");
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Failed to update activity";
+      toast.error(message);
       console.error(error);
     } finally {
       setSaving(false);
@@ -115,58 +114,42 @@ export default function EditActivityPage() {
       <form onSubmit={handleSubmit}>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
-            <div className="bg-white rounded-lg shadow p-6">
+            <DashboardCard>
               <Input
                 label="Activity Name"
                 required
-                value={formData.name}
+                value={formData.title}
                 onChange={(e) =>
-                  setFormData({ ...formData, name: e.target.value })
+                  setFormData({ ...formData, title: e.target.value })
                 }
                 placeholder="Enter activity name"
               />
-            </div>
+            </DashboardCard>
 
-            <div className="bg-white rounded-lg shadow p-6">
+            <DashboardCard>
               <Textarea
                 label="Short Description"
-                value={formData.description}
+                value={formData.short_description}
                 onChange={(e) =>
-                  setFormData({ ...formData, description: e.target.value })
+                  setFormData({
+                    ...formData,
+                    short_description: e.target.value,
+                  })
                 }
                 placeholder="Brief description of the activity"
                 rows={3}
               />
-            </div>
+            </DashboardCard>
 
-            <div className="bg-white rounded-lg shadow p-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Detailed Content
-              </label>
-              <LexicalEditor
-                initialContent={formData.content}
-                onChange={(html) => setFormData({ ...formData, content: html })}
-                placeholder="Write detailed activity information..."
-              />
-            </div>
-
-            <div className="bg-white rounded-lg shadow p-6">
-              <h3 className="text-lg font-semibold mb-4">Hero Image</h3>
-              <p className="text-sm text-gray-600 mb-4">
-                Large banner image for activity detail pages
-              </p>
-              <ImageUpload
-                value={formData.hero_image}
-                onChange={(url) =>
-                  setFormData({ ...formData, hero_image: url })
-                }
-                onRemove={() => setFormData({ ...formData, hero_image: "" })}
-              />
-            </div>
+            <NotionEditorField
+              initialContent={formData.content}
+              onChange={(html) => setFormData({ ...formData, content: html })}
+              placeholder="Write detailed activity information..."
+            />
           </div>
 
           <div className="space-y-6">
-            <div className="bg-white rounded-lg shadow p-6">
+            <DashboardCard>
               <Input
                 label="Icon (Emoji or Text)"
                 value={formData.icon}
@@ -182,60 +165,44 @@ export default function EditActivityPage() {
                   <p className="text-xs text-gray-500 mt-2">Icon Preview</p>
                 </div>
               )}
-            </div>
+            </DashboardCard>
 
-            <div className="bg-white rounded-lg shadow p-6">
-              <Input
-                label="Display Order"
-                type="number"
-                value={formData.display_order}
-                onChange={(e) =>
-                  setFormData({ ...formData, display_order: e.target.value })
-                }
-                helperText="Lower numbers appear first"
-              />
-            </div>
-
-            <div className="bg-white rounded-lg shadow p-6">
+            <DashboardCard>
               <label className="flex items-center">
-                <input
-                  type="checkbox"
-                  checked={formData.is_active}
+                <Checkbox
+                  checked={formData.is_featured}
                   onChange={(e) =>
-                    setFormData({ ...formData, is_active: e.target.checked })
+                    setFormData({ ...formData, is_featured: e.target.checked })
                   }
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                 />
                 <span className="ml-2 text-sm font-medium text-gray-700">
-                  Active
+                  Featured
                 </span>
               </label>
               <p className="text-xs text-gray-500 mt-1">
-                Only active activities are shown on the website
+                Featured activities are highlighted on the website
               </p>
-            </div>
+            </DashboardCard>
 
-            <div className="bg-white rounded-lg shadow p-6">
+            <DashboardCard>
               <h3 className="text-sm font-medium text-gray-700 mb-2">
-                Featured Image
+                Cover Image
               </h3>
               <p className="text-xs text-gray-500 mb-3">Card/thumbnail image</p>
               <ImageUpload
-                value={formData.featured_image}
+                value={formData.cover_image}
                 onChange={(url) =>
-                  setFormData({ ...formData, featured_image: url })
+                  setFormData({ ...formData, cover_image: url })
                 }
-                onRemove={() =>
-                  setFormData({ ...formData, featured_image: "" })
-                }
+                onRemove={() => setFormData({ ...formData, cover_image: "" })}
               />
-            </div>
+            </DashboardCard>
 
-            <div className="bg-white rounded-lg shadow p-6">
+            <DashboardCard>
               <Button type="submit" className="w-full" isLoading={saving}>
                 Update Activity
               </Button>
-            </div>
+            </DashboardCard>
           </div>
         </div>
       </form>

@@ -4,6 +4,11 @@ const nextConfig: NextConfig = {
   // Output standalone build for Docker
   output: "standalone",
 
+  // Server-only packages — prevent bundling Node.js modules (pg, redis, etc.)
+  // into the client bundle. These are used by auth-server.ts which is
+  // dynamically imported by api-client.ts for server-side session extraction.
+  serverExternalPackages: ["pg", "redis"],
+
   // Image optimization configuration
   images: {
     remotePatterns: [
@@ -16,9 +21,14 @@ const nextConfig: NextConfig = {
         hostname: "localhost",
       },
       {
-        // Allow images from the nginx uploads directory
+        // Allow images from the nginx reverse proxy
         protocol: "http",
         hostname: "nginx",
+      },
+      {
+        // Allow images from the backend service (Docker internal)
+        protocol: "http",
+        hostname: "backend",
       },
     ],
     // Optimize for common device sizes
@@ -33,7 +43,7 @@ const nextConfig: NextConfig = {
   // Experimental features for better performance
   experimental: {
     // Optimize package imports
-    optimizePackageImports: ["lucide-react"],
+    optimizePackageImports: ["lucide-react", "@reduxjs/toolkit"],
   },
 
   // Logging configuration
@@ -78,17 +88,58 @@ const nextConfig: NextConfig = {
     ];
   },
 
-  // Rewrites for static uploads proxy to Rust backend
-  // API requests are handled by app/api/[...path]/route.ts for proper auth cookie forwarding
+  // -------------------------------------------------------------------------
+  // Rewrites — Development Only
+  //
+  // In production, nginx handles all routing:
+  //   /api/auth/*     → Next.js (BetterAuth)
+  //   /api/*          → Rust backend (data API)
+  //   /uploads/*      → Rust backend (static files)
+  //   /*              → Next.js (SSR pages)
+  //
+  // In development (no nginx), we need rewrites so that:
+  //   - /api/* requests from the browser reach the Rust backend
+  //     (except /api/auth/* which stays in Next.js for BetterAuth)
+  //   - /uploads/* requests reach the Rust backend for static files
+  //
+  // The DOCKER_ENV variable is set in docker-compose.yml. When running
+  // with Docker + nginx, rewrites are unnecessary (nginx handles routing).
+  // When running locally without Docker, these rewrites forward requests
+  // to the local Rust backend.
+  //
+  // Note: /api/auth/* is handled by Next.js App Router routes
+  // (app/api/auth/[...all]/route.ts, app/api/auth/sync-session/route.ts,
+  // app/api/auth/invalidate-session-cache/route.ts) and is NOT rewritten.
+  // Next.js matches App Router routes BEFORE rewrites, so these routes
+  // take priority automatically.
+  // -------------------------------------------------------------------------
   async rewrites() {
-    const backendUrl = process.env.DOCKER_ENV
-      ? "http://backend:8080"
-      : "http://localhost:8080";
+    // In Docker with nginx, no rewrites needed — nginx handles everything
+    if (process.env.DOCKER_ENV) {
+      return [];
+    }
+
+    // Local development: rewrite /api/* and /uploads/* to the Rust backend
+    const backendBase =
+      process.env.BACKEND_URL ||
+      (process.env.INTERNAL_API_URL
+        ? process.env.INTERNAL_API_URL.replace(/\/api\/?$/, "")
+        : "http://localhost:8080");
 
     return [
+      // Static uploads → Rust backend
       {
         source: "/uploads/:path*",
-        destination: `${backendUrl}/uploads/:path*`,
+        destination: `${backendBase}/uploads/:path*`,
+      },
+      // API requests → Rust backend (except /api/auth/* which is handled
+      // by Next.js App Router routes — those match before rewrites).
+      //
+      // This rewrite only applies in development. In production, nginx
+      // routes /api/* directly to Rust and /api/auth/* to Next.js.
+      {
+        source: "/api/:path*",
+        destination: `${backendBase}/api/:path*`,
       },
     ];
   },

@@ -4,7 +4,7 @@ use axum::{
     http::{request::Parts, StatusCode},
 };
 
-use crate::middleware::auth::UserRole;
+use crate::models::user::UserRole;
 
 /// Authenticated user extracted from request extensions
 #[derive(Debug, Clone)]

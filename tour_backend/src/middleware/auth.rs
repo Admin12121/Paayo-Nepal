@@ -4,26 +4,8 @@ use axum::{
     middleware::Next,
     response::Response,
 };
-use sqlx::MySqlPool;
 
-use crate::extractors::auth::AuthenticatedUser;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum UserRole {
-    Admin,
-    Editor,
-    User,
-}
-
-impl From<&str> for UserRole {
-    fn from(s: &str) -> Self {
-        match s.to_lowercase().as_str() {
-            "admin" => UserRole::Admin,
-            "editor" => UserRole::Editor,
-            _ => UserRole::User,
-        }
-    }
-}
+use crate::{extractors::auth::AuthenticatedUser, models::user::UserRole, AppState};
 
 #[derive(Debug, sqlx::FromRow)]
 struct SessionRow {
@@ -36,10 +18,48 @@ struct SessionRow {
     name: Option<String>,
     role: String,
     is_active: bool,
+    banned_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+/// Extract the raw session token from cookies.
+///
+/// Checks multiple cookie names in priority order:
+///   1. `paayo_session`                         — plain cookie set by `/api/auth/sync-session`
+///                                                 (the primary mechanism when nginx routes
+///                                                  browser requests directly to Rust)
+///   2. `__Secure-better-auth.session_token`    — BetterAuth signed cookie (production, via proxy)
+///   3. `better-auth.session_token`             — BetterAuth signed cookie (dev, via proxy)
+///
+/// The `paayo_session` cookie contains the exact raw token that is stored in
+/// the `session.token` DB column, so Rust can look it up directly without
+/// needing Next.js to decode BetterAuth's signed cookie.
+fn extract_session_token(cookie_header: &str) -> Option<String> {
+    // First pass: prefer the plain `paayo_session` cookie (fastest path)
+    let mut better_auth_token: Option<&str> = None;
+
+    for c in cookie_header.split(';') {
+        let c = c.trim();
+        if let Some(val) = c.strip_prefix("paayo_session=") {
+            let val = val.trim();
+            if !val.is_empty() {
+                return Some(val.to_string());
+            }
+        }
+        // Remember better-auth tokens as fallback (for proxy / dev scenarios)
+        if better_auth_token.is_none() {
+            if let Some(val) = c.strip_prefix("__Secure-better-auth.session_token=") {
+                better_auth_token = Some(val);
+            } else if let Some(val) = c.strip_prefix("better-auth.session_token=") {
+                better_auth_token = Some(val);
+            }
+        }
+    }
+
+    better_auth_token.map(|t| t.to_string())
 }
 
 pub async fn auth_middleware(
-    State(db): State<MySqlPool>,
+    State(state): State<AppState>,
     mut request: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
@@ -49,42 +69,61 @@ pub async fn auth_middleware(
         .and_then(|c| c.to_str().ok())
         .unwrap_or("");
 
-    let session_token = cookie_header
-        .split(';')
-        .find_map(|c| {
-            let c = c.trim();
-            if let Some(val) = c.strip_prefix("__Secure-better-auth.session_token=") {
-                Some(val)
-            } else {
-                c.strip_prefix("better-auth.session_token=")
-            }
-        })
-        .map(|token| {
-            let token = token.split('.').next().unwrap_or(token);
-            token.to_string()
-        });
+    tracing::debug!("Auth middleware - Cookie header: {:?}", cookie_header);
 
-    let session_token = match session_token {
+    let session_token = match extract_session_token(cookie_header) {
         Some(token) if !token.is_empty() => token,
-        _ => return Err(StatusCode::UNAUTHORIZED),
+        _ => {
+            tracing::debug!("Auth middleware - No session token found");
+            return Err(StatusCode::UNAUTHORIZED);
+        }
     };
+
+    tracing::debug!("Auth middleware - Extracted token: {:?}", session_token);
 
     let session = sqlx::query_as::<_, SessionRow>(
         r#"
-        SELECT s.id, s.user_id, s.token, u.email, u.name, u.role, u.is_active
-        FROM session s
-        JOIN user u ON s.user_id = u.id
-        WHERE s.token = ? AND s.expires_at > NOW()
+        SELECT s.id, s.user_id, s.token, u.email, u.name, u.role, u.is_active, u.banned_at
+        FROM "session" s
+        JOIN "user" u ON s.user_id = u.id
+        WHERE s.token = $1 AND s.expires_at > NOW()
         "#,
     )
     .bind(&session_token)
-    .fetch_optional(&db)
+    .fetch_optional(&state.db)
     .await
     .map_err(|e| {
         tracing::error!("Database error during auth: {:?}", e);
         StatusCode::INTERNAL_SERVER_ERROR
-    })?
-    .ok_or(StatusCode::UNAUTHORIZED)?;
+    })?;
+
+    let session = match session {
+        Some(s) => s,
+        None => {
+            tracing::debug!("Auth middleware - No session found in DB for token");
+            return Err(StatusCode::UNAUTHORIZED);
+        }
+    };
+
+    tracing::debug!("Auth middleware - User authenticated: {}", session.email);
+
+    // Reject banned users immediately
+    if session.banned_at.is_some() {
+        tracing::debug!(
+            "Auth middleware - User {} is banned, rejecting",
+            session.email
+        );
+        return Err(StatusCode::FORBIDDEN);
+    }
+
+    // Reject inactive non-admin users
+    if !session.is_active && session.role != "admin" {
+        tracing::debug!(
+            "Auth middleware - User {} is inactive, rejecting",
+            session.email
+        );
+        return Err(StatusCode::FORBIDDEN);
+    }
 
     let user = AuthenticatedUser {
         id: session.user_id,
@@ -121,9 +160,8 @@ pub async fn require_role(
     Ok(next.run(request).await)
 }
 
-
 pub async fn optional_auth_middleware(
-    State(db): State<MySqlPool>,
+    State(state): State<AppState>,
     mut request: Request,
     next: Next,
 ) -> Response {
@@ -133,44 +171,45 @@ pub async fn optional_auth_middleware(
         .and_then(|c| c.to_str().ok())
         .unwrap_or("");
 
-    let session_token = cookie_header
-        .split(';')
-        .find_map(|c| {
-            let c = c.trim();
-            if let Some(val) = c.strip_prefix("__Secure-better-auth.session_token=") {
-                Some(val)
-            } else {
-                c.strip_prefix("better-auth.session_token=")
-            }
-        })
-        .map(|token| {
-            let token = token.split('.').next().unwrap_or(token);
-            token.to_string()
-        });
-
-    if let Some(token) = session_token {
+    if let Some(token) = extract_session_token(cookie_header) {
         if !token.is_empty() {
-            // Try to verify session
             if let Ok(Some(session)) = sqlx::query_as::<_, SessionRow>(
                 r#"
-                SELECT s.id, s.user_id, s.token, u.email, u.name, u.role, u.is_active
-                FROM session s
-                JOIN user u ON s.user_id = u.id
-                WHERE s.token = ? AND s.expires_at > NOW()
+                SELECT s.id, s.user_id, s.token, u.email, u.name, u.role, u.is_active, u.banned_at
+                FROM "session" s
+                JOIN "user" u ON s.user_id = u.id
+                WHERE s.token = $1 AND s.expires_at > NOW()
                 "#,
             )
             .bind(&token)
-            .fetch_optional(&db)
+            .fetch_optional(&state.db)
             .await
             {
-                let user = AuthenticatedUser {
-                    id: session.user_id,
-                    email: session.email,
-                    name: session.name,
-                    role: UserRole::from(session.role.as_str()),
-                    is_active: session.is_active,
-                };
-                request.extensions_mut().insert(user);
+                // Skip populating the auth extension for banned or inactive users.
+                // This means handler-level extractors (AuthenticatedUser, AdminUser,
+                // etc.) will see them as unauthenticated rather than authenticated-
+                // but-inactive. This is the correct behavior: banned/inactive users
+                // should not be able to perform ANY authenticated action.
+                if session.banned_at.is_some() {
+                    tracing::debug!(
+                        "Optional auth - User {} is banned, skipping auth extension",
+                        session.email
+                    );
+                } else if !session.is_active && session.role != "admin" {
+                    tracing::debug!(
+                        "Optional auth - User {} is inactive, skipping auth extension",
+                        session.email
+                    );
+                } else {
+                    let user = AuthenticatedUser {
+                        id: session.user_id,
+                        email: session.email,
+                        name: session.name,
+                        role: UserRole::from(session.role.as_str()),
+                        is_active: session.is_active,
+                    };
+                    request.extensions_mut().insert(user);
+                }
             }
         }
     }

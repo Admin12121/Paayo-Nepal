@@ -1,15 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { Plus, Edit, Trash2, MapPin, Eye } from "lucide-react";
-import { regionsApi, Region } from "@/lib/api-client";
+import { Plus, Edit, Trash2, MapPin } from "lucide-react";
+import type { Region } from "@/lib/api-client";
+import { useListRegionsQuery, useDeleteRegionMutation } from "@/lib/store";
 import Button from "@/components/ui/button";
 import Input from "@/components/ui/input";
 import Select from "@/components/ui/Select";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import Pagination from "@/components/ui/Pagination";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import DashboardCard from "@/components/dashboard/DashboardCard";
 import { toast } from "@/lib/utils/toast";
 
 const PROVINCES = [
@@ -23,9 +25,7 @@ const PROVINCES = [
 ];
 
 export default function RegionsPage() {
-  const [regions, setRegions] = useState<Region[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [totalPages, setTotalPages] = useState(1);
+  // ── Local UI state ──────────────────────────────────────────────────────
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
   const [provinceFilter, setProvinceFilter] = useState("all");
@@ -36,54 +36,47 @@ export default function RegionsPage() {
     open: false,
     region: null,
   });
-  const [deleting, setDeleting] = useState(false);
 
-  useEffect(() => {
-    loadRegions();
-  }, [currentPage, provinceFilter]);
+  // ── RTK Query hooks ─────────────────────────────────────────────────────
+  const {
+    data: regionsResponse,
+    isLoading,
+    isFetching,
+  } = useListRegionsQuery({
+    page: currentPage,
+    limit: 20,
+    province: provinceFilter !== "all" ? provinceFilter : undefined,
+  });
 
-  const loadRegions = async () => {
-    setLoading(true);
-    try {
-      const params: any = { page: currentPage, limit: 20 };
-      if (provinceFilter !== "all") params.province = provinceFilter;
+  const [deleteRegion, { isLoading: deleting }] = useDeleteRegionMutation();
 
-      const response = await regionsApi.list(params);
-      setRegions(response.data);
-      setTotalPages(response.total_pages);
-    } catch (error) {
-      toast.error("Failed to load regions");
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // ── Derived data ────────────────────────────────────────────────────────
+  const regions = regionsResponse?.data ?? [];
+  const totalPages = regionsResponse?.total_pages ?? 1;
 
-  const handleDelete = async () => {
-    if (!deleteDialog.region) return;
-
-    setDeleting(true);
-    try {
-      const response = await fetch(`/api/regions/${deleteDialog.region.slug}`, {
-        method: "DELETE",
-      });
-      if (!response.ok) throw new Error("Failed to delete region");
-      toast.success("Region deleted successfully");
-      setDeleteDialog({ open: false, region: null });
-      loadRegions();
-    } catch (error) {
-      toast.error("Failed to delete region");
-      console.error(error);
-    } finally {
-      setDeleting(false);
-    }
-  };
-
+  // Client-side search filter (instant, no network request)
   const filteredRegions = regions.filter((region) =>
     searchQuery
       ? region.name.toLowerCase().includes(searchQuery.toLowerCase())
       : true,
   );
+
+  // ── Handlers ────────────────────────────────────────────────────────────
+
+  const handleDelete = async () => {
+    if (!deleteDialog.region) return;
+
+    try {
+      await deleteRegion(deleteDialog.region.slug).unwrap();
+      toast.success("Region deleted successfully");
+      setDeleteDialog({ open: false, region: null });
+    } catch (error) {
+      toast.error("Failed to delete region");
+      console.error(error);
+    }
+  };
+
+  // ── Render ──────────────────────────────────────────────────────────────
 
   return (
     <div>
@@ -102,7 +95,7 @@ export default function RegionsPage() {
         </Link>
       </div>
 
-      <div className="bg-white rounded-lg shadow mb-6">
+      <DashboardCard className="mb-6" contentClassName="p-0">
         <div className="p-4 border-b flex flex-wrap gap-4">
           <div className="flex-1 min-w-[200px]">
             <Input
@@ -114,7 +107,10 @@ export default function RegionsPage() {
           </div>
           <Select
             value={provinceFilter}
-            onChange={(e) => setProvinceFilter(e.target.value)}
+            onChange={(e) => {
+              setProvinceFilter(e.target.value);
+              setCurrentPage(1);
+            }}
             options={[
               { value: "all", label: "All Provinces" },
               ...PROVINCES.map((p) => ({ value: p, label: p })),
@@ -123,7 +119,14 @@ export default function RegionsPage() {
           />
         </div>
 
-        {loading ? (
+        {/* Show a subtle loading indicator when refetching in the background */}
+        {isFetching && !isLoading && (
+          <div className="h-0.5 bg-blue-100 overflow-hidden">
+            <div className="h-full bg-blue-500 animate-pulse w-full" />
+          </div>
+        )}
+
+        {isLoading ? (
           <LoadingSpinner />
         ) : filteredRegions.length === 0 ? (
           <div className="text-center py-12 text-gray-500">
@@ -139,9 +142,9 @@ export default function RegionsPage() {
                   className="p-6 hover:bg-gray-50 transition-colors"
                 >
                   <div className="flex items-start gap-4">
-                    {region.featured_image && (
+                    {region.cover_image && (
                       <img
-                        src={region.featured_image}
+                        src={region.cover_image}
                         alt={region.name}
                         className="w-32 h-32 object-cover rounded-lg flex-shrink-0"
                       />
@@ -158,22 +161,19 @@ export default function RegionsPage() {
                             </p>
                           )}
                           <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500">
-                            {region.province && (
-                              <div className="flex items-center">
-                                <MapPin className="w-4 h-4 mr-1" />
-                                {region.province}
-                                {region.district && `, ${region.district}`}
-                              </div>
-                            )}
-                            {region.latitude && region.longitude && (
-                              <div>
-                                Coordinates: {region.latitude.toFixed(4)},{" "}
-                                {region.longitude.toFixed(4)}
-                              </div>
+                            <span
+                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${region.status === "active" ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}`}
+                            >
+                              {region.status}
+                            </span>
+                            {region.is_featured && (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                Featured
+                              </span>
                             )}
                           </div>
                           <div className="mt-2 text-xs text-gray-500">
-                            Display Order: {region.display_order}
+                            Attraction Rank: {region.attraction_rank || 0}
                           </div>
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
@@ -210,7 +210,7 @@ export default function RegionsPage() {
             )}
           </>
         )}
-      </div>
+      </DashboardCard>
 
       <ConfirmDialog
         isOpen={deleteDialog.open}

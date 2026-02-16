@@ -1,17 +1,16 @@
 use axum::{
     extract::{Multipart, Path, Query, State},
-    Extension, Json,
+    Json,
 };
-use serde::Deserialize;
-use tracing::info;
+use serde::{Deserialize, Serialize};
+use tracing::{error, info, warn};
 
 use crate::{
     error::ApiError,
-    extractors::auth::AuthenticatedUser,
+    extractors::auth::{ActiveEditorUser, AdminUser, AuthenticatedUser, EditorUser},
     handlers::posts::PaginatedResponse,
-    middleware::auth::UserRole,
     models::media::Media,
-    services::{MediaService, NotificationService},
+    services::{MediaCleanupService, MediaService, NotificationService},
     AppState,
 };
 
@@ -29,14 +28,20 @@ pub struct GalleryQuery {
     pub featured: Option<bool>,
 }
 
+/// List all media (editor/admin only — dashboard media library).
+///
+/// This endpoint exposes internal media metadata (filenames, upload paths,
+/// uploader IDs). It must NOT be public — unauthenticated users should not
+/// be able to enumerate the media library (V-010).
 pub async fn list(
     State(state): State<AppState>,
+    _user: EditorUser,
     Query(query): Query<ListMediaQuery>,
 ) -> Result<Json<PaginatedResponse<Media>>, ApiError> {
     let service = MediaService::new(state.db.clone(), state.cache.clone());
 
-    let page = query.page.unwrap_or(1);
-    let limit = query.limit.unwrap_or(20);
+    let page = query.page.unwrap_or(1).max(1);
+    let limit = query.limit.unwrap_or(20).min(100).max(1);
 
     let (media, total) = service
         .list(page, limit, query.media_type.as_deref())
@@ -53,14 +58,19 @@ pub async fn list(
     }))
 }
 
+/// Gallery view of images (editor/admin only — dashboard media picker).
+///
+/// Like `list`, this exposes internal media metadata and should not be
+/// accessible to unauthenticated users.
 pub async fn gallery(
     State(state): State<AppState>,
+    _user: EditorUser,
     Query(query): Query<GalleryQuery>,
 ) -> Result<Json<PaginatedResponse<Media>>, ApiError> {
     let service = MediaService::new(state.db.clone(), state.cache.clone());
 
-    let page = query.page.unwrap_or(1);
-    let limit = query.limit.unwrap_or(20);
+    let page = query.page.unwrap_or(1).max(1);
+    let limit = query.limit.unwrap_or(20).min(100).max(1);
 
     let (media, total) = service.gallery(page, limit, query.featured).await?;
 
@@ -91,17 +101,9 @@ pub async fn get(
 
 pub async fn upload(
     State(state): State<AppState>,
-    Extension(user): Extension<AuthenticatedUser>,
+    user: ActiveEditorUser,
     mut multipart: Multipart,
 ) -> Result<Json<Media>, ApiError> {
-    // Only active editors and admins can upload
-    if user.role == UserRole::User {
-        return Err(ApiError::Forbidden);
-    }
-    if user.role != UserRole::Admin && !user.is_active {
-        return Err(ApiError::Forbidden);
-    }
-
     while let Some(field) = multipart
         .next_field()
         .await
@@ -138,11 +140,16 @@ pub async fn upload(
             .await
             .map_err(|e| ApiError::BadRequest(e.to_string()))?;
 
-        // Validate file size (max 10MB for uploads)
-        const MAX_UPLOAD_SIZE: usize = 10 * 1024 * 1024; // 10MB
+        // Validate file size (max 20MB for uploads).
+        //
+        // This limit must stay in sync with:
+        //   - routes/media.rs  DefaultBodyLimit  → 22 MB (20MB file + multipart overhead)
+        //   - Frontend validation                → 20 MB
+        //   - nginx.conf  client_max_body_size   → 50 MB (generous; real cap is here)
+        const MAX_UPLOAD_SIZE: usize = 20 * 1024 * 1024; // 20MB
         if data.len() > MAX_UPLOAD_SIZE {
             return Err(ApiError::BadRequest(format!(
-                "File too large. Maximum size: 10MB (received: {:.2}MB)",
+                "File too large. Maximum size: 20MB (received: {:.2}MB)",
                 data.len() as f64 / 1024.0 / 1024.0
             )));
         }
@@ -158,42 +165,55 @@ pub async fn upload(
             .image_service
             .process_image(&data, &file_name)
             .await
-            .map_err(|_| ApiError::InternalServerError)?;
+            .map_err(|e| {
+                error!("Image processing failed for '{}': {:?}", file_name, e);
+                ApiError::ImageError(format!("Image processing failed: {}", e))
+            })?;
 
         info!(
             "Image processed: {} ({}x{}), blur: {}",
             processed.filename, processed.width, processed.height, processed.blur_hash
         );
 
-        // Save to database
+        // Save to database — size is i32 in the schema
         let media_service = MediaService::new(state.db.clone(), state.cache.clone());
         let media = media_service
             .create(
                 &processed.filename,
                 &file_name,
                 &processed.mime_type,
-                processed.size as i64,
+                processed.size as i32,
                 processed.width as i32,
                 processed.height as i32,
                 &processed.blur_hash,
                 &processed.thumbnail_filename,
-                &user.id,
+                &user.0.id,
             )
-            .await?;
+            .await
+            .map_err(|e| {
+                error!(
+                    "Database insert failed for media '{}' (uploaded by {}): {:?}",
+                    processed.filename, user.0.id, e
+                );
+                e
+            })?;
 
         info!("Media record created: {}", media.id);
 
         // Notify admins about new media upload
         let notif_service = NotificationService::with_redis(state.db.clone(), state.redis.clone());
-        let uploader_name = user.name.as_deref().unwrap_or(&user.email);
+        let uploader_name = user.0.name.as_deref().unwrap_or(&user.0.email);
         let _ = notif_service
             .notify_admins(
-                "new_content",
+                Some(&user.0.id),
+                "content",
                 "New Media Uploaded",
                 Some(&format!(
                     "{} uploaded a new file: {}",
                     uploader_name, media.original_name
                 )),
+                None,
+                None,
                 Some("/dashboard/media"),
             )
             .await;
@@ -204,9 +224,118 @@ pub async fn upload(
     Err(ApiError::BadRequest("No file uploaded".to_string()))
 }
 
+// ---------------------------------------------------------------------------
+// Admin media cleanup — on-demand orphan removal
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+pub struct CleanupQuery {
+    /// Grace period in hours — only delete orphans older than this.
+    /// Defaults to 24 hours if not specified.
+    pub grace_hours: Option<i64>,
+    /// If true, only count orphans without deleting (dry-run).
+    #[serde(default)]
+    pub dry_run: Option<bool>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CleanupResponse {
+    pub orphans_found: usize,
+    pub orphans_deleted: usize,
+    pub files_deleted: usize,
+    pub errors: Vec<String>,
+    pub dry_run: bool,
+}
+
+/// Admin-only endpoint to trigger media orphan cleanup on demand.
+///
+/// POST /api/media/cleanup?grace_hours=24&dry_run=false
+///
+/// - `grace_hours` (optional, default 24): only consider media older than
+///    this many hours as potential orphans. This gives editors time to
+///    finish editing and save references.
+/// - `dry_run` (optional, default false): if true, only count orphans
+///    without actually deleting anything — useful for auditing.
+///
+/// Returns a report of how many orphans were found, deleted, and any errors
+/// encountered during file deletion.
+pub async fn cleanup(
+    State(state): State<AppState>,
+    _admin: AdminUser,
+    Query(query): Query<CleanupQuery>,
+) -> Result<Json<CleanupResponse>, ApiError> {
+    let grace_hours = query.grace_hours.unwrap_or(24).max(1);
+    let dry_run = query.dry_run.unwrap_or(false);
+
+    let cleanup_service = MediaCleanupService::new(state.db.clone(), state.cache.clone());
+
+    if dry_run {
+        let count = cleanup_service.count_orphans(grace_hours).await?;
+
+        info!(
+            "Media cleanup dry-run: {} orphans found (grace period: {}h)",
+            count, grace_hours
+        );
+
+        return Ok(Json(CleanupResponse {
+            orphans_found: count as usize,
+            orphans_deleted: 0,
+            files_deleted: 0,
+            errors: vec![],
+            dry_run: true,
+        }));
+    }
+
+    // Full cleanup: find orphans, delete DB records, then delete files
+    let (orphans, mut report) = cleanup_service.cleanup(grace_hours).await?;
+
+    let mut files_deleted = 0usize;
+    let mut errors = Vec::new();
+
+    for orphan in &orphans {
+        let thumb = orphan.thumbnail_path.as_deref().unwrap_or("");
+        match state
+            .image_service
+            .delete_image(&orphan.filename, thumb)
+            .await
+        {
+            Ok(_) => {
+                files_deleted += 1;
+                if !thumb.is_empty() {
+                    files_deleted += 1;
+                }
+            }
+            Err(e) => {
+                let msg = format!("Failed to delete files for media {}: {}", orphan.id, e);
+                warn!("{}", msg);
+                errors.push(msg);
+            }
+        }
+    }
+
+    report.files_deleted = files_deleted;
+    report.errors.extend(errors);
+
+    info!(
+        "Admin media cleanup complete: {} found, {} deleted, {} files removed, {} errors",
+        report.orphans_found,
+        report.orphans_deleted,
+        report.files_deleted,
+        report.errors.len()
+    );
+
+    Ok(Json(CleanupResponse {
+        orphans_found: report.orphans_found,
+        orphans_deleted: report.orphans_deleted,
+        files_deleted: report.files_deleted,
+        errors: report.errors,
+        dry_run: false,
+    }))
+}
+
 pub async fn delete(
     State(state): State<AppState>,
-    Extension(user): Extension<AuthenticatedUser>,
+    user: AuthenticatedUser,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let service = MediaService::new(state.db.clone(), state.cache.clone());
@@ -218,7 +347,7 @@ pub async fn delete(
         .ok_or_else(|| ApiError::NotFound("Media not found".to_string()))?;
 
     // Only admin or uploader can delete
-    if existing.uploaded_by != user.id && user.role != UserRole::Admin {
+    if existing.uploaded_by != user.id && user.role != crate::models::user::UserRole::Admin {
         return Err(ApiError::Forbidden);
     }
 

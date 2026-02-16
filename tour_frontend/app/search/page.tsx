@@ -53,10 +53,10 @@ function ResultCard({ result }: { result: SearchResult }) {
     <Link href={result.url}>
       <div className="bg-white rounded-2xl overflow-hidden hover:shadow-xl transition-shadow cursor-pointer border border-gray-100 p-6">
         <div className="flex gap-6">
-          {result.featured_image && (
+          {result.cover_image && (
             <div className="overflow-hidden rounded-xl w-48 h-48 flex-shrink-0 relative">
               <Image
-                src={result.featured_image}
+                src={result.cover_image}
                 alt={result.title}
                 fill
                 className="object-cover hover:scale-105 transition-transform duration-300"

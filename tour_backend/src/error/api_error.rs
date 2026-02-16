@@ -85,11 +85,32 @@ impl IntoResponse for ApiError {
                 "Internal server error".to_string(),
             ),
             ApiError::DatabaseError(e) => {
+                // Log full details server-side for debugging — including
+                // constraint names, table names, error codes, and messages.
+                // NEVER expose these to the client (CWE-209).
                 tracing::error!("Database error: {:?}", e);
+
+                // Check for unique-constraint violations — these are user-
+                // facing (e.g. "slug already exists") and safe to surface
+                // as a 409 Conflict with a generic hint.
+                if let sqlx::Error::Database(ref db_err) = e {
+                    if db_err.code().as_deref() == Some("23505") {
+                        return (
+                            StatusCode::CONFLICT,
+                            Json(ErrorResponse {
+                                error: "conflict".to_string(),
+                                message: "A record with that value already exists.".to_string(),
+                                details: None,
+                            }),
+                        )
+                            .into_response();
+                    }
+                }
+
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "database_error",
-                    "Database error occurred".to_string(),
+                    "A database error occurred. Please try again later.".to_string(),
                 )
             }
             ApiError::RedisError(e) => {

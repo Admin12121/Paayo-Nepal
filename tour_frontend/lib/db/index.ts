@@ -1,28 +1,30 @@
-import { drizzle } from "drizzle-orm/mysql2";
-import mysql from "mysql2/promise";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { Pool } from "pg";
 import * as schema from "./schema";
 
 const globalForDb = globalThis as unknown as {
-  connection: mysql.Pool | undefined;
+  pool: Pool | undefined;
 };
 
-const connection =
-  globalForDb.connection ??
-  mysql.createPool({
-    host: process.env.DATABASE_HOST || "localhost",
-    port: parseInt(process.env.DATABASE_PORT || "3306"),
-    user: process.env.DATABASE_USER || "tourism",
-    password: process.env.DATABASE_PASSWORD || "tourism_dev_password",
-    database: process.env.DATABASE_NAME || "tourism",
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0,
-  });
+const pool =
+  globalForDb.pool ??
+  new Pool(
+    process.env.DATABASE_URL
+      ? { connectionString: process.env.DATABASE_URL, max: 10 }
+      : {
+          host: process.env.DATABASE_HOST || "localhost",
+          port: parseInt(process.env.DATABASE_PORT || "5432"),
+          user: process.env.DATABASE_USER || "tourism",
+          password: process.env.DATABASE_PASSWORD || "tourism_dev_password",
+          database: process.env.DATABASE_NAME || "tourism",
+          max: 10,
+        },
+  );
 
 if (process.env.NODE_ENV !== "production") {
-  globalForDb.connection = connection;
+  globalForDb.pool = pool;
 }
 
-export const db = drizzle(connection, { schema, mode: "default" });
+export const db = drizzle(pool, { schema });
 
 export type Database = typeof db;

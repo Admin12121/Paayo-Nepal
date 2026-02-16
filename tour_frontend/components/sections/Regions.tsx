@@ -1,6 +1,7 @@
 import { SectionHeading } from "@/components/atoms/section-heading";
 import { ImageCard } from "@/components/atoms/image-card";
 import { ViewMoreButton } from "@/components/atoms/view-more-button";
+import { RegionsSkeleton } from "@/components/ui/Skeleton";
 import { regionsApi } from "@/lib/api-client";
 
 export async function RegionsSection() {
@@ -9,10 +10,10 @@ export async function RegionsSection() {
     const res = await regionsApi.list({ limit: 9 });
     regions = res.data;
   } catch {
-    return null;
+    return <RegionsSkeleton />;
   }
 
-  if (!regions || regions.length === 0) return null;
+  if (!regions || regions.length === 0) return <RegionsSkeleton />;
 
   return (
     <section className="py-10 px-6 bg-white">
@@ -24,7 +25,7 @@ export async function RegionsSection() {
           {regions.slice(0, 9).map((region) => (
             <ImageCard
               key={region.id}
-              src={region.featured_image || ""}
+              src={region.cover_image || ""}
               alt={region.name}
               title={region.name}
               href={`/regions/${region.slug}`}

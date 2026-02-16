@@ -11,10 +11,10 @@ axum = { version = "0.7", features = ["multipart", "macros"] }
 axum-extra = { version = "0.9", features = ["typed-header", "cookie"] }
 tokio = { version = "1.0", features = ["full"] }
 tower = { version = "0.4", features = ["full"] }
-tower-http = { version = "0.5", features = ["cors", "trace", "compression-gzip", "limit", "timeout"] }
+tower-http = { version = "0.5", features = ["cors", "trace", "compression-gzip", "limit", "timeout", "fs"] }
 
 # Database
-sqlx = { version = "0.7", features = ["runtime-tokio", "mysql", "chrono", "uuid", "json"] }
+sqlx = { version = "0.7", features = ["runtime-tokio", "postgres", "chrono", "uuid", "json"] }
 
 # Redis
 redis = { version = "0.25", features = ["tokio-comp", "connection-manager"] }
@@ -38,7 +38,7 @@ bcrypt = "0.15"
 # Image Processing - AVIF support
 image = { version = "0.25", features = ["avif", "jpeg", "png", "webp"] }
 blurhash = "0.2"
-ravif = "0.11" # High-quality AVIF encoding
+ravif = { version = "0.11", default-features = false, features = ["threading"] } # Disable asm to avoid NASM requirement
 
 # Async utilities
 futures = "0.3"
@@ -63,6 +63,16 @@ governor = "0.6"
 
 # Slug generation
 slug = "0.1"
+
+# Cryptographic hashing (viewer hash)
+sha2 = "0.10"
+
+# CSRF token generation
+rand = "0.8"
+hex = "0.4"
+
+# HTML sanitization (XSS prevention for user-submitted content)
+ammonia = "3"
 
 # MIME type detection
 mime_guess = "2.0"

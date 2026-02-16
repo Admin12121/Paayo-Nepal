@@ -1,39 +1,49 @@
 import {
-  mysqlTable,
+  pgTable,
+  pgEnum,
   varchar,
   text,
   timestamp,
-  int,
-  decimal,
+  integer,
+  boolean,
   index,
-} from "drizzle-orm/mysql-core";
+  jsonb,
+} from "drizzle-orm/pg-core";
 import { user } from "./auth";
 
-export const regions = mysqlTable(
+// Mirrors: CREATE TYPE content_status AS ENUM ('draft', 'published');
+// Declared here (regions has no schema imports) to avoid circular deps.
+// Other schemas (posts, videos, hotels, photo-features) import from here.
+export const contentStatus = pgEnum("content_status", ["draft", "published"]);
+
+export const regions = pgTable(
   "regions",
   {
     id: varchar("id", { length: 36 }).primaryKey(),
-    slug: varchar("slug", { length: 255 }).notNull().unique(),
-    name: varchar("name", { length: 255 }).notNull(),
-    description: text("description"),
-    featuredImage: varchar("featured_image", { length: 255 }),
-    featuredImageBlur: varchar("featured_image_blur", { length: 100 }),
-    latitude: decimal("latitude", { precision: 10, scale: 8 }),
-    longitude: decimal("longitude", { precision: 11, scale: 8 }),
-    province: varchar("province", { length: 100 }),
-    district: varchar("district", { length: 100 }),
-    displayOrder: int("display_order").default(0),
-    createdBy: varchar("created_by", { length: 36 })
+    authorId: varchar("author_id", { length: 36 })
       .notNull()
       .references(() => user.id),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+    name: varchar("name", { length: 255 }).notNull(),
+    slug: varchar("slug", { length: 255 }).notNull().unique(),
+    description: text("description"),
+    coverImage: varchar("cover_image", { length: 500 }),
+    mapData: jsonb("map_data"),
+    attractionRank: integer("attraction_rank"),
+    isFeatured: boolean("is_featured").default(false).notNull(),
+    status: contentStatus("status").default("draft").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
   (table) => ({
-    slugIdx: index("region_slug_idx").on(table.slug),
-    orderIdx: index("order_idx").on(table.displayOrder),
-    provinceIdx: index("province_idx").on(table.province),
-  })
+    slugIdx: index("idx_regions_slug").on(table.slug),
+    statusIdx: index("idx_regions_status").on(table.status),
+    rankIdx: index("idx_regions_rank").on(table.attractionRank),
+  }),
 );
 
 // Type exports

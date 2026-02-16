@@ -2,26 +2,16 @@ use axum::{
     extract::{Path, Query, State},
     Json,
 };
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use crate::{
-    error::ApiError, extractors::auth::AdminUser, handlers::posts::PaginatedResponse, AppState,
+    error::ApiError,
+    extractors::auth::AdminUser,
+    handlers::posts::PaginatedResponse,
+    services::user_service::{ListUsersFilter, UserCounts, UserListItem},
+    services::UserService,
+    AppState,
 };
-
-#[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct UserListItem {
-    pub id: String,
-    pub email: String,
-    pub email_verified: bool,
-    pub name: Option<String>,
-    pub image: Option<String>,
-    pub role: String,
-    pub is_active: bool,
-    pub banned_at: Option<DateTime<Utc>>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
 
 #[derive(Debug, Deserialize)]
 pub struct ListUsersQuery {
@@ -32,6 +22,11 @@ pub struct ListUsersQuery {
     pub search: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ChangeRoleInput {
+    pub role: String,
+}
+
 pub async fn list(
     State(state): State<AppState>,
     _admin: AdminUser,
@@ -39,59 +34,15 @@ pub async fn list(
 ) -> Result<Json<PaginatedResponse<UserListItem>>, ApiError> {
     let page = query.page.unwrap_or(1).max(1);
     let limit = query.limit.unwrap_or(20).min(100);
-    let offset = (page - 1) * limit;
 
-    let mut where_clauses = vec!["1=1".to_string()];
-    let mut bind_values: Vec<String> = Vec::new();
+    let service = UserService::new(state.db.clone());
+    let filter = ListUsersFilter {
+        role: query.role,
+        status: query.status,
+        search: query.search,
+    };
 
-    if let Some(ref role) = query.role {
-        if !role.is_empty() {
-            where_clauses.push("`role` = ?".to_string());
-            bind_values.push(role.clone());
-        }
-    }
-
-    if let Some(ref status) = query.status {
-        match status.as_str() {
-            "active" => where_clauses.push("`is_active` = 1 AND `banned_at` IS NULL".to_string()),
-            "pending" => where_clauses.push("`is_active` = 0 AND `banned_at` IS NULL".to_string()),
-            "blocked" => where_clauses.push("`banned_at` IS NOT NULL".to_string()),
-            _ => {}
-        }
-    }
-
-    if let Some(ref search) = query.search {
-        if !search.is_empty() {
-            where_clauses.push("(`name` LIKE ? OR `email` LIKE ?)".to_string());
-            let pattern = format!("%{}%", search);
-            bind_values.push(pattern.clone());
-            bind_values.push(pattern);
-        }
-    }
-
-    let where_sql = where_clauses.join(" AND ");
-
-    let count_sql = format!("SELECT COUNT(*) FROM `user` WHERE {}", where_sql);
-    let list_sql = format!(
-        "SELECT `id`, `email`, `email_verified`, `name`, `image`, `role`, `is_active`, `banned_at`, `created_at`, `updated_at` FROM `user` WHERE {} ORDER BY `created_at` DESC LIMIT ? OFFSET ?",
-        where_sql
-    );
-
-    // Build count query
-    let mut count_query = sqlx::query_as::<_, (i64,)>(&count_sql);
-    for val in &bind_values {
-        count_query = count_query.bind(val);
-    }
-    let (total,) = count_query.fetch_one(&state.db).await?;
-
-    // Build list query
-    let mut list_query = sqlx::query_as::<_, UserListItem>(&list_sql);
-    for val in &bind_values {
-        list_query = list_query.bind(val);
-    }
-    list_query = list_query.bind(limit).bind(offset);
-    let users = list_query.fetch_all(&state.db).await?;
-
+    let (users, total) = service.list(page, limit, &filter).await?;
     let total_pages = ((total as f64) / (limit as f64)).ceil() as i32;
 
     Ok(Json(PaginatedResponse {
@@ -103,71 +54,132 @@ pub async fn list(
     }))
 }
 
-pub async fn activate(
+pub async fn get_by_id(
     State(state): State<AppState>,
     _admin: AdminUser,
     Path(id): Path<String>,
+) -> Result<Json<UserListItem>, ApiError> {
+    let service = UserService::new(state.db.clone());
+    let user = service
+        .get_by_id(&id)
+        .await?
+        .ok_or_else(|| ApiError::NotFound("User not found".to_string()))?;
+
+    Ok(Json(user))
+}
+
+pub async fn activate(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    sqlx::query("UPDATE `user` SET `is_active` = 1, `banned_at` = NULL WHERE `id` = ?")
-        .bind(&id)
-        .execute(&state.db)
-        .await?;
+    let service = UserService::new(state.db.clone());
+    service.activate(&id).await?;
+
+    // Notify the editor that their account has been activated (real-time via SSE)
+    let notif_service = state.notification_service();
+    let _ = notif_service
+        .notify_user(
+            &id,
+            Some(&admin.0.id),
+            "verified",
+            "Account Activated",
+            Some("Your account has been verified and activated by an administrator. You can now create and manage content."),
+            None,
+            None,
+            Some("/dashboard"),
+        )
+        .await;
+
     Ok(Json(serde_json::json!({"success": true})))
 }
 
 pub async fn deactivate(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    // Prevent deactivating admin users
-    let user: Option<(String,)> = sqlx::query_as("SELECT `role` FROM `user` WHERE `id` = ?")
-        .bind(&id)
-        .fetch_optional(&state.db)
-        .await?;
-    if let Some((role,)) = user {
-        if role == "admin" {
-            return Err(ApiError::Forbidden);
-        }
-    }
-    sqlx::query("UPDATE `user` SET `is_active` = 0 WHERE `id` = ?")
-        .bind(&id)
-        .execute(&state.db)
-        .await?;
+    let service = UserService::new(state.db.clone());
+    service.deactivate(&id).await?;
+
+    // Notify the editor that their account has been deactivated
+    let notif_service = state.notification_service();
+    let _ = notif_service
+        .notify_user(
+            &id,
+            Some(&admin.0.id),
+            "verified",
+            "Account Deactivated",
+            Some("Your account has been deactivated by an administrator. Content creation is now disabled until reactivation."),
+            None,
+            None,
+            Some("/dashboard"),
+        )
+        .await;
+
     Ok(Json(serde_json::json!({"success": true})))
 }
 
 pub async fn block(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    // Block user: deactivate + set banned_at + delete all sessions
-    sqlx::query(
-        "UPDATE `user` SET `is_active` = 0, `banned_at` = NOW() WHERE `id` = ? AND `role` != 'admin'",
-    )
-    .bind(&id)
-    .execute(&state.db)
-    .await?;
+    let service = UserService::new(state.db.clone());
+    service.block(&id).await?;
 
-    // Delete all sessions to force logout
-    sqlx::query("DELETE FROM `session` WHERE `user_id` = ?")
-        .bind(&id)
-        .execute(&state.db)
-        .await?;
+    // Notify the user that their account has been blocked
+    let notif_service = state.notification_service();
+    let _ = notif_service
+        .notify_user(
+            &id,
+            Some(&admin.0.id),
+            "verified",
+            "Account Blocked",
+            Some("Your account has been blocked by an administrator. Please contact support if you believe this is an error."),
+            None,
+            None,
+            None,
+        )
+        .await;
 
     Ok(Json(serde_json::json!({"success": true})))
 }
 
 pub async fn unblock(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    sqlx::query("UPDATE `user` SET `is_active` = 1, `banned_at` = NULL WHERE `id` = ?")
-        .bind(&id)
-        .execute(&state.db)
-        .await?;
+    let service = UserService::new(state.db.clone());
+    service.unblock(&id).await?;
+
+    // Notify the user that their account has been unblocked
+    let notif_service = state.notification_service();
+    let _ = notif_service
+        .notify_user(
+            &id,
+            Some(&admin.0.id),
+            "verified",
+            "Account Unblocked",
+            Some("Your account has been unblocked and reactivated. You can now access the platform again."),
+            None,
+            None,
+            Some("/dashboard"),
+        )
+        .await;
+
+    Ok(Json(serde_json::json!({"success": true})))
+}
+
+pub async fn change_role(
+    State(state): State<AppState>,
+    _admin: AdminUser,
+    Path(id): Path<String>,
+    Json(input): Json<ChangeRoleInput>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let service = UserService::new(state.db.clone());
+    service.change_role(&id, &input.role).await?;
     Ok(Json(serde_json::json!({"success": true})))
 }
 
@@ -176,17 +188,23 @@ pub async fn delete_user(
     _admin: AdminUser,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    // Prevent deleting admin users
-    let result = sqlx::query("DELETE FROM `user` WHERE `id` = ? AND `role` != 'admin'")
-        .bind(&id)
-        .execute(&state.db)
-        .await?;
+    let service = UserService::new(state.db.clone());
+    let deleted = service.delete(&id).await?;
 
-    if result.rows_affected() == 0 {
+    if !deleted {
         return Err(ApiError::BadRequest(
             "Cannot delete admin users".to_string(),
         ));
     }
 
     Ok(Json(serde_json::json!({"success": true})))
+}
+
+pub async fn counts(
+    State(state): State<AppState>,
+    _admin: AdminUser,
+) -> Result<Json<UserCounts>, ApiError> {
+    let service = UserService::new(state.db.clone());
+    let counts = service.get_counts().await?;
+    Ok(Json(counts))
 }

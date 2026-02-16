@@ -1,5 +1,5 @@
 use axum::{
-    routing::{delete, get, post, put},
+    routing::{get, post, put},
     Router,
 };
 
@@ -18,9 +18,6 @@ pub fn routes() -> Router<AppState> {
                 .delete(handlers::posts::delete),
         )
         .route("/:id/publish", post(handlers::posts::publish))
-        .route("/:id/approve", post(handlers::posts::approve))
-        .route(
-            "/:post_id/comments",
-            get(handlers::comments::list_for_post).post(handlers::comments::create),
-        )
+        .route("/:id/status", put(handlers::posts::update_status))
+        .route("/:post_id/comments", get(handlers::comments::list_for_post))
 }

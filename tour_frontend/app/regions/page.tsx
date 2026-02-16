@@ -37,14 +37,12 @@ function RegionCard({ region }: { region: Region }) {
         className="relative overflow-hidden cursor-pointer group rounded-[20px] h-[420px]"
         style={{ boxShadow: "0px 4px 20px rgba(0, 0, 0, 0.08)" }}
       >
-        {region.featured_image ? (
+        {region.cover_image ? (
           <Image
-            src={region.featured_image}
+            src={region.cover_image}
             alt={region.name}
             fill
             className="object-cover group-hover:scale-105 transition-transform duration-500"
-            placeholder={region.featured_image_blur ? "blur" : "empty"}
-            blurDataURL={region.featured_image_blur || undefined}
           />
         ) : (
           <div className="w-full h-full bg-gray-200 flex items-center justify-center">

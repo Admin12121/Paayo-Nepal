@@ -1,6 +1,7 @@
 import { SectionHeading } from "@/components/atoms/section-heading";
 import { ImageCard } from "@/components/atoms/image-card";
 import { ViewMoreButton } from "@/components/atoms/view-more-button";
+import { AttractionsSkeleton } from "@/components/ui/Skeleton";
 import { attractionsApi } from "@/lib/api-client";
 
 export async function AttractionsSection() {
@@ -9,10 +10,10 @@ export async function AttractionsSection() {
     const res = await attractionsApi.top({ limit: 5 });
     attractions = res.data;
   } catch {
-    return null;
+    return <AttractionsSkeleton />;
   }
 
-  if (!attractions || attractions.length === 0) return null;
+  if (!attractions || attractions.length === 0) return <AttractionsSkeleton />;
 
   // Split into top row (first 2) and bottom row (next 3)
   const topRow = attractions.slice(0, 2);
@@ -29,9 +30,9 @@ export async function AttractionsSection() {
             {topRow.map((attraction) => (
               <ImageCard
                 key={attraction.id}
-                src={attraction.featured_image || ""}
-                alt={attraction.name}
-                title={attraction.name}
+                src={attraction.cover_image || ""}
+                alt={attraction.title}
+                title={attraction.title}
                 href={`/attractions/${attraction.slug}`}
                 className="h-[400px]"
               />
@@ -45,9 +46,9 @@ export async function AttractionsSection() {
             {bottomRow.map((attraction) => (
               <ImageCard
                 key={attraction.id}
-                src={attraction.featured_image || ""}
-                alt={attraction.name}
-                title={attraction.name}
+                src={attraction.cover_image || ""}
+                alt={attraction.title}
+                title={attraction.title}
                 href={`/attractions/${attraction.slug}`}
                 className="h-[220px]"
               />

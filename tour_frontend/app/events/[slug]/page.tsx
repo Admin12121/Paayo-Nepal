@@ -1,11 +1,16 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { notFound, useParams } from 'next/navigation';
-import { eventsApi, Event } from '@/lib/api-client';
-import Image from 'next/image';
-import Link from 'next/link';
-import { Calendar, Clock, MapPin, Eye, Share2 } from 'lucide-react';
+import { useState, useEffect } from "react";
+import { notFound, useParams } from "next/navigation";
+import { eventsApi, Event } from "@/lib/api-client";
+import Image from "next/image";
+import Link from "next/link";
+import { Calendar, Clock, MapPin, Eye } from "lucide-react";
+import { useViewTracker } from "@/lib/hooks/use-view-tracker";
+import { LikeButton } from "@/components/ui/LikeButton";
+import { CommentSection } from "@/components/ui/CommentSection";
+import { ShareButtons } from "@/components/ui/ShareButtons";
+import { prepareContent } from "@/lib/sanitize";
 
 // Breadcrumbs Component
 function Breadcrumbs({ items }: { items: { label: string; href?: string }[] }) {
@@ -14,7 +19,10 @@ function Breadcrumbs({ items }: { items: { label: string; href?: string }[] }) {
       {items.map((item, index) => (
         <div key={index} className="flex items-center gap-2">
           {item.href ? (
-            <Link href={item.href} className="hover:text-[#0078C0] transition-colors">
+            <Link
+              href={item.href}
+              className="hover:text-[#0078C0] transition-colors"
+            >
               {item.label}
             </Link>
           ) : (
@@ -30,10 +38,10 @@ function Breadcrumbs({ items }: { items: { label: string; href?: string }[] }) {
 // Related Event Card
 function RelatedEventCard({ event }: { event: Event }) {
   const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
+    return new Date(dateStr).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
     });
   };
 
@@ -41,14 +49,12 @@ function RelatedEventCard({ event }: { event: Event }) {
     <Link href={`/events/${event.slug}`}>
       <div className="flex gap-4 group cursor-pointer">
         <div className="w-[140px] h-[90px] rounded-xl overflow-hidden shrink-0 relative">
-          {event.featured_image ? (
+          {event.cover_image ? (
             <Image
-              src={event.featured_image}
+              src={event.cover_image}
               alt={event.title}
               fill
               className="object-cover group-hover:scale-105 transition-transform duration-300"
-              placeholder={event.featured_image_blur ? 'blur' : 'empty'}
-              blurDataURL={event.featured_image_blur || undefined}
             />
           ) : (
             <div className="w-full h-full bg-gray-200 flex items-center justify-center">
@@ -57,7 +63,9 @@ function RelatedEventCard({ event }: { event: Event }) {
           )}
         </div>
         <div className="flex flex-col justify-center">
-          <p className="text-xs text-gray-500 mb-1">{formatDate(event.start_date)}</p>
+          <p className="text-xs text-gray-500 mb-1">
+            {event.event_date ? formatDate(event.event_date) : "TBD"}
+          </p>
           <h4 className="text-sm font-semibold text-[#1A2B49] leading-snug line-clamp-2 group-hover:text-[#0078C0] transition-colors">
             {event.title}
           </h4>
@@ -76,6 +84,9 @@ export default function EventDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Track the page view once the event is loaded
+  useViewTracker("post", event?.id);
+
   useEffect(() => {
     if (slug) {
       fetchEvent();
@@ -89,8 +100,8 @@ export default function EventDetailPage() {
       setError(null);
       const data = await eventsApi.getBySlug(slug);
       setEvent(data);
-    } catch (err: any) {
-      setError(err.message || 'Failed to load event');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to load event");
     } finally {
       setLoading(false);
     }
@@ -99,18 +110,18 @@ export default function EventDetailPage() {
   const fetchRelatedEvents = async () => {
     try {
       const response = await eventsApi.upcoming({ limit: 5 });
-      setRelatedEvents(response.data.filter(e => e.slug !== slug));
+      setRelatedEvents(response.data.filter((e) => e.slug !== slug));
     } catch (err) {
-      console.error('Failed to fetch related events:', err);
+      console.error("Failed to fetch related events:", err);
     }
   };
 
   const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
+    return new Date(dateStr).toLocaleDateString("en-US", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
     });
   };
 
@@ -137,26 +148,26 @@ export default function EventDetailPage() {
   return (
     <div className="bg-[#F8F9FA] min-h-screen pt-20">
       <div className="max-w-[1400px] mx-auto px-6 py-10">
-        <Breadcrumbs items={[
-          { label: 'Home', href: '/' },
-          { label: 'Events', href: '/events' },
-          { label: event.title }
-        ]} />
+        <Breadcrumbs
+          items={[
+            { label: "Home", href: "/" },
+            { label: "Events", href: "/events" },
+            { label: event.title },
+          ]}
+        />
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Main Content */}
           <div className="lg:col-span-2">
             {/* Featured Image */}
-            {event.featured_image && (
+            {event.cover_image && (
               <div className="relative h-[500px] w-full rounded-2xl overflow-hidden mb-6">
                 <Image
-                  src={event.featured_image}
+                  src={event.cover_image}
                   alt={event.title}
                   fill
                   className="object-cover"
                   priority
-                  placeholder={event.featured_image_blur ? 'blur' : 'empty'}
-                  blurDataURL={event.featured_image_blur || undefined}
                 />
                 {event.is_featured && (
                   <div className="absolute top-6 right-6 px-4 py-2 bg-[#F29C72] text-white text-sm font-semibold rounded-full">
@@ -179,12 +190,13 @@ export default function EventDetailPage() {
                   <div>
                     <p className="text-sm text-gray-600 mb-1">Date</p>
                     <p className="font-semibold text-gray-900">
-                      {formatDate(event.start_date)}
-                      {event.end_date && event.end_date !== event.start_date && (
-                        <span className="block text-sm font-normal text-gray-600 mt-1">
-                          to {formatDate(event.end_date)}
-                        </span>
-                      )}
+                      {event.event_date ? formatDate(event.event_date) : "TBD"}
+                      {event.event_end_date &&
+                        event.event_end_date !== event.event_date && (
+                          <span className="block text-sm font-normal text-gray-600 mt-1">
+                            to {formatDate(event.event_end_date)}
+                          </span>
+                        )}
                     </p>
                   </div>
                 </div>
@@ -207,22 +219,35 @@ export default function EventDetailPage() {
                     <MapPin className="w-5 h-5 text-[#0078C0] mt-1 shrink-0" />
                     <div>
                       <p className="text-sm text-gray-600 mb-1">Location</p>
-                      <p className="font-semibold text-gray-900">{event.location}</p>
+                      <p className="font-semibold text-gray-900">
+                        {event.location}
+                      </p>
                     </div>
                   </div>
                 )}
               </div>
 
-              {/* Stats */}
-              <div className="flex items-center gap-6 mt-6">
-                <div className="flex items-center gap-2 text-gray-600">
-                  <Eye className="w-5 h-5" />
-                  <span className="font-medium">{event.views.toLocaleString()} views</span>
+              {/* Engagement: views, like, share */}
+              <div className="flex items-center justify-between flex-wrap gap-4 mt-6">
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-1.5 text-gray-500 text-sm">
+                    <Eye className="w-4 h-4" />
+                    <span className="font-medium">
+                      {event.views.toLocaleString()} views
+                    </span>
+                  </div>
+                  <LikeButton
+                    targetType="post"
+                    targetId={event.id}
+                    initialCount={event.likes}
+                    size="sm"
+                  />
                 </div>
-                <button className="flex items-center gap-2 text-[#0078C0] hover:text-[#0068A0] transition-colors">
-                  <Share2 className="w-5 h-5" />
-                  <span className="font-medium">Share</span>
-                </button>
+                <ShareButtons
+                  title={event.title}
+                  description={event.short_description || undefined}
+                  compact
+                />
               </div>
             </div>
 
@@ -239,17 +264,22 @@ export default function EventDetailPage() {
             )}
 
             {/* Content */}
-            {event.content && (
-              <div className="bg-white rounded-2xl p-8 shadow-sm">
+            {!!event.content && (
+              <div className="bg-white rounded-2xl p-8 mb-6 shadow-sm">
                 <h2 className="font-display text-2xl font-bold text-[#1A2B49] mb-4">
                   Event Details
                 </h2>
                 <div
                   className="prose prose-lg max-w-none"
-                  dangerouslySetInnerHTML={{ __html: event.content }}
+                  dangerouslySetInnerHTML={{
+                    __html: prepareContent(event.content),
+                  }}
                 />
               </div>
             )}
+
+            {/* Comments Section */}
+            <CommentSection targetType="post" targetId={event.id} />
           </div>
 
           {/* Sidebar */}
@@ -282,6 +312,17 @@ export default function EventDetailPage() {
               </button>
             </div>
 
+            {/* Share Card */}
+            <div className="bg-white rounded-xl p-6 shadow-sm mb-6">
+              <h3 className="font-display text-xl font-bold text-[#1A2B49] mb-4">
+                Share this event
+              </h3>
+              <ShareButtons
+                title={event.title}
+                description={event.short_description || undefined}
+              />
+            </div>
+
             {/* Related Events */}
             {relatedEvents.length > 0 && (
               <div className="bg-white rounded-xl p-6 shadow-sm">
@@ -290,7 +331,10 @@ export default function EventDetailPage() {
                 </h3>
                 <div className="space-y-5">
                   {relatedEvents.slice(0, 4).map((relatedEvent) => (
-                    <RelatedEventCard key={relatedEvent.id} event={relatedEvent} />
+                    <RelatedEventCard
+                      key={relatedEvent.id}
+                      event={relatedEvent}
+                    />
                   ))}
                 </div>
                 <Link

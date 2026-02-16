@@ -1,30 +1,36 @@
 import { InputHTMLAttributes, forwardRef } from "react";
-import { clsx } from "clsx";
+import { cn } from "@/lib/utils";
 
-interface CheckboxProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'type'> {
+interface CheckboxProps extends Omit<
+  InputHTMLAttributes<HTMLInputElement>,
+  "type"
+> {
   label?: string;
 }
 
 const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
   ({ className, label, ...props }, ref) => {
     return (
-      <label className="flex items-center cursor-pointer">
+      <label
+        className={cn(
+          "inline-flex items-center",
+          props.disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer",
+        )}
+      >
         <input
           ref={ref}
           type="checkbox"
-          className={clsx(
-            "w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2 cursor-pointer",
-            props.disabled && "opacity-50 cursor-not-allowed",
-            className
+          data-slot="checkbox"
+          className={cn(
+            "h-4 w-4 rounded border border-gray-300 bg-white text-blue-600 shadow-sm transition-colors focus-visible:ring-2 focus-visible:ring-blue-100 focus-visible:outline-none",
+            className,
           )}
           {...props}
         />
-        {label && (
-          <span className="ml-2 text-sm text-gray-700">{label}</span>
-        )}
+        {label && <span className="ml-2 text-sm text-gray-700">{label}</span>}
       </label>
     );
-  }
+  },
 );
 
 Checkbox.displayName = "Checkbox";

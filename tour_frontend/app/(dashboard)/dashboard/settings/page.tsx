@@ -23,6 +23,8 @@ import Input from "@/components/ui/input";
 import Label from "@/components/ui/Label";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import DashboardCard from "@/components/dashboard/DashboardCard";
 import {
   useSession,
   enableTwoFactor,
@@ -323,54 +325,53 @@ export default function SettingsPage() {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200 mb-6">
-        <nav className="flex space-x-8">
-          <button
-            onClick={() => setActiveTab("profile")}
-            className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === "profile"
-                ? "border-blue-500 text-blue-600"
-                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-              }`}
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) =>
+          setActiveTab(value as "profile" | "security" | "2fa" | "passkeys")
+        }
+        className="mb-6"
+      >
+        <div className="border-b border-gray-200">
+          <TabsList
+            variant="line"
+            className="h-auto gap-8 rounded-none bg-transparent p-0"
           >
-            <User className="w-4 h-4 inline mr-2" />
-            Profile
-          </button>
-          <button
-            onClick={() => setActiveTab("security")}
-            className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === "security"
-                ? "border-blue-500 text-blue-600"
-                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-              }`}
-          >
-            <Lock className="w-4 h-4 inline mr-2" />
-            Security
-          </button>
-          <button
-            onClick={() => setActiveTab("2fa")}
-            className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === "2fa"
-                ? "border-blue-500 text-blue-600"
-                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-              }`}
-          >
-            <Shield className="w-4 h-4 inline mr-2" />
-            Two-Factor Auth
-          </button>
-          <button
-            onClick={() => setActiveTab("passkeys")}
-            className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === "passkeys"
-                ? "border-blue-500 text-blue-600"
-                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-              }`}
-          >
-            <Fingerprint className="w-4 h-4 inline mr-2" />
-            Passkeys
-          </button>
-        </nav>
-      </div>
+            <TabsTrigger
+              value="profile"
+              className="h-auto rounded-none px-1 py-4 text-sm font-medium data-[state=active]:text-blue-600"
+            >
+              <User className="mr-2 inline h-4 w-4" />
+              Profile
+            </TabsTrigger>
+            <TabsTrigger
+              value="security"
+              className="h-auto rounded-none px-1 py-4 text-sm font-medium data-[state=active]:text-blue-600"
+            >
+              <Lock className="mr-2 inline h-4 w-4" />
+              Security
+            </TabsTrigger>
+            <TabsTrigger
+              value="2fa"
+              className="h-auto rounded-none px-1 py-4 text-sm font-medium data-[state=active]:text-blue-600"
+            >
+              <Shield className="mr-2 inline h-4 w-4" />
+              Two-Factor Auth
+            </TabsTrigger>
+            <TabsTrigger
+              value="passkeys"
+              className="h-auto rounded-none px-1 py-4 text-sm font-medium data-[state=active]:text-blue-600"
+            >
+              <Fingerprint className="mr-2 inline h-4 w-4" />
+              Passkeys
+            </TabsTrigger>
+          </TabsList>
+        </div>
+      </Tabs>
 
       {/* Profile Tab */}
       {activeTab === "profile" && (
-        <div className="bg-white rounded-lg shadow p-6 max-w-2xl">
+        <DashboardCard className="max-w-2xl" contentClassName="p-6">
           <h2 className="text-xl font-semibold text-gray-900 mb-6">
             Profile Information
           </h2>
@@ -413,12 +414,12 @@ export default function SettingsPage() {
               Save Changes
             </Button>
           </form>
-        </div>
+        </DashboardCard>
       )}
 
       {/* Security Tab */}
       {activeTab === "security" && (
-        <div className="bg-white rounded-lg shadow p-6 max-w-2xl">
+        <DashboardCard className="max-w-2xl" contentClassName="p-6">
           <h2 className="text-xl font-semibold text-gray-900 mb-6">
             Change Password
           </h2>
@@ -437,17 +438,19 @@ export default function SettingsPage() {
                   disabled={isPasswordLoading}
                 />
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="sm"
                   onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-2 top-1/2 h-8 w-8 -translate-y-1/2 p-0 text-gray-400 hover:bg-transparent hover:text-gray-600"
                 >
                   {showCurrentPassword ? (
                     <EyeOff className="w-5 h-5" />
                   ) : (
                     <Eye className="w-5 h-5" />
                   )}
-                </button>
+                </Button>
               </div>
             </div>
 
@@ -465,17 +468,19 @@ export default function SettingsPage() {
                   disabled={isPasswordLoading}
                 />
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="sm"
                   onClick={() => setShowNewPassword(!showNewPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-2 top-1/2 h-8 w-8 -translate-y-1/2 p-0 text-gray-400 hover:bg-transparent hover:text-gray-600"
                 >
                   {showNewPassword ? (
                     <EyeOff className="w-5 h-5" />
                   ) : (
                     <Eye className="w-5 h-5" />
                   )}
-                </button>
+                </Button>
               </div>
             </div>
 
@@ -493,17 +498,19 @@ export default function SettingsPage() {
                   disabled={isPasswordLoading}
                 />
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="sm"
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-2 top-1/2 h-8 w-8 -translate-y-1/2 p-0 text-gray-400 hover:bg-transparent hover:text-gray-600"
                 >
                   {showConfirmPassword ? (
                     <EyeOff className="w-5 h-5" />
                   ) : (
                     <Eye className="w-5 h-5" />
                   )}
-                </button>
+                </Button>
               </div>
             </div>
 
@@ -511,12 +518,12 @@ export default function SettingsPage() {
               Update Password
             </Button>
           </form>
-        </div>
+        </DashboardCard>
       )}
 
       {/* 2FA Tab */}
       {activeTab === "2fa" && (
-        <div className="bg-white rounded-lg shadow p-6 max-w-2xl">
+        <DashboardCard className="max-w-2xl" contentClassName="p-6">
           <div className="flex items-start justify-between mb-6">
             <div>
               <h2 className="text-xl font-semibold text-gray-900 mb-2">
@@ -527,10 +534,11 @@ export default function SettingsPage() {
               </p>
             </div>
             <div
-              className={`px-3 py-1 rounded-full text-sm font-medium ${is2FAEnabled
+              className={`px-3 py-1 rounded-full text-sm font-medium ${
+                is2FAEnabled
                   ? "bg-green-100 text-green-800"
                   : "bg-gray-100 text-gray-800"
-                }`}
+              }`}
             >
               {is2FAEnabled ? "Enabled" : "Disabled"}
             </div>
@@ -709,12 +717,12 @@ export default function SettingsPage() {
               </div>
             </form>
           )}
-        </div>
+        </DashboardCard>
       )}
 
       {/* Passkeys Tab */}
       {activeTab === "passkeys" && (
-        <div className="bg-white rounded-lg shadow p-6 max-w-2xl">
+        <DashboardCard className="max-w-2xl" contentClassName="p-6">
           <div className="flex items-start justify-between mb-6">
             <div>
               <h2 className="text-xl font-semibold text-gray-900 mb-2">
@@ -801,7 +809,7 @@ export default function SettingsPage() {
               )}
             </>
           )}
-        </div>
+        </DashboardCard>
       )}
 
       {/* Delete Passkey Confirmation Dialog */}

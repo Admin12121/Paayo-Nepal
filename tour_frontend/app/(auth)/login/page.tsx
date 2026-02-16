@@ -128,7 +128,11 @@ export default function LoginPage() {
       toast.success("Login successful!");
       router.push("/dashboard");
     } catch (error) {
-      toast.error("An error occurred. Please try again.");
+      const message =
+        error instanceof Error
+          ? error.message
+          : "An error occurred. Please try again.";
+      toast.error(message);
       console.error("Login error:", error);
     } finally {
       setIsLoading(false);

@@ -1,8 +1,14 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
-import { Upload, Trash2, Search, Image as ImageIcon, X } from "lucide-react";
-import { mediaApi, Media, PaginatedResponse } from "@/lib/api-client";
+import { useState, useRef } from "react";
+import Image from "next/image";
+import { Upload, Trash2, Image as ImageIcon } from "lucide-react";
+import type { Media } from "@/lib/api-client";
+import {
+  useListMediaQuery,
+  useUploadMediaMutation,
+  useDeleteMediaMutation,
+} from "@/lib/store";
 import Button from "@/components/ui/button";
 import Input from "@/components/ui/input";
 import Select from "@/components/ui/Select";
@@ -10,12 +16,11 @@ import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import Pagination from "@/components/ui/Pagination";
 import Modal from "@/components/ui/Modal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import DashboardCard from "@/components/dashboard/DashboardCard";
 import { toast } from "@/lib/utils/toast";
 
 export default function MediaPage() {
-  const [media, setMedia] = useState<Media[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [totalPages, setTotalPages] = useState(1);
+  // ── Local UI state ──────────────────────────────────────────────────────
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -29,53 +34,100 @@ export default function MediaPage() {
     open: false,
     media: null,
   });
-  const [deleting, setDeleting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    loadMedia();
-  }, [currentPage, typeFilter]);
+  // ── RTK Query hooks ─────────────────────────────────────────────────────
+  //
+  // `useListMediaQuery` automatically:
+  //   - Fetches data on mount and when params change
+  //   - Caches results (deduplicates identical requests)
+  //   - Refetches when the browser tab regains focus
+  //   - Refetches when cache tags are invalidated by mutations
+  //
+  // No more manual `useEffect` + `useState` + `loadMedia()` pattern!
+  const {
+    data: mediaResponse,
+    isLoading,
+    isFetching,
+  } = useListMediaQuery({
+    page: currentPage,
+    limit: 24,
+    type: typeFilter !== "all" ? typeFilter : undefined,
+  });
 
-  const loadMedia = async () => {
-    setLoading(true);
-    try {
-      const params: any = { page: currentPage, limit: 24 };
-      if (typeFilter !== "all") params.type = typeFilter;
+  // Mutations — each returns a trigger function and a result object.
+  // When a mutation succeeds, RTK Query automatically invalidates the
+  // relevant cache tags, causing `useListMediaQuery` to refetch.
+  // No more manual `loadMedia()` calls after every mutation!
+  const [uploadMedia] = useUploadMediaMutation();
+  const [deleteMedia, { isLoading: deleting }] = useDeleteMediaMutation();
 
-      const response = await mediaApi.list(params);
-      setMedia(response.data);
-      setTotalPages(response.total_pages);
-    } catch (error) {
-      toast.error("Failed to load media");
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // ── Derived data ────────────────────────────────────────────────────────
+  const media = mediaResponse?.data ?? [];
+  const totalPages = mediaResponse?.total_pages ?? 1;
+
+  // Client-side search filter (instant, no network request)
+  const filteredMedia = media.filter((item) =>
+    searchQuery
+      ? item.original_name.toLowerCase().includes(searchQuery.toLowerCase())
+      : true,
+  );
+
+  // ── Handlers ────────────────────────────────────────────────────────────
 
   const handleUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
 
     setUploading(true);
+    let successCount = 0;
+    let lastError = "";
     try {
       for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+
+        // Client-side validations
+        if (
+          !file.type.startsWith("image/") &&
+          !file.type.startsWith("video/") &&
+          !file.type.startsWith("application/")
+        ) {
+          lastError = `"${file.name}" has an unsupported file type.`;
+          continue;
+        }
+        if (file.size > 10 * 1024 * 1024) {
+          lastError = `"${file.name}" exceeds the 10 MB limit (${(file.size / 1024 / 1024).toFixed(1)} MB).`;
+          continue;
+        }
+
         const formData = new FormData();
-        formData.append("file", files[i]);
+        formData.append("file", file);
 
-        const response = await fetch("/api/media", {
-          method: "POST",
-          body: formData,
-          credentials: "include",
-        });
-
-        if (!response.ok) throw new Error("Upload failed");
+        try {
+          // Use RTK Query mutation for uploads.
+          // On success, cache invalidation triggers automatic refetch of the list.
+          await uploadMedia(formData).unwrap();
+          successCount++;
+        } catch (err: unknown) {
+          const message =
+            err && typeof err === "object" && "data" in err
+              ? (err as { data?: { message?: string } }).data?.message ||
+                `Upload failed for "${file.name}"`
+              : `Upload failed for "${file.name}"`;
+          lastError = message;
+        }
       }
 
-      toast.success(`${files.length} file(s) uploaded successfully`);
-      setUploadModal(false);
-      loadMedia();
+      if (successCount > 0) {
+        toast.success(`${successCount} file(s) uploaded successfully`);
+        setUploadModal(false);
+      }
+      if (lastError) {
+        toast.error(lastError);
+      }
     } catch (error) {
-      toast.error("Failed to upload files");
+      toast.error(
+        "Failed to upload files. Please check your connection and try again.",
+      );
       console.error(error);
     } finally {
       setUploading(false);
@@ -92,31 +144,25 @@ export default function MediaPage() {
   const handleDelete = async () => {
     if (!deleteDialog.media) return;
 
-    setDeleting(true);
     try {
-      await mediaApi.delete(deleteDialog.media.id);
+      // `.unwrap()` throws on error so we can catch it.
+      // On success, RTK Query invalidates 'Media' tags → list refetches automatically.
+      await deleteMedia(deleteDialog.media.id).unwrap();
       toast.success("Media deleted successfully");
       setDeleteDialog({ open: false, media: null });
-      loadMedia();
     } catch (error) {
       toast.error("Failed to delete media");
       console.error(error);
-    } finally {
-      setDeleting(false);
     }
   };
-
-  const filteredMedia = media.filter((item) =>
-    searchQuery
-      ? item.original_name.toLowerCase().includes(searchQuery.toLowerCase())
-      : true,
-  );
 
   const formatFileSize = (bytes: number) => {
     if (bytes < 1024) return bytes + " B";
     if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB";
     return (bytes / 1048576).toFixed(1) + " MB";
   };
+
+  // ── Render ──────────────────────────────────────────────────────────────
 
   return (
     <div>
@@ -131,7 +177,7 @@ export default function MediaPage() {
         </Button>
       </div>
 
-      <div className="bg-white rounded-lg shadow mb-6">
+      <DashboardCard className="mb-6" contentClassName="p-0">
         <div className="p-4 border-b flex flex-wrap gap-4">
           <div className="flex-1 min-w-[200px]">
             <Input
@@ -143,18 +189,27 @@ export default function MediaPage() {
           </div>
           <Select
             value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
+            onChange={(e) => {
+              setTypeFilter(e.target.value);
+              setCurrentPage(1);
+            }}
             options={[
               { value: "all", label: "All Types" },
               { value: "image", label: "Images" },
-              { value: "video", label: "Videos" },
               { value: "document", label: "Documents" },
             ]}
             className="min-w-[150px]"
           />
         </div>
 
-        {loading ? (
+        {/* Show a subtle loading indicator when refetching in the background */}
+        {isFetching && !isLoading && (
+          <div className="h-0.5 bg-blue-100 overflow-hidden">
+            <div className="h-full bg-blue-500 animate-pulse w-full" />
+          </div>
+        )}
+
+        {isLoading ? (
           <LoadingSpinner />
         ) : filteredMedia.length === 0 ? (
           <div className="text-center py-12 text-gray-500">
@@ -171,10 +226,18 @@ export default function MediaPage() {
                 <div key={item.id} className="group relative">
                   <div className="aspect-square bg-gray-100 rounded-lg overflow-hidden">
                     {item.media_type === "image" ? (
-                      <img
-                        src={item.filename}
+                      <Image
+                        src={
+                          item.url ||
+                          (item.filename.startsWith("/")
+                            ? item.filename
+                            : `/uploads/${item.filename}`)
+                        }
                         alt={item.alt || item.original_name}
-                        className="w-full h-full object-cover"
+                        fill
+                        className="object-cover"
+                        sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, 16vw"
+                        unoptimized
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
@@ -219,7 +282,7 @@ export default function MediaPage() {
             )}
           </>
         )}
-      </div>
+      </DashboardCard>
 
       <Modal
         isOpen={uploadModal}
@@ -233,10 +296,11 @@ export default function MediaPage() {
         }
       >
         <div
-          className={`border-2 border-dashed rounded-lg p-12 text-center cursor-pointer transition-colors ${dragActive
+          className={`border-2 border-dashed rounded-lg p-12 text-center cursor-pointer transition-colors ${
+            dragActive
               ? "border-blue-500 bg-blue-50"
               : "border-gray-300 hover:border-gray-400"
-            }`}
+          }`}
           onDragOver={(e) => {
             e.preventDefault();
             setDragActive(true);
@@ -262,7 +326,7 @@ export default function MediaPage() {
             </div>
           )}
         </div>
-        <input
+        <Input
           ref={fileInputRef}
           type="file"
           multiple

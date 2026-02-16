@@ -36,135 +36,118 @@ impl ImageService {
             thumbnail_width: 400,
             thumbnail_height: 400,
             avif_quality: 75, // 0-100, higher = better quality
-            avif_speed: 4,    // 1-10, higher = faster but lower quality
+            avif_speed: 8,    // 1-10, higher = faster encoding (was 4, now 8 for ~4-8x speedup)
         }
     }
 
-    /// Process uploaded image: resize, convert to AVIF, generate thumbnail and blur hash
+    /// Process uploaded image: resize, convert to AVIF, generate thumbnail and blur hash.
+    ///
+    /// All CPU-intensive work (decode, resize, encode, blur hash) is offloaded to
+    /// `tokio::task::spawn_blocking` so the async runtime is never blocked.
     pub async fn process_image(
         &self,
         image_data: &[u8],
         original_filename: &str,
     ) -> Result<ProcessedImage> {
-        // Load image
-        let img = ImageReader::new(Cursor::new(image_data))
-            .with_guessed_format()
-            .context("Failed to guess image format")?
-            .decode()
-            .context("Failed to decode image")?;
+        let data = image_data.to_vec();
+        let filename = original_filename.to_string();
+        let max_w = self.max_width;
+        let max_h = self.max_height;
+        let thumb_w = self.thumbnail_width;
+        let thumb_h = self.thumbnail_height;
+        let quality = self.avif_quality;
+        let speed = self.avif_speed;
+        let upload_path = self.upload_path.clone();
 
-        info!(
-            "Processing image: {} ({}x{})",
-            original_filename,
-            img.width(),
-            img.height()
-        );
+        // Offload ALL CPU-intensive work to a blocking thread so we don't
+        // starve the async executor. This is where the 80-second stall lived.
+        let result = tokio::task::spawn_blocking(move || -> Result<ProcessedImageIntermediate> {
+            // Load image
+            let img = ImageReader::new(Cursor::new(&data))
+                .with_guessed_format()
+                .context("Failed to guess image format")?
+                .decode()
+                .context("Failed to decode image")?;
 
-        // Generate unique filename
-        let file_id = uuid::Uuid::new_v4().to_string();
-        let filename = format!("{}.avif", file_id);
-        let thumbnail_filename = format!("{}_thumb.avif", file_id);
+            info!(
+                "Processing image: {} ({}x{})",
+                filename,
+                img.width(),
+                img.height()
+            );
 
-        // Resize if needed (maintain aspect ratio)
-        let resized = self.resize_image(&img, self.max_width, self.max_height);
-        let (width, height) = (resized.width(), resized.height());
+            // Generate unique filename
+            let file_id = uuid::Uuid::new_v4().to_string();
+            let out_filename = format!("{}.avif", file_id);
+            let thumbnail_filename = format!("{}_thumb.avif", file_id);
 
-        // Generate blur hash (sample to 32x32 for performance)
-        let blur_hash = self.generate_blur_hash(&resized)?;
+            // Resize main image if needed (maintain aspect ratio)
+            let resized = resize_image(&img, max_w, max_h);
+            let (width, height) = (resized.width(), resized.height());
 
-        // Convert to AVIF and save main image
-        let avif_data = self.encode_avif(&resized)?;
-        let file_path = self.upload_path.join(&filename);
-        fs::write(&file_path, &avif_data)
+            // Generate blur hash (sample to 32x32 for performance)
+            let blur_hash = generate_blur_hash(&resized)?;
+
+            // Encode main image as AVIF
+            let avif_data = encode_avif(&resized, quality, speed)?;
+            info!(
+                "Encoded main image: {} ({}x{}, {} bytes)",
+                out_filename,
+                width,
+                height,
+                avif_data.len()
+            );
+
+            // Generate and encode thumbnail
+            let thumbnail = resize_image(&img, thumb_w, thumb_h);
+            info!(
+                "Resized thumbnail from {}x{} to {}x{}",
+                img.width(),
+                img.height(),
+                thumbnail.width(),
+                thumbnail.height()
+            );
+            let thumbnail_data = encode_avif(&thumbnail, quality, speed)?;
+
+            let size = avif_data.len() as u64;
+
+            Ok(ProcessedImageIntermediate {
+                filename: out_filename,
+                thumbnail_filename,
+                width,
+                height,
+                blur_hash,
+                size,
+                avif_data,
+                thumbnail_data,
+                upload_path,
+            })
+        })
+        .await
+        .context("Image processing task panicked")??;
+
+        // Write files to disk (async I/O — cheap, doesn't block the executor)
+        let file_path = result.upload_path.join(&result.filename);
+        fs::write(&file_path, &result.avif_data)
             .await
             .context("Failed to write AVIF file")?;
+        info!("Saved main image: {}", result.filename);
 
-        info!("Saved main image: {}", filename);
-
-        // Generate and save thumbnail
-        let thumbnail = self.resize_image(&img, self.thumbnail_width, self.thumbnail_height);
-        let thumbnail_data = self.encode_avif(&thumbnail)?;
-        let thumbnail_path = self.upload_path.join(&thumbnail_filename);
-        fs::write(&thumbnail_path, &thumbnail_data)
+        let thumbnail_path = result.upload_path.join(&result.thumbnail_filename);
+        fs::write(&thumbnail_path, &result.thumbnail_data)
             .await
             .context("Failed to write thumbnail")?;
-
-        info!("Saved thumbnail: {}", thumbnail_filename);
-
-        // Get file size
-        let size = avif_data.len() as u64;
+        info!("Saved thumbnail: {}", result.thumbnail_filename);
 
         Ok(ProcessedImage {
-            filename,
-            thumbnail_filename,
-            width,
-            height,
-            blur_hash,
-            size,
+            filename: result.filename,
+            thumbnail_filename: result.thumbnail_filename,
+            width: result.width,
+            height: result.height,
+            blur_hash: result.blur_hash,
+            size: result.size,
             mime_type: "image/avif".to_string(),
         })
-    }
-
-    /// Resize image maintaining aspect ratio
-    fn resize_image(&self, img: &DynamicImage, max_width: u32, max_height: u32) -> DynamicImage {
-        let (width, height) = img.dimensions();
-
-        // If image is within limits, return original
-        if width <= max_width && height <= max_height {
-            return img.clone();
-        }
-
-        // Calculate new dimensions maintaining aspect ratio
-        let width_ratio = max_width as f32 / width as f32;
-        let height_ratio = max_height as f32 / height as f32;
-        let ratio = width_ratio.min(height_ratio);
-
-        let new_width = (width as f32 * ratio) as u32;
-        let new_height = (height as f32 * ratio) as u32;
-
-        info!(
-            "Resizing image from {}x{} to {}x{}",
-            width, height, new_width, new_height
-        );
-
-        img.resize(new_width, new_height, FilterType::Lanczos3)
-    }
-
-    /// Generate blur hash for placeholder
-    fn generate_blur_hash(&self, img: &DynamicImage) -> Result<String> {
-        // Resize to 32x32 for blur hash calculation (performance)
-        let small = img.resize_exact(32, 32, FilterType::Triangle);
-        let rgba = small.to_rgba8();
-        let (width, height) = small.dimensions();
-
-        // Generate blur hash (4x3 components = good balance)
-        let hash = encode(4, 3, width, height, &rgba.into_raw())
-            .context("Failed to generate blur hash")?;
-
-        Ok(hash)
-    }
-
-    /// Encode image as AVIF
-    fn encode_avif(&self, img: &DynamicImage) -> Result<Vec<u8>> {
-        let rgba = img.to_rgba8();
-        let (width, height) = img.dimensions();
-
-        // Configure AVIF encoder
-        let encoder = ravif::Encoder::new()
-            .with_quality(self.avif_quality as f32)
-            .with_speed(self.avif_speed)
-            .with_alpha_quality(self.avif_quality as f32);
-
-        // Create image buffer for ravif
-        let rgba_pixels: Vec<ravif::RGBA8> = rgba.as_raw().as_rgba();
-        let img_data = ravif::Img::new(rgba_pixels.as_slice(), width as usize, height as usize);
-
-        // Encode
-        let encoded = encoder
-            .encode_rgba(img_data)
-            .map_err(|e| anyhow::anyhow!("AVIF encoding failed: {}", e))?;
-
-        Ok(encoded.avif_file)
     }
 
     /// Delete image files
@@ -209,6 +192,78 @@ impl ImageService {
     }
 }
 
+// ── Internal helpers (pure, sync — run inside spawn_blocking) ───────────────
+
+/// Intermediate result from the blocking thread, carries encoded bytes
+/// so the async side can write them to disk.
+struct ProcessedImageIntermediate {
+    filename: String,
+    thumbnail_filename: String,
+    width: u32,
+    height: u32,
+    blur_hash: String,
+    size: u64,
+    avif_data: Vec<u8>,
+    thumbnail_data: Vec<u8>,
+    upload_path: PathBuf,
+}
+
+/// Resize image maintaining aspect ratio. Returns the original if already within limits.
+fn resize_image(img: &DynamicImage, max_width: u32, max_height: u32) -> DynamicImage {
+    let (width, height) = img.dimensions();
+
+    if width <= max_width && height <= max_height {
+        return img.clone();
+    }
+
+    let width_ratio = max_width as f32 / width as f32;
+    let height_ratio = max_height as f32 / height as f32;
+    let ratio = width_ratio.min(height_ratio);
+
+    let new_width = (width as f32 * ratio) as u32;
+    let new_height = (height as f32 * ratio) as u32;
+
+    info!(
+        "Resizing image from {}x{} to {}x{}",
+        width, height, new_width, new_height
+    );
+
+    // Use CatmullRom instead of Lanczos3 — nearly identical quality but ~30% faster
+    img.resize(new_width, new_height, FilterType::CatmullRom)
+}
+
+/// Generate blur hash for placeholder image
+fn generate_blur_hash(img: &DynamicImage) -> Result<String> {
+    let small = img.resize_exact(32, 32, FilterType::Triangle);
+    let rgba = small.to_rgba8();
+    let (width, height) = small.dimensions();
+
+    let hash =
+        encode(4, 3, width, height, &rgba.into_raw()).context("Failed to generate blur hash")?;
+
+    Ok(hash)
+}
+
+/// Encode image as AVIF with the given quality and speed settings.
+fn encode_avif(img: &DynamicImage, quality: u8, speed: u8) -> Result<Vec<u8>> {
+    let rgba = img.to_rgba8();
+    let (width, height) = img.dimensions();
+
+    let encoder = ravif::Encoder::new()
+        .with_quality(quality as f32)
+        .with_speed(speed)
+        .with_alpha_quality(quality as f32);
+
+    let rgba_pixels: Vec<ravif::RGBA8> = rgba.as_raw().as_rgba();
+    let img_data = ravif::Img::new(rgba_pixels.as_slice(), width as usize, height as usize);
+
+    let encoded = encoder
+        .encode_rgba(img_data)
+        .map_err(|e| anyhow::anyhow!("AVIF encoding failed: {}", e))?;
+
+    Ok(encoded.avif_file)
+}
+
 // Helper trait for RGBA conversion
 trait AsRgba {
     fn as_rgba(&self) -> Vec<ravif::RGBA8>;
@@ -231,5 +286,6 @@ mod tests {
         let service = ImageService::new(PathBuf::from("/tmp/uploads"));
         assert_eq!(service.max_width, 1920);
         assert_eq!(service.thumbnail_width, 400);
+        assert_eq!(service.avif_speed, 8);
     }
 }

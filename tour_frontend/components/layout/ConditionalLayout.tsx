@@ -3,6 +3,8 @@
 import { usePathname } from "next/navigation";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/sections/footer";
+import { Toaster } from "@/components/ui/sonner";
+import { StoreProvider } from "@/lib/store/provider";
 
 export function ConditionalLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -13,14 +15,20 @@ export function ConditionalLayout({ children }: { children: React.ReactNode }) {
     pathname === "/forgot-password";
 
   if (isDashboard || isAuth) {
-    return <>{children}</>;
+    return (
+      <StoreProvider>
+        {children}
+        <Toaster position="top-right" richColors closeButton />
+      </StoreProvider>
+    );
   }
 
   return (
-    <>
+    <StoreProvider>
       <Header />
       <main className="pt-16">{children}</main>
       <Footer />
-    </>
+      <Toaster position="top-right" richColors closeButton />
+    </StoreProvider>
   );
 }

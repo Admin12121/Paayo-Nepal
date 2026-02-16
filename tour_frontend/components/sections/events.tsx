@@ -1,6 +1,7 @@
 import { SectionHeading } from "@/components/atoms/section-heading";
 import { EventCard } from "@/components/atoms/event-card";
 import { ViewMoreButton } from "@/components/atoms/view-more-button";
+import { EventsSkeleton } from "@/components/ui/Skeleton";
 import { eventsApi } from "@/lib/api-client";
 
 export async function EventsSection() {
@@ -9,10 +10,10 @@ export async function EventsSection() {
     const res = await eventsApi.upcoming({ limit: 3 });
     events = res.data;
   } catch {
-    return null;
+    return <EventsSkeleton />;
   }
 
-  if (!events || events.length === 0) return null;
+  if (!events || events.length === 0) return <EventsSkeleton />;
 
   return (
     <section className="py-10 px-6 bg-white">
@@ -23,7 +24,7 @@ export async function EventsSection() {
           {events.map((event) => (
             <EventCard
               key={event.id}
-              image={event.featured_image || ""}
+              image={event.cover_image || ""}
               title={event.title}
               href={`/events/${event.slug}`}
             />

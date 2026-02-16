@@ -37,14 +37,12 @@ function ActivityCard({ activity }: { activity: Activity }) {
         style={{ boxShadow: "0px 4px 20px rgba(0, 0, 0, 0.08)" }}
       >
         <div className="overflow-hidden rounded-[16px] h-[320px] relative">
-          {activity.featured_image ? (
+          {activity.cover_image ? (
             <Image
-              src={activity.featured_image}
-              alt={activity.name}
+              src={activity.cover_image}
+              alt={activity.title}
               fill
               className="object-cover group-hover:scale-105 transition-transform duration-500"
-              placeholder={activity.featured_image_blur ? "blur" : "empty"}
-              blurDataURL={activity.featured_image_blur || undefined}
             />
           ) : (
             <div className="w-full h-full bg-gray-200 flex items-center justify-center">
@@ -61,11 +59,11 @@ function ActivityCard({ activity }: { activity: Activity }) {
         </div>
         <div className="p-6">
           <h3 className="font-display text-2xl font-semibold text-[#1A2B49] mb-3 text-center">
-            {activity.name}
+            {activity.title}
           </h3>
-          {activity.description && (
+          {activity.short_description && (
             <p className="text-gray-600 text-sm leading-relaxed text-center line-clamp-3">
-              {activity.description}
+              {activity.short_description}
             </p>
           )}
         </div>

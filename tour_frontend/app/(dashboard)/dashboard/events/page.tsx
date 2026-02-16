@@ -1,98 +1,112 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { Plus, Edit, Trash2, Calendar, MapPin, Eye } from "lucide-react";
-import { eventsApi, Event } from "@/lib/api-client";
+import Image from "next/image";
+import { Plus, Edit, Trash2, Calendar, Eye } from "lucide-react";
+import type { Post } from "@/lib/api-client";
+import {
+  useListEventsQuery,
+  useListUpcomingEventsQuery,
+  useDeletePostMutation,
+} from "@/lib/store";
 import Button from "@/components/ui/button";
 import Input from "@/components/ui/input";
 import Select from "@/components/ui/Select";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import Pagination from "@/components/ui/Pagination";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import DashboardCard from "@/components/dashboard/DashboardCard";
 import { toast } from "@/lib/utils/toast";
 
 export default function EventsPage() {
-  const [events, setEvents] = useState<Event[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [totalPages, setTotalPages] = useState(1);
+  // ── Local UI state ──────────────────────────────────────────────────────
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
   const [timeFilter, setTimeFilter] = useState("all");
   const [deleteDialog, setDeleteDialog] = useState<{
     open: boolean;
-    event: Event | null;
+    event: Post | null;
   }>({
     open: false,
     event: null,
   });
-  const [deleting, setDeleting] = useState(false);
 
-  useEffect(() => {
-    loadEvents();
-  }, [currentPage, timeFilter]);
+  // ── RTK Query hooks ─────────────────────────────────────────────────────
+  //
+  // We use different queries depending on the time filter:
+  //   - "all" / "past" → useListEventsQuery
+  //   - "upcoming"     → useListUpcomingEventsQuery
+  //
+  // RTK Query automatically caches, deduplicates, and refetches as needed.
 
-  const loadEvents = async () => {
-    setLoading(true);
-    try {
-      const params: any = { page: currentPage, limit: 20 };
+  const allEventsQuery = useListEventsQuery(
+    {
+      page: currentPage,
+      limit: 20,
+    },
+    { skip: timeFilter === "upcoming" },
+  );
 
-      if (timeFilter === "past") {
-        params.past = true;
-      }
+  const upcomingEventsQuery = useListUpcomingEventsQuery(
+    {
+      page: currentPage,
+      limit: 20,
+    },
+    { skip: timeFilter !== "upcoming" },
+  );
 
-      const response =
-        timeFilter === "upcoming"
-          ? await eventsApi.upcoming(params)
-          : await eventsApi.list(params);
+  // Pick the active query result based on the filter
+  const activeQuery =
+    timeFilter === "upcoming" ? upcomingEventsQuery : allEventsQuery;
 
-      setEvents(response.data);
-      setTotalPages(response.total_pages);
-    } catch (error) {
-      toast.error("Failed to load events");
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data: eventsResponse, isLoading, isFetching } = activeQuery;
 
-  const handleDelete = async () => {
-    if (!deleteDialog.event) return;
+  const [deleteEvent, { isLoading: deleting }] = useDeletePostMutation();
 
-    setDeleting(true);
-    try {
-      const response = await fetch(`/api/events/${deleteDialog.event.slug}`, {
-        method: "DELETE",
-      });
-      if (!response.ok) throw new Error("Failed to delete event");
-      toast.success("Event deleted successfully");
-      setDeleteDialog({ open: false, event: null });
-      loadEvents();
-    } catch (error) {
-      toast.error("Failed to delete event");
-      console.error(error);
-    } finally {
-      setDeleting(false);
-    }
-  };
+  // ── Derived data ────────────────────────────────────────────────────────
+  const events = eventsResponse?.data ?? [];
+  const totalPages = eventsResponse?.total_pages ?? 1;
 
+  // Client-side search filter (instant, no network request)
   const filteredEvents = events.filter((event) =>
     searchQuery
       ? event.title.toLowerCase().includes(searchQuery.toLowerCase())
       : true,
   );
 
-  const isUpcoming = (event: Event) => {
-    return new Date(event.start_date) >= new Date();
+  // ── Helpers ─────────────────────────────────────────────────────────────
+
+  const isUpcoming = (event: Post) => {
+    const eventDate = event.start_time || event.event_date;
+    return eventDate ? new Date(eventDate) >= new Date() : false;
   };
 
-  const formatDate = (dateStr: string) => {
+  const formatDate = (dateStr: string | null | undefined) => {
+    if (!dateStr) return "TBD";
     return new Date(dateStr).toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
       year: "numeric",
     });
   };
+
+  // ── Handlers ────────────────────────────────────────────────────────────
+
+  const handleDelete = async () => {
+    if (!deleteDialog.event) return;
+
+    try {
+      await deleteEvent(deleteDialog.event.slug).unwrap();
+      toast.success("Event deleted successfully");
+      setDeleteDialog({ open: false, event: null });
+    } catch (error) {
+      toast.error("Failed to delete event");
+      console.error(error);
+    }
+  };
+
+  // ── Render ──────────────────────────────────────────────────────────────
 
   return (
     <div>
@@ -111,7 +125,7 @@ export default function EventsPage() {
         </Link>
       </div>
 
-      <div className="bg-white rounded-lg shadow mb-6">
+      <DashboardCard className="mb-6" contentClassName="p-0">
         <div className="p-4 border-b flex flex-wrap gap-4">
           <div className="flex-1 min-w-[200px]">
             <Input
@@ -123,7 +137,10 @@ export default function EventsPage() {
           </div>
           <Select
             value={timeFilter}
-            onChange={(e) => setTimeFilter(e.target.value)}
+            onChange={(e) => {
+              setTimeFilter(e.target.value);
+              setCurrentPage(1);
+            }}
             options={[
               { value: "all", label: "All Events" },
               { value: "upcoming", label: "Upcoming" },
@@ -133,7 +150,14 @@ export default function EventsPage() {
           />
         </div>
 
-        {loading ? (
+        {/* Show a subtle loading indicator when refetching in the background */}
+        {isFetching && !isLoading && (
+          <div className="h-0.5 bg-blue-100 overflow-hidden">
+            <div className="h-full bg-blue-500 animate-pulse w-full" />
+          </div>
+        )}
+
+        {isLoading ? (
           <LoadingSpinner />
         ) : filteredEvents.length === 0 ? (
           <div className="text-center py-12 text-gray-500">
@@ -149,11 +173,14 @@ export default function EventsPage() {
                   className="p-6 hover:bg-gray-50 transition-colors"
                 >
                   <div className="flex items-start gap-4">
-                    {event.featured_image && (
-                      <img
-                        src={event.featured_image}
+                    {event.cover_image && (
+                      <Image
+                        src={event.cover_image}
                         alt={event.title}
-                        className="w-32 h-32 object-cover rounded-lg flex-shrink-0"
+                        width={128}
+                        height={128}
+                        className="w-32 h-32 object-cover rounded-lg shrink-0"
+                        unoptimized={event.cover_image.startsWith("/uploads")}
                       />
                     )}
                     <div className="flex-1 min-w-0">
@@ -162,27 +189,21 @@ export default function EventsPage() {
                           <h3 className="text-lg font-semibold text-gray-900 mb-1">
                             {event.title}
                           </h3>
-                          {event.description && (
+                          {event.short_description && (
                             <p className="text-sm text-gray-600 mb-2 line-clamp-2">
-                              {event.description}
+                              {event.short_description}
                             </p>
                           )}
                           <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500">
                             <div className="flex items-center">
                               <Calendar className="w-4 h-4 mr-1" />
-                              {formatDate(event.start_date)}
-                              {event.end_date &&
-                                ` - ${formatDate(event.end_date)}`}
+                              {formatDate(event.start_time || event.event_date)}
+                              {(event.end_time || event.event_end_date) &&
+                                ` - ${formatDate(event.end_time || event.event_end_date)}`}
                             </div>
-                            {event.location && (
-                              <div className="flex items-center">
-                                <MapPin className="w-4 h-4 mr-1" />
-                                {event.location}
-                              </div>
-                            )}
                             <div className="flex items-center">
                               <Eye className="w-4 h-4 mr-1" />
-                              {event.views} views
+                              {event.likes ?? event.like_count ?? 0} likes
                             </div>
                           </div>
                           <div className="mt-2">
@@ -202,7 +223,7 @@ export default function EventsPage() {
                             )}
                           </div>
                         </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
+                        <div className="flex items-center gap-2 shrink-0">
                           <Link href={`/dashboard/events/${event.slug}/edit`}>
                             <Button variant="ghost" size="sm">
                               <Edit className="w-4 h-4" />
@@ -236,7 +257,7 @@ export default function EventsPage() {
             )}
           </>
         )}
-      </div>
+      </DashboardCard>
 
       <ConfirmDialog
         isOpen={deleteDialog.open}

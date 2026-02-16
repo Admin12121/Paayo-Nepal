@@ -18,6 +18,7 @@ import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import Pagination from "@/components/ui/Pagination";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { toast } from "@/lib/utils/toast";
+import { apiFetch } from "@/lib/csrf";
 
 interface UserItem {
   id: string;
@@ -116,7 +117,7 @@ export default function UsersManagement() {
           break;
       }
 
-      const res = await fetch(url, { method, credentials: "include" });
+      const res = await apiFetch(url, { method });
       if (!res.ok) throw new Error(`Failed to ${action} user`);
 
       toast.success(

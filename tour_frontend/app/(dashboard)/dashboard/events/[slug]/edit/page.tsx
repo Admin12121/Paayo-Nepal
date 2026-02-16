@@ -1,16 +1,19 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
-import { eventsApi, Event, regionsApi, Region } from "@/lib/api-client";
+import { eventsApi, regionsApi, Region } from "@/lib/api-client";
+import { apiFetch } from "@/lib/csrf";
 import Button from "@/components/ui/button";
 import Input from "@/components/ui/input";
 import Select from "@/components/ui/Select";
 import Textarea from "@/components/ui/Textarea";
+import Checkbox from "@/components/ui/Checkbox";
 import ImageUpload from "@/components/ui/ImageUpload";
-import LexicalEditor from "@/components/editor/LexicalEditor";
+import NotionEditorField from "@/components/editor/NotionEditorField";
+import DashboardCard from "@/components/dashboard/DashboardCard";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { toast } from "@/lib/utils/toast";
 
@@ -22,44 +25,39 @@ export default function EditEventPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [regions, setRegions] = useState<Region[]>([]);
-  const [event, setEvent] = useState<Event | null>(null);
   const [formData, setFormData] = useState({
     title: "",
-    description: "",
+    short_description: "",
     content: "",
-    featured_image: "",
-    start_date: "",
-    end_date: "",
-    start_time: "",
-    end_time: "",
-    location: "",
+    cover_image: "",
+    event_date: "",
+    event_end_date: "",
     region_id: "",
     is_featured: false,
   });
 
-  useEffect(() => {
-    loadData();
-  }, [slug]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       const [eventData, regionsData] = await Promise.all([
         eventsApi.getBySlug(slug),
         regionsApi.list({ limit: 100 }),
       ]);
 
-      setEvent(eventData);
       setRegions(regionsData.data);
       setFormData({
         title: eventData.title,
-        description: eventData.description || "",
-        content: eventData.content || "",
-        featured_image: eventData.featured_image || "",
-        start_date: eventData.start_date.split("T")[0],
-        end_date: eventData.end_date ? eventData.end_date.split("T")[0] : "",
-        start_time: eventData.start_time || "",
-        end_time: eventData.end_time || "",
-        location: eventData.location || "",
+        short_description: eventData.short_description || "",
+        content:
+          typeof eventData.content === "string"
+            ? eventData.content
+            : JSON.stringify(eventData.content ?? ""),
+        cover_image: eventData.cover_image || "",
+        event_date: eventData.event_date
+          ? eventData.event_date.split("T")[0]
+          : "",
+        event_end_date: eventData.event_end_date
+          ? eventData.event_end_date.split("T")[0]
+          : "",
         region_id: eventData.region_id || "",
         is_featured: eventData.is_featured,
       });
@@ -69,27 +67,34 @@ export default function EditEventPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [slug]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.title || !formData.start_date) {
-      toast.error("Title and start date are required");
+    if (!formData.title || !formData.event_date) {
+      toast.error("Title and event date are required");
       return;
     }
 
     setSaving(true);
     try {
-      const response = await fetch(`/api/events/${slug}`, {
+      const response = await apiFetch(`/api/events/${slug}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...formData,
+          title: formData.title,
+          short_description: formData.short_description || null,
+          content: formData.content || null,
+          cover_image: formData.cover_image || null,
+          event_date: formData.event_date || null,
+          event_end_date: formData.event_end_date || null,
           region_id: formData.region_id || null,
-          end_date: formData.end_date || null,
-          start_time: formData.start_time || null,
-          end_time: formData.end_time || null,
+          is_featured: formData.is_featured,
         }),
       });
 
@@ -97,8 +102,10 @@ export default function EditEventPage() {
 
       toast.success("Event updated successfully");
       router.push("/dashboard/events");
-    } catch (error: any) {
-      toast.error(error.message || "Failed to update event");
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Failed to update event";
+      toast.error(message);
       console.error(error);
     } finally {
       setSaving(false);
@@ -125,7 +132,7 @@ export default function EditEventPage() {
       <form onSubmit={handleSubmit}>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
-            <div className="bg-white rounded-lg shadow p-6">
+            <DashboardCard>
               <Input
                 label="Event Title"
                 required
@@ -135,84 +142,55 @@ export default function EditEventPage() {
                 }
                 placeholder="Enter event title"
               />
-            </div>
+            </DashboardCard>
 
-            <div className="bg-white rounded-lg shadow p-6">
+            <DashboardCard>
               <Textarea
                 label="Short Description"
-                value={formData.description}
+                value={formData.short_description}
                 onChange={(e) =>
-                  setFormData({ ...formData, description: e.target.value })
+                  setFormData({
+                    ...formData,
+                    short_description: e.target.value,
+                  })
                 }
                 placeholder="Brief description of the event"
                 rows={3}
               />
-            </div>
+            </DashboardCard>
 
-            <div className="bg-white rounded-lg shadow p-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Detailed Content
-              </label>
-              <LexicalEditor
-                initialContent={formData.content}
-                onChange={(html) => setFormData({ ...formData, content: html })}
-                placeholder="Write detailed event information..."
-              />
-            </div>
+            <NotionEditorField
+              initialContent={formData.content}
+              onChange={(html) => setFormData({ ...formData, content: html })}
+              placeholder="Write detailed event information..."
+            />
 
-            <div className="bg-white rounded-lg shadow p-6">
-              <h3 className="text-lg font-semibold mb-4">Date & Time</h3>
+            <DashboardCard>
+              <h3 className="text-lg font-semibold mb-4">Date</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Input
-                  label="Start Date"
+                  label="Event Date"
                   type="date"
                   required
-                  value={formData.start_date}
+                  value={formData.event_date}
                   onChange={(e) =>
-                    setFormData({ ...formData, start_date: e.target.value })
+                    setFormData({ ...formData, event_date: e.target.value })
                   }
                 />
                 <Input
                   label="End Date"
                   type="date"
-                  value={formData.end_date}
+                  value={formData.event_end_date}
                   onChange={(e) =>
-                    setFormData({ ...formData, end_date: e.target.value })
-                  }
-                />
-                <Input
-                  label="Start Time"
-                  type="time"
-                  value={formData.start_time}
-                  onChange={(e) =>
-                    setFormData({ ...formData, start_time: e.target.value })
-                  }
-                />
-                <Input
-                  label="End Time"
-                  type="time"
-                  value={formData.end_time}
-                  onChange={(e) =>
-                    setFormData({ ...formData, end_time: e.target.value })
+                    setFormData({ ...formData, event_end_date: e.target.value })
                   }
                 />
               </div>
-            </div>
+            </DashboardCard>
           </div>
 
           <div className="space-y-6">
-            <div className="bg-white rounded-lg shadow p-6">
-              <Input
-                label="Location"
-                value={formData.location}
-                onChange={(e) =>
-                  setFormData({ ...formData, location: e.target.value })
-                }
-                placeholder="Event venue or location"
-              />
-            </div>
-
-            <div className="bg-white rounded-lg shadow p-6">
+            <DashboardCard>
               <Select
                 label="Region"
                 value={formData.region_id}
@@ -224,17 +202,15 @@ export default function EditEventPage() {
                   ...regions.map((r) => ({ value: r.id, label: r.name })),
                 ]}
               />
-            </div>
+            </DashboardCard>
 
-            <div className="bg-white rounded-lg shadow p-6">
+            <DashboardCard>
               <label className="flex items-center">
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={formData.is_featured}
                   onChange={(e) =>
                     setFormData({ ...formData, is_featured: e.target.checked })
                   }
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                 />
                 <span className="ml-2 text-sm font-medium text-gray-700">
                   Featured Event
@@ -243,26 +219,24 @@ export default function EditEventPage() {
               <p className="text-xs text-gray-500 mt-1">
                 Featured events appear prominently on the homepage
               </p>
-            </div>
+            </DashboardCard>
 
-            <div className="bg-white rounded-lg shadow p-6">
+            <DashboardCard>
               <ImageUpload
-                label="Featured Image"
-                value={formData.featured_image}
+                label="Cover Image"
+                value={formData.cover_image}
                 onChange={(url) =>
-                  setFormData({ ...formData, featured_image: url })
+                  setFormData({ ...formData, cover_image: url })
                 }
-                onRemove={() =>
-                  setFormData({ ...formData, featured_image: "" })
-                }
+                onRemove={() => setFormData({ ...formData, cover_image: "" })}
               />
-            </div>
+            </DashboardCard>
 
-            <div className="bg-white rounded-lg shadow p-6">
+            <DashboardCard>
               <Button type="submit" className="w-full" isLoading={saving}>
                 Update Event
               </Button>
-            </div>
+            </DashboardCard>
           </div>
         </div>
       </form>

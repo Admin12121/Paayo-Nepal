@@ -4,6 +4,8 @@
 .env.development.local
 .env.production.local
 
+.claude
+
 # Dependencies
 node_modules/
 tour_frontend/node_modules/
@@ -76,3 +78,7 @@ cleanup.txt
 # OS
 Thumbs.db
 .DS_Store
+
+dev.ps1
+PROJECT.md
+SECURITY_AUDIT.md

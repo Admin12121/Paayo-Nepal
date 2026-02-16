@@ -1,6 +1,7 @@
 import { SectionHeading } from "@/components/atoms/section-heading";
 import { ImageCard } from "@/components/atoms/image-card";
 import { ViewMoreButton } from "@/components/atoms/view-more-button";
+import { PhotoFeaturesSkeleton } from "@/components/ui/Skeleton";
 import { mediaApi } from "@/lib/api-client";
 
 export async function PhotoFeaturesSection() {
@@ -9,10 +10,10 @@ export async function PhotoFeaturesSection() {
     const res = await mediaApi.gallery({ limit: 5 });
     photos = res.data;
   } catch {
-    return null;
+    return <PhotoFeaturesSkeleton />;
   }
 
-  if (!photos || photos.length === 0) return null;
+  if (!photos || photos.length === 0) return <PhotoFeaturesSkeleton />;
 
   // Split into top row (first 2) and bottom row (next 3)
   const topRow = photos.slice(0, 2);

@@ -21,12 +21,20 @@ pub struct CorsConfig {
 }
 
 #[derive(Debug, Clone)]
+pub struct AdminConfig {
+    pub email: String,
+    pub password: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone)]
 pub struct Settings {
     pub server: ServerConfig,
     pub database: DatabaseConfig,
     pub redis: RedisConfig,
     pub media: MediaConfig,
     pub cors: CorsConfig,
+    pub admin: AdminConfig,
 }
 
 impl Settings {
@@ -78,6 +86,13 @@ impl Settings {
                     .split(',')
                     .map(|s| s.trim().to_string())
                     .collect(),
+            },
+            admin: AdminConfig {
+                email: std::env::var("ADMIN_EMAIL")
+                    .unwrap_or_else(|_| "admin@paayonepal.com".to_string()),
+                password: std::env::var("ADMIN_PASSWORD")
+                    .expect("ADMIN_PASSWORD must be set in environment variables"),
+                name: std::env::var("ADMIN_NAME").unwrap_or_else(|_| "Admin".to_string()),
             },
         })
     }

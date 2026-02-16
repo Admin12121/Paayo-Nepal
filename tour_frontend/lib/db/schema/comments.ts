@@ -1,65 +1,76 @@
 import {
-  mysqlTable,
+  pgTable,
+  pgEnum,
   varchar,
   text,
   timestamp,
-  int,
   index,
-} from "drizzle-orm/mysql-core";
-import { user } from "./auth";
-import { posts } from "./posts";
+} from "drizzle-orm/pg-core";
 
-export const comments = mysqlTable(
+// Matches: CREATE TYPE comment_status AS ENUM ('pending', 'approved', 'spam', 'rejected');
+export const commentStatusEnum = pgEnum("comment_status", [
+  "pending",
+  "approved",
+  "spam",
+  "rejected",
+]);
+
+// Matches: CREATE TYPE comment_target_type AS ENUM ('post', 'video', 'photo');
+export const commentTargetTypeEnum = pgEnum("comment_target_type", [
+  "post",
+  "video",
+  "photo",
+]);
+
+// Mirrors: tour_backend/migrations/20250101000000_initial_schema.sql — comments table
+export const comments = pgTable(
   "comments",
   {
     id: varchar("id", { length: 36 }).primaryKey(),
-    postId: varchar("post_id", { length: 36 })
-      .notNull()
-      .references(() => posts.id, { onDelete: "cascade" }),
-    userId: varchar("user_id", { length: 36 })
-      .notNull()
-      .references(() => user.id),
-    parentId: varchar("parent_id", { length: 36 }), // For nested replies
+    parentId: varchar("parent_id", { length: 36 }),
+    targetType: commentTargetTypeEnum("target_type").notNull(),
+    targetId: varchar("target_id", { length: 36 }).notNull(),
+    guestName: varchar("guest_name", { length: 100 }).notNull(),
+    guestEmail: varchar("guest_email", { length: 255 }).notNull(),
     content: text("content").notNull(),
-    likes: int("likes").default(0).notNull(),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+    status: commentStatusEnum("status").default("pending").notNull(),
+    ipAddress: varchar("ip_address", { length: 45 }),
+    viewerHash: varchar("viewer_hash", { length: 64 }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
   },
   (table) => ({
-    postIdx: index("post_idx").on(table.postId),
-    userIdx: index("user_idx").on(table.userId),
-    parentIdx: index("parent_idx").on(table.parentId),
-  })
-);
-
-export const commentLikes = mysqlTable(
-  "comment_likes",
-  {
-    id: varchar("id", { length: 36 }).primaryKey(),
-    commentId: varchar("comment_id", { length: 36 })
-      .notNull()
-      .references(() => comments.id, { onDelete: "cascade" }),
-    userId: varchar("user_id", { length: 36 })
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-  },
-  (table) => ({
-    uniqueLike: index("unique_comment_like").on(table.commentId, table.userId),
-  })
+    targetIdx: index("idx_comments_target").on(
+      table.targetType,
+      table.targetId,
+    ),
+    parentIdx: index("idx_comments_parent").on(table.parentId),
+    statusIdx: index("idx_comments_status").on(table.status),
+  }),
 );
 
 // Type exports
 export type Comment = typeof comments.$inferSelect;
 export type NewComment = typeof comments.$inferInsert;
-export type CommentLike = typeof commentLikes.$inferSelect;
 
-// Type with user info for display
-export interface CommentWithUser extends Comment {
-  user: {
-    id: string;
-    name: string | null;
-    image: string | null;
-  };
-  replies?: CommentWithUser[];
+// Type with nested replies for display
+export interface CommentWithReplies extends Comment {
+  replies?: CommentWithReplies[];
 }
+
+export const CommentTargetTypes = {
+  POST: "post",
+  VIDEO: "video",
+  PHOTO: "photo",
+} as const;
+
+export const CommentStatuses = {
+  PENDING: "pending",
+  APPROVED: "approved",
+  SPAM: "spam",
+  REJECTED: "rejected",
+} as const;

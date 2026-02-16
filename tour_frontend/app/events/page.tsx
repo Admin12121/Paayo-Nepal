@@ -46,14 +46,12 @@ function EventCard({ event }: { event: Event }) {
         style={{ boxShadow: "0px 4px 20px rgba(0, 0, 0, 0.08)" }}
       >
         <div className="overflow-hidden rounded-[16px] h-[320px] relative">
-          {event.featured_image ? (
+          {event.cover_image ? (
             <Image
-              src={event.featured_image}
+              src={event.cover_image}
               alt={event.title}
               fill
               className="object-cover group-hover:scale-105 transition-transform duration-500"
-              placeholder={event.featured_image_blur ? "blur" : "empty"}
-              blurDataURL={event.featured_image_blur || undefined}
             />
           ) : (
             <div className="w-full h-full bg-gray-200 flex items-center justify-center">
@@ -70,17 +68,18 @@ function EventCard({ event }: { event: Event }) {
           <h3 className="font-display text-2xl font-semibold text-[#1A2B49] mb-3 line-clamp-2">
             {event.title}
           </h3>
-          {event.description && (
+          {event.short_description && (
             <p className="text-gray-600 text-sm leading-relaxed mb-4 line-clamp-2">
-              {event.description}
+              {event.short_description}
             </p>
           )}
           <div className="space-y-2 text-sm text-gray-600">
             <div className="flex items-center gap-2">
               <Calendar className="w-4 h-4 text-[#0078C0]" />
               <span>
-                {formatDate(event.start_date)}
-                {event.end_date && ` - ${formatDate(event.end_date)}`}
+                {event.event_date ? formatDate(event.event_date) : "TBD"}
+                {event.event_end_date &&
+                  ` - ${formatDate(event.event_end_date)}`}
               </span>
             </div>
             {event.start_time && (

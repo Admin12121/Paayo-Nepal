@@ -1,18 +1,19 @@
 import { SectionHeading } from "@/components/atoms/section-heading";
 import { ImageCard } from "@/components/atoms/image-card";
 import { ViewMoreButton } from "@/components/atoms/view-more-button";
+import { ActivitiesSkeleton } from "@/components/ui/Skeleton";
 import { activitiesApi } from "@/lib/api-client";
 
 export async function ActivitiesSection() {
   let activities;
   try {
-    const res = await activitiesApi.list({ limit: 6, is_active: true });
+    const res = await activitiesApi.list({ limit: 6 });
     activities = res.data;
   } catch {
-    return null;
+    return <ActivitiesSkeleton />;
   }
 
-  if (!activities || activities.length === 0) return null;
+  if (!activities || activities.length === 0) return <ActivitiesSkeleton />;
 
   return (
     <section className="py-10 px-6 bg-white">
@@ -24,9 +25,9 @@ export async function ActivitiesSection() {
           {activities.slice(0, 6).map((activity) => (
             <ImageCard
               key={activity.id}
-              src={activity.featured_image || ""}
-              alt={activity.name}
-              title={activity.name}
+              src={activity.cover_image || ""}
+              alt={activity.title}
+              title={activity.title}
               href={`/activities/${activity.slug}`}
               className="h-[350px]"
             />

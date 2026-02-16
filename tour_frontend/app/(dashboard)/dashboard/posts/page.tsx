@@ -1,29 +1,27 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
+import { Plus, Edit, Trash2, Eye, CheckCircle } from "lucide-react";
+import type { Post } from "@/lib/api-client";
 import {
-  Plus,
-  Search,
-  Filter,
-  Edit,
-  Trash2,
-  Eye,
-  CheckCircle,
-} from "lucide-react";
-import { postsApi, Post, PaginatedResponse } from "@/lib/api-client";
+  useListPostsQuery,
+  useDeletePostMutation,
+  useApprovePostMutation,
+  usePublishPostMutation,
+} from "@/lib/store";
 import Button from "@/components/ui/button";
 import Input from "@/components/ui/input";
 import Select from "@/components/ui/Select";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import Pagination from "@/components/ui/Pagination";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import DashboardCard from "@/components/dashboard/DashboardCard";
 import { toast } from "@/lib/utils/toast";
 
 export default function PostsPage() {
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [totalPages, setTotalPages] = useState(1);
+  // ── Local UI state ──────────────────────────────────────────────────────
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -35,84 +33,96 @@ export default function PostsPage() {
     open: false,
     post: null,
   });
-  const [deleting, setDeleting] = useState(false);
 
-  useEffect(() => {
-    loadPosts();
-  }, [currentPage, statusFilter, typeFilter]);
+  // ── RTK Query hooks ─────────────────────────────────────────────────────
+  //
+  // `useListPostsQuery` automatically:
+  //   - Fetches data on mount and when params change
+  //   - Caches results (deduplicates identical requests)
+  //   - Refetches when the browser tab regains focus
+  //   - Refetches when cache tags are invalidated by mutations
+  //
+  // No more manual `useEffect` + `useState` + `loadPosts()` pattern!
+  const {
+    data: postsResponse,
+    isLoading,
+    isFetching,
+  } = useListPostsQuery({
+    page: currentPage,
+    limit: 20,
+    sort_by: "latest",
+    status: statusFilter !== "all" ? statusFilter : undefined,
+    type: typeFilter !== "all" ? typeFilter : undefined,
+  });
 
-  const loadPosts = async () => {
-    setLoading(true);
-    try {
-      const params: any = { page: currentPage, limit: 20 };
-      if (statusFilter !== "all") params.status = statusFilter;
-      if (typeFilter !== "all") params.type = typeFilter;
+  // Mutations — each returns a trigger function and a result object.
+  // When a mutation succeeds, RTK Query automatically invalidates the
+  // relevant cache tags, causing `useListPostsQuery` to refetch.
+  // No more manual `loadPosts()` calls after every mutation!
+  const [deletePost, { isLoading: deleting }] = useDeletePostMutation();
+  const [approvePost] = useApprovePostMutation();
+  const [publishPost] = usePublishPostMutation();
 
-      const response = await postsApi.list(params);
-      setPosts(response.data);
-      setTotalPages(response.total_pages);
-    } catch (error) {
-      toast.error("Failed to load posts");
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // ── Derived data ────────────────────────────────────────────────────────
+  const posts = postsResponse?.data ?? [];
+  const totalPages = postsResponse?.total_pages ?? 1;
 
-  const handleDelete = async () => {
-    if (!deleteDialog.post) return;
-
-    setDeleting(true);
-    try {
-      await postsApi.delete(deleteDialog.post.slug);
-      toast.success("Post deleted successfully");
-      setDeleteDialog({ open: false, post: null });
-      loadPosts();
-    } catch (error) {
-      toast.error("Failed to delete post");
-      console.error(error);
-    } finally {
-      setDeleting(false);
-    }
-  };
-
-  const handleApprove = async (post: Post) => {
-    try {
-      await postsApi.approve(post.id);
-      toast.success("Post approved successfully");
-      loadPosts();
-    } catch (error) {
-      toast.error("Failed to approve post");
-      console.error(error);
-    }
-  };
-
-  const handlePublish = async (post: Post) => {
-    try {
-      await postsApi.publish(post.id);
-      toast.success("Post published successfully");
-      loadPosts();
-    } catch (error) {
-      toast.error("Failed to publish post");
-      console.error(error);
-    }
-  };
-
+  // Client-side search filter (instant, no network request)
   const filteredPosts = posts.filter((post) =>
     searchQuery
       ? post.title.toLowerCase().includes(searchQuery.toLowerCase())
       : true,
   );
 
-  const getStatusBadge = (status: string) => {
-    const styles = {
-      draft: "bg-gray-100 text-gray-800",
-      pending: "bg-yellow-100 text-yellow-800",
-      approved: "bg-green-100 text-green-800",
-      published: "bg-blue-100 text-blue-800",
-    };
-    return styles[status as keyof typeof styles] || styles.draft;
+  // ── Handlers ────────────────────────────────────────────────────────────
+
+  const handleDelete = async () => {
+    if (!deleteDialog.post) return;
+
+    try {
+      // `.unwrap()` throws on error so we can catch it.
+      // On success, RTK Query invalidates 'Post' tags → list refetches automatically.
+      await deletePost(deleteDialog.post.slug).unwrap();
+      toast.success("Post deleted successfully");
+      setDeleteDialog({ open: false, post: null });
+    } catch (error) {
+      toast.error("Failed to delete post");
+      console.error(error);
+    }
   };
+
+  const handleApprove = async (post: Post) => {
+    try {
+      await approvePost(post.id).unwrap();
+      toast.success("Post approved successfully");
+      // No need to manually reload — cache invalidation handles it
+    } catch (error) {
+      toast.error("Failed to approve post");
+      console.error(error);
+    }
+  };
+
+  const _handlePublish = async (post: Post) => {
+    try {
+      await publishPost(post.id).unwrap();
+      toast.success("Post published successfully");
+      // No need to manually reload — cache invalidation handles it
+    } catch (error) {
+      toast.error("Failed to publish post");
+      console.error(error);
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    const styles: Record<string, string> = {
+      draft: "bg-gray-100 text-gray-800",
+      published: "bg-blue-100 text-blue-800",
+      pending: "bg-amber-100 text-amber-800",
+    };
+    return styles[status] || styles.draft;
+  };
+
+  // ── Render ──────────────────────────────────────────────────────────────
 
   return (
     <div>
@@ -131,7 +141,7 @@ export default function PostsPage() {
         </Link>
       </div>
 
-      <div className="bg-white rounded-lg shadow mb-6">
+      <DashboardCard className="mb-6" contentClassName="p-0">
         <div className="p-4 border-b flex flex-wrap gap-4">
           <div className="flex-1 min-w-[200px]">
             <Input
@@ -143,30 +153,42 @@ export default function PostsPage() {
           </div>
           <Select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setCurrentPage(1); // Reset to page 1 when filter changes
+            }}
             options={[
               { value: "all", label: "All Status" },
               { value: "draft", label: "Draft" },
-              { value: "pending", label: "Pending" },
-              { value: "approved", label: "Approved" },
               { value: "published", label: "Published" },
             ]}
             className="min-w-[150px]"
           />
           <Select
             value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
+            onChange={(e) => {
+              setTypeFilter(e.target.value);
+              setCurrentPage(1); // Reset to page 1 when filter changes
+            }}
             options={[
               { value: "all", label: "All Types" },
               { value: "article", label: "Article" },
-              { value: "guide", label: "Guide" },
-              { value: "news", label: "News" },
+              { value: "event", label: "Event" },
+              { value: "activity", label: "Activity" },
+              { value: "explore", label: "Explore" },
             ]}
             className="min-w-[150px]"
           />
         </div>
 
-        {loading ? (
+        {/* Show a subtle loading indicator when refetching in the background */}
+        {isFetching && !isLoading && (
+          <div className="h-0.5 bg-blue-100 overflow-hidden">
+            <div className="h-full bg-blue-500 animate-pulse w-full" />
+          </div>
+        )}
+
+        {isLoading ? (
           <LoadingSpinner />
         ) : filteredPosts.length === 0 ? (
           <div className="text-center py-12 text-gray-500">
@@ -202,11 +224,16 @@ export default function PostsPage() {
                   <tr key={post.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4">
                       <div className="flex items-center">
-                        {post.featured_image && (
-                          <img
-                            src={post.featured_image}
+                        {post.cover_image && (
+                          <Image
+                            src={post.cover_image}
                             alt={post.title}
+                            width={48}
+                            height={48}
                             className="w-12 h-12 object-cover rounded mr-3"
+                            unoptimized={post.cover_image.startsWith(
+                              "/uploads",
+                            )}
                           />
                         )}
                         <div>
@@ -284,7 +311,7 @@ export default function PostsPage() {
             />
           </div>
         )}
-      </div>
+      </DashboardCard>
 
       <ConfirmDialog
         isOpen={deleteDialog.open}

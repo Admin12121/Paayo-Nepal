@@ -37,16 +37,32 @@ impl CacheService {
         Ok(())
     }
 
+    /// Invalidate all keys matching a pattern using SCAN (production-safe).
+    /// Unlike KEYS, SCAN does not block the Redis server.
     pub async fn invalidate(&self, pattern: &str) -> anyhow::Result<()> {
         let mut conn = self.redis.clone();
-        let keys: Vec<String> = redis::cmd("KEYS")
-            .arg(pattern)
-            .query_async(&mut conn)
-            .await?;
+        let mut cursor: u64 = 0;
 
-        if !keys.is_empty() {
-            conn.del::<_, ()>(keys).await?;
+        loop {
+            let (next_cursor, keys): (u64, Vec<String>) = redis::cmd("SCAN")
+                .arg(cursor)
+                .arg("MATCH")
+                .arg(pattern)
+                .arg("COUNT")
+                .arg(100)
+                .query_async(&mut conn)
+                .await?;
+
+            if !keys.is_empty() {
+                conn.del::<_, ()>(&keys).await?;
+            }
+
+            cursor = next_cursor;
+            if cursor == 0 {
+                break;
+            }
         }
+
         Ok(())
     }
 
@@ -72,7 +88,8 @@ impl CacheService {
     }
 }
 
-/// Cache key generators
+/// Cache key generators - used for caching various data types
+#[allow(dead_code)]
 pub mod keys {
     pub fn post_by_slug(slug: &str) -> String {
         format!("post:slug:{}", slug)

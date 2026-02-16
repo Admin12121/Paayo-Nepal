@@ -15,6 +15,12 @@ import {
   Home,
   Lock,
   ShieldAlert,
+  Video,
+  Hotel,
+  Camera,
+  MessageSquare,
+  SlidersHorizontal,
+  Tags,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -67,6 +73,42 @@ const navItems: NavItem[] = [
     href: "/dashboard/activities",
     icon: <Activity className="w-5 h-5" />,
     requiresActive: true,
+  },
+  {
+    name: "Videos",
+    href: "/dashboard/videos",
+    icon: <Video className="w-5 h-5" />,
+    requiresActive: true,
+  },
+  {
+    name: "Hotels",
+    href: "/dashboard/hotels",
+    icon: <Hotel className="w-5 h-5" />,
+    requiresActive: true,
+  },
+  {
+    name: "Photos",
+    href: "/dashboard/photos",
+    icon: <Camera className="w-5 h-5" />,
+    requiresActive: true,
+  },
+  {
+    name: "Comments",
+    href: "/dashboard/comments",
+    icon: <MessageSquare className="w-5 h-5" />,
+    adminOnly: true,
+  },
+  {
+    name: "Hero Slides",
+    href: "/dashboard/hero-slides",
+    icon: <SlidersHorizontal className="w-5 h-5" />,
+    adminOnly: true,
+  },
+  {
+    name: "Tags",
+    href: "/dashboard/tags",
+    icon: <Tags className="w-5 h-5" />,
+    adminOnly: true,
   },
   {
     name: "Users",

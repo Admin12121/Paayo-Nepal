@@ -56,14 +56,12 @@ function ArticleCard({ article }: { article: Post }) {
       <div className="bg-white rounded-3xl overflow-hidden hover:shadow-xl transition-shadow cursor-pointer border border-gray-100 p-6">
         <div className="flex gap-6">
           <div className="overflow-hidden rounded-2xl w-64 h-64 flex-shrink-0 relative">
-            {article.featured_image ? (
+            {article.cover_image ? (
               <Image
-                src={article.featured_image}
+                src={article.cover_image}
                 alt={article.title}
                 fill
                 className="object-cover hover:scale-105 transition-transform duration-300"
-                placeholder={article.featured_image_blur ? "blur" : "empty"}
-                blurDataURL={article.featured_image_blur || undefined}
               />
             ) : (
               <div className="w-full h-full bg-gray-200 flex items-center justify-center">
@@ -91,7 +89,7 @@ function ArticleCard({ article }: { article: Post }) {
                 {article.title}
               </h3>
               <p className="text-base text-gray-500 leading-relaxed line-clamp-3">
-                {article.excerpt || "No excerpt available"}
+                {article.short_description || "No excerpt available"}
               </p>
             </div>
             <div className="flex items-center justify-between mt-4">
@@ -173,7 +171,7 @@ function Pagination({
   const maxVisiblePages = 5;
 
   let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
-  let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+  const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
 
   if (endPage - startPage < maxVisiblePages - 1) {
     startPage = Math.max(1, endPage - maxVisiblePages + 1);
@@ -264,7 +262,12 @@ export default function ArticlesPage() {
     try {
       setLoading(true);
 
-      const params: any = {
+      const params: {
+        page: number;
+        limit: number;
+        status: string;
+        type?: string;
+      } = {
         page: currentPage,
         limit,
         status: "published",
@@ -278,7 +281,7 @@ export default function ArticlesPage() {
       setArticles(response.data);
       setTotalPages(response.total_pages);
       setTotal(response.total);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Failed to load articles:", err);
       setArticles([]);
       setTotal(0);
@@ -303,7 +306,9 @@ export default function ArticlesPage() {
     ? articles.filter(
         (article) =>
           article.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          article.excerpt?.toLowerCase().includes(searchQuery.toLowerCase()),
+          article.short_description
+            ?.toLowerCase()
+            .includes(searchQuery.toLowerCase()),
       )
     : articles;
 
@@ -320,7 +325,7 @@ export default function ArticlesPage() {
             Articles & Blog
           </h1>
           <p className="text-lg text-gray-600 max-w-3xl">
-            Discover stories, insights, and news about Nepal's amazing
+            Discover stories, insights, and news about Nepal&apos;s amazing
             destinations, culture, and travel experiences.
           </p>
         </div>
@@ -335,19 +340,21 @@ export default function ArticlesPage() {
                 Filter by:
               </span>
               <div className="flex gap-2">
-                {["all", "blog", "article", "news"].map((type) => (
-                  <button
-                    key={type}
-                    onClick={() => handleTypeChange(type)}
-                    className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                      selectedType === type
-                        ? "bg-[#0078C0] text-white"
-                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                    }`}
-                  >
-                    {type.charAt(0).toUpperCase() + type.slice(1)}
-                  </button>
-                ))}
+                {["all", "article", "event", "activity", "explore"].map(
+                  (type) => (
+                    <button
+                      key={type}
+                      onClick={() => handleTypeChange(type)}
+                      className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                        selectedType === type
+                          ? "bg-[#0078C0] text-white"
+                          : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                      }`}
+                    >
+                      {type.charAt(0).toUpperCase() + type.slice(1)}
+                    </button>
+                  ),
+                )}
               </div>
             </div>
 

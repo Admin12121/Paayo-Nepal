@@ -7,17 +7,22 @@ import {
   UserPlus,
   FileText,
   Image as ImageIcon,
-  Check,
   CheckCheck,
+  ShieldCheck,
 } from "lucide-react";
+import { toast } from "sonner";
+import { apiFetch } from "@/lib/csrf";
 
 interface Notification {
   id: string;
-  user_id: string;
+  recipient_id: string;
+  actor_id: string | null;
   type: string;
   title: string;
   message: string | null;
-  link: string | null;
+  target_type: string | null;
+  target_id: string | null;
+  action_url: string | null;
   is_read: boolean;
   created_at: string;
 }
@@ -41,7 +46,7 @@ export default function NotificationBell() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // Poll unread count every 30 seconds (fallback for when SSE is not available)
+  // Fetch unread count via REST (used only as fallback when SSE is disconnected)
   const fetchUnreadCount = useCallback(async () => {
     try {
       const res = await fetch("/api/notifications/unread-count", {
@@ -56,31 +61,91 @@ export default function NotificationBell() {
     }
   }, []);
 
-  // SSE connection for real-time notifications
+  // SSE connection for real-time notifications.
+  // Polling is ONLY active when SSE is disconnected (fallback every 5 min).
   useEffect(() => {
     let eventSource: EventSource | null = null;
     let reconnectTimeout: NodeJS.Timeout;
+    let pollInterval: NodeJS.Timeout | null = null;
+    let sseConnected = false;
+
+    // Start fallback polling (only runs while SSE is down)
+    const startPolling = () => {
+      if (pollInterval) return; // already polling
+      pollInterval = setInterval(fetchUnreadCount, 5 * 60 * 1000); // 5 minutes
+    };
+
+    const stopPolling = () => {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+      }
+    };
 
     const connectSSE = () => {
-      // Use full URL for SSE to ensure cookies are sent
       eventSource = new EventSource("/api/notifications/stream", {
         withCredentials: true,
       });
 
       eventSource.addEventListener("connected", () => {
         console.log("SSE connected for notifications");
+        sseConnected = true;
+        // SSE is live — stop fallback polling
+        stopPolling();
       });
 
       eventSource.addEventListener("notification", (event) => {
         try {
           const notification = JSON.parse(event.data);
-          // Increment unread count immediately
           setUnreadCount((prev) => prev + 1);
-          // If dropdown is open, add to list
           setNotifications((prev) => [
-            { ...notification, is_read: false, created_at: new Date().toISOString() },
+            {
+              ...notification,
+              is_read: false,
+              created_at: new Date().toISOString(),
+            },
             ...prev,
           ]);
+
+          const notifType = notification.type as string;
+          const actionUrl = notification.actionUrl || notification.action_url;
+
+          if (notifType === "verified") {
+            toast.info(notification.title || "Account Status Updated", {
+              description:
+                notification.message ||
+                "Your account status has been changed by an administrator.",
+              action: actionUrl
+                ? {
+                    label: "View",
+                    onClick: () => router.push(actionUrl),
+                  }
+                : undefined,
+              duration: 8000,
+            });
+          } else if (notifType === "new_user") {
+            toast.info(notification.title || "New Notification", {
+              description: notification.message || undefined,
+              action: actionUrl
+                ? {
+                    label: "View",
+                    onClick: () => router.push(actionUrl),
+                  }
+                : undefined,
+              duration: 6000,
+            });
+          } else {
+            toast(notification.title || "New Notification", {
+              description: notification.message || undefined,
+              action: actionUrl
+                ? {
+                    label: "View",
+                    onClick: () => router.push(actionUrl),
+                  }
+                : undefined,
+              duration: 5000,
+            });
+          }
         } catch (e) {
           console.error("Failed to parse notification:", e);
         }
@@ -97,22 +162,21 @@ export default function NotificationBell() {
 
       eventSource.onerror = () => {
         eventSource?.close();
-        // Reconnect after 5 seconds
+        sseConnected = false;
+        // SSE disconnected — start fallback polling and schedule reconnect
+        startPolling();
         reconnectTimeout = setTimeout(connectSSE, 5000);
       };
     };
 
-    // Initial fetch and SSE connection
+    // Initial fetch (one-time) then rely on SSE for updates
     fetchUnreadCount();
     connectSSE();
-
-    // Fallback polling every 60 seconds in case SSE fails
-    const interval = setInterval(fetchUnreadCount, 60000);
 
     return () => {
       eventSource?.close();
       clearTimeout(reconnectTimeout);
-      clearInterval(interval);
+      stopPolling();
     };
   }, [fetchUnreadCount]);
 
@@ -140,11 +204,10 @@ export default function NotificationBell() {
     setOpen(!open);
   };
 
-  const handleMarkRead = async (id: string, link: string | null) => {
+  const handleMarkRead = async (id: string, action_url: string | null) => {
     try {
-      await fetch(`/api/notifications/${id}/read`, {
+      await apiFetch(`/api/notifications/${id}/read`, {
         method: "POST",
-        credentials: "include",
       });
       setNotifications((prev) =>
         prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)),
@@ -153,17 +216,16 @@ export default function NotificationBell() {
     } catch {
       // Silently fail
     }
-    if (link) {
+    if (action_url) {
       setOpen(false);
-      router.push(link);
+      router.push(action_url);
     }
   };
 
   const handleMarkAllRead = async () => {
     try {
-      await fetch("/api/notifications/read-all", {
+      await apiFetch("/api/notifications/read-all", {
         method: "POST",
-        credentials: "include",
       });
       setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
       setUnreadCount(0);
@@ -174,12 +236,16 @@ export default function NotificationBell() {
 
   const getIcon = (type: string) => {
     switch (type) {
-      case "new_account":
+      case "new_user":
         return <UserPlus className="h-4 w-4 text-blue-500" />;
+      case "verified":
+        return <ShieldCheck className="h-4 w-4 text-green-600" />;
       case "new_post_review":
         return <FileText className="h-4 w-4 text-amber-500" />;
-      case "new_content":
+      case "content":
         return <ImageIcon className="h-4 w-4 text-green-500" />;
+      case "comment":
+        return <Bell className="h-4 w-4 text-orange-500" />;
       default:
         return <Bell className="h-4 w-4 text-gray-500" />;
     }
@@ -240,9 +306,10 @@ export default function NotificationBell() {
               notifications.map((notif) => (
                 <button
                   key={notif.id}
-                  onClick={() => handleMarkRead(notif.id, notif.link)}
-                  className={`flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-gray-50 ${!notif.is_read ? "bg-blue-50/50" : ""
-                    }`}
+                  onClick={() => handleMarkRead(notif.id, notif.action_url)}
+                  className={`flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-gray-50 ${
+                    !notif.is_read ? "bg-blue-50/50" : ""
+                  }`}
                 >
                   <div className="mt-0.5 flex-shrink-0">
                     {getIcon(notif.type)}

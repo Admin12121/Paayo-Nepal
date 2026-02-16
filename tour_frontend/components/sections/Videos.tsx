@@ -1,18 +1,19 @@
 import { SectionHeading } from "@/components/atoms/section-heading";
 import { VideoCard } from "@/components/atoms/video-card";
 import { ViewMoreButton } from "@/components/atoms/view-more-button";
-import { mediaApi } from "@/lib/api-client";
+import { VideosSkeleton } from "@/components/ui/Skeleton";
+import { videosApi } from "@/lib/api-client";
 
 export async function VideosSection() {
   let videos;
   try {
-    const res = await mediaApi.list({ type: "video", limit: 6 });
+    const res = await videosApi.list({ limit: 6 });
     videos = res.data;
   } catch {
-    return null;
+    return <VideosSkeleton />;
   }
 
-  if (!videos || videos.length === 0) return null;
+  if (!videos || videos.length === 0) return <VideosSkeleton />;
 
   return (
     <section className="py-10 px-6 bg-white">
@@ -23,10 +24,14 @@ export async function VideosSection() {
           {videos.map((video) => (
             <VideoCard
               key={video.id}
-              thumbnail={video.thumbnail_path || video.filename}
-              title={video.caption || video.original_name}
-              duration=""
-              views={0}
+              thumbnail={video.thumbnail_url || ""}
+              title={video.title}
+              duration={
+                video.duration
+                  ? `${Math.floor(video.duration / 60)}:${String(video.duration % 60).padStart(2, "0")}`
+                  : ""
+              }
+              views={video.view_count ?? 0}
               channel=""
               channelImage=""
             />

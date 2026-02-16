@@ -4,49 +4,47 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
+import { apiFetch } from "@/lib/csrf";
 import Button from "@/components/ui/button";
 import Input from "@/components/ui/input";
 import Textarea from "@/components/ui/Textarea";
+import Checkbox from "@/components/ui/Checkbox";
 import ImageUpload from "@/components/ui/ImageUpload";
-import LexicalEditor from "@/components/editor/LexicalEditor";
+import NotionEditorField from "@/components/editor/NotionEditorField";
+import DashboardCard from "@/components/dashboard/DashboardCard";
 import { toast } from "@/lib/utils/toast";
 
 export default function NewActivityPage() {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState({
-    name: "",
-    description: "",
+    title: "",
+    short_description: "",
     content: "",
-    featured_image: "",
-    hero_image: "",
+    cover_image: "",
     icon: "",
-    display_order: "0",
-    is_active: true,
+    is_featured: true,
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.name) {
+    if (!formData.title) {
       toast.error("Activity name is required");
       return;
     }
 
     setSaving(true);
     try {
-      const response = await fetch("/api/activities", {
+      const response = await apiFetch("/api/activities", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: formData.name,
-          description: formData.description || null,
+          title: formData.title,
+          short_description: formData.short_description || null,
           content: formData.content || null,
-          featured_image: formData.featured_image || null,
-          hero_image: formData.hero_image || null,
-          icon: formData.icon || null,
-          display_order: parseInt(formData.display_order) || 0,
-          is_active: formData.is_active,
+          cover_image: formData.cover_image || null,
+          is_featured: formData.is_featured,
         }),
       });
 
@@ -54,8 +52,10 @@ export default function NewActivityPage() {
 
       toast.success("Activity created successfully");
       router.push("/dashboard/activities");
-    } catch (error: any) {
-      toast.error(error.message || "Failed to create activity");
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Failed to create activity";
+      toast.error(message);
       console.error(error);
     } finally {
       setSaving(false);
@@ -80,57 +80,41 @@ export default function NewActivityPage() {
       <form onSubmit={handleSubmit}>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
-            <div className="bg-white rounded-lg shadow p-6">
+            <DashboardCard>
               <Input
                 label="Activity Name"
                 required
-                value={formData.name}
+                value={formData.title}
                 onChange={(e) =>
-                  setFormData({ ...formData, name: e.target.value })
+                  setFormData({ ...formData, title: e.target.value })
                 }
                 placeholder="Enter activity name"
               />
-            </div>
+            </DashboardCard>
 
-            <div className="bg-white rounded-lg shadow p-6">
+            <DashboardCard>
               <Textarea
                 label="Short Description"
-                value={formData.description}
+                value={formData.short_description}
                 onChange={(e) =>
-                  setFormData({ ...formData, description: e.target.value })
+                  setFormData({
+                    ...formData,
+                    short_description: e.target.value,
+                  })
                 }
                 placeholder="Brief description of the activity"
                 rows={3}
               />
-            </div>
+            </DashboardCard>
 
-            <div className="bg-white rounded-lg shadow p-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Detailed Content
-              </label>
-              <LexicalEditor
-                onChange={(html) => setFormData({ ...formData, content: html })}
-                placeholder="Write detailed activity information..."
-              />
-            </div>
-
-            <div className="bg-white rounded-lg shadow p-6">
-              <h3 className="text-lg font-semibold mb-4">Hero Image</h3>
-              <p className="text-sm text-gray-600 mb-4">
-                Large banner image for activity detail pages
-              </p>
-              <ImageUpload
-                value={formData.hero_image}
-                onChange={(url) =>
-                  setFormData({ ...formData, hero_image: url })
-                }
-                onRemove={() => setFormData({ ...formData, hero_image: "" })}
-              />
-            </div>
+            <NotionEditorField
+              onChange={(html) => setFormData({ ...formData, content: html })}
+              placeholder="Write detailed activity information..."
+            />
           </div>
 
           <div className="space-y-6">
-            <div className="bg-white rounded-lg shadow p-6">
+            <DashboardCard>
               <Input
                 label="Icon (Emoji or Text)"
                 value={formData.icon}
@@ -146,60 +130,44 @@ export default function NewActivityPage() {
                   <p className="text-xs text-gray-500 mt-2">Icon Preview</p>
                 </div>
               )}
-            </div>
+            </DashboardCard>
 
-            <div className="bg-white rounded-lg shadow p-6">
-              <Input
-                label="Display Order"
-                type="number"
-                value={formData.display_order}
-                onChange={(e) =>
-                  setFormData({ ...formData, display_order: e.target.value })
-                }
-                helperText="Lower numbers appear first"
-              />
-            </div>
-
-            <div className="bg-white rounded-lg shadow p-6">
+            <DashboardCard>
               <label className="flex items-center">
-                <input
-                  type="checkbox"
-                  checked={formData.is_active}
+                <Checkbox
+                  checked={formData.is_featured}
                   onChange={(e) =>
-                    setFormData({ ...formData, is_active: e.target.checked })
+                    setFormData({ ...formData, is_featured: e.target.checked })
                   }
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                 />
                 <span className="ml-2 text-sm font-medium text-gray-700">
-                  Active
+                  Featured
                 </span>
               </label>
               <p className="text-xs text-gray-500 mt-1">
-                Only active activities are shown on the website
+                Featured activities are highlighted on the website
               </p>
-            </div>
+            </DashboardCard>
 
-            <div className="bg-white rounded-lg shadow p-6">
+            <DashboardCard>
               <h3 className="text-sm font-medium text-gray-700 mb-2">
-                Featured Image
+                Cover Image
               </h3>
               <p className="text-xs text-gray-500 mb-3">Card/thumbnail image</p>
               <ImageUpload
-                value={formData.featured_image}
+                value={formData.cover_image}
                 onChange={(url) =>
-                  setFormData({ ...formData, featured_image: url })
+                  setFormData({ ...formData, cover_image: url })
                 }
-                onRemove={() =>
-                  setFormData({ ...formData, featured_image: "" })
-                }
+                onRemove={() => setFormData({ ...formData, cover_image: "" })}
               />
-            </div>
+            </DashboardCard>
 
-            <div className="bg-white rounded-lg shadow p-6">
+            <DashboardCard>
               <Button type="submit" className="w-full" isLoading={saving}>
                 Create Activity
               </Button>
-            </div>
+            </DashboardCard>
           </div>
         </div>
       </form>
