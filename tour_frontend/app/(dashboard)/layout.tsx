@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth-server";
 import { headers } from "next/headers";
 import AdminSidebar from "@/components/dashboard/AdminSidebar";
 import AdminHeader from "@/components/dashboard/AdminHeader";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { DashboardProvider } from "@/lib/contexts/DashboardContext";
 
 export default async function DashboardLayout({
@@ -33,15 +34,22 @@ export default async function DashboardLayout({
 
   return (
     <DashboardProvider value={{ userRole, isActive }}>
-      <div className="min-h-screen bg-gray-50">
-        <AdminHeader user={session.user} />
-        <div className="flex">
-          <AdminSidebar userRole={userRole} isActive={isActive} />
-          <main className="flex-1 p-8 ml-64 mt-16.25">
-            <div className="max-w-7xl mx-auto">{children}</div>
-          </main>
+      <SidebarProvider>
+        <div className="flex h-svh w-full overflow-hidden bg-zinc-100/60">
+          {/*<AdminHeader user={session.user} />*/}
+          <AdminSidebar
+            userRole={userRole}
+            isActive={isActive}
+            user={session.user}
+          />
+
+          <SidebarInset className="pt-5">
+            <main className="h-[calc(100svh-4rem)] w-full overflow-y-auto overflow-x-hidden">
+              <div className="mx-auto w-full max-w-7xl">{children}</div>
+            </main>
+          </SidebarInset>
         </div>
-      </div>
+      </SidebarProvider>
     </DashboardProvider>
   );
 }

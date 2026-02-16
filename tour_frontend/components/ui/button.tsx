@@ -1,5 +1,4 @@
 import { type ButtonHTMLAttributes, forwardRef } from "react";
-import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
@@ -53,7 +52,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       className,
       variant,
       size,
-      asChild = false,
+      asChild: _asChild = false,
       isLoading = false,
       disabled,
       children,
@@ -61,16 +60,19 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     },
     ref,
   ) => {
-    const Comp = asChild ? Slot : "button";
+    // Intentionally render native button only.
+    // This avoids runtime crashes from invalid Slot child shape.
+    void _asChild;
+    const showLoading = isLoading;
 
     return (
-      <Comp
+      <button
         ref={ref}
         className={cn(buttonVariants({ variant, size }), className)}
         disabled={disabled || isLoading}
         {...props}
       >
-        {isLoading && (
+        {showLoading && (
           <svg
             className="h-4 w-4 animate-spin"
             xmlns="http://www.w3.org/2000/svg"
@@ -94,7 +96,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           </svg>
         )}
         {children}
-      </Comp>
+      </button>
     );
   },
 );

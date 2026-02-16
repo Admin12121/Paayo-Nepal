@@ -2,8 +2,10 @@
 
 import { LogOut, User as UserIcon } from "lucide-react";
 import Link from "next/link";
-import { signOut } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
+import { signOutAndClear } from "@/lib/auth-client";
+import Button from "@/components/ui/button";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 import NotificationBell from "./NotificationBell";
 
 interface AdminHeaderProps {
@@ -19,55 +21,60 @@ export default function AdminHeader({ user }: AdminHeaderProps) {
   const router = useRouter();
 
   const handleSignOut = async () => {
-    await signOut();
+    await signOutAndClear();
     router.push("/");
   };
 
   return (
-    <header className="fixed top-0 left-0 right-0 h-16 bg-white border-b border-gray-200 z-50">
-      <div className="h-full px-4 flex items-center justify-between">
-        {/* Logo */}
-        <Link href="/dashboard" className="flex items-center gap-2">
-          <div className="text-xl font-bold text-blue-600">Paayo Nepal</div>
-          <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded">
-            {user.role === "admin" ? "Admin" : "Editor"}
-          </span>
-        </Link>
+    <header className="fixed inset-x-0 top-0 z-50 h-16 border-b border-zinc-200/80 bg-white/90 backdrop-blur">
+      <div className="mx-auto flex h-full max-w-[1600px] items-center justify-between px-4 md:px-6">
+        <div className="flex items-center gap-3">
+          <SidebarTrigger className="text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900" />
 
-        {/* Right side */}
-        <div className="flex items-center gap-4">
-          {/* Notifications */}
+          <Link href="/dashboard" className="flex items-center gap-2">
+            <div className="text-lg font-bold text-blue-600 md:text-xl">
+              Paayo Nepal
+            </div>
+            <span className="rounded-md bg-blue-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-blue-700">
+              {user.role === "admin" ? "Admin" : "Editor"}
+            </span>
+          </Link>
+        </div>
+
+        <div className="flex items-center gap-3">
           <NotificationBell />
 
-          {/* User menu */}
-          <div className="flex items-center gap-3 pl-4 border-l border-gray-200">
-            <div className="text-right">
-              <div className="text-sm font-medium text-gray-900">
-                {user.name}
-              </div>
-              <div className="text-xs text-gray-500">{user.email}</div>
+          <div className="hidden items-center gap-3 border-l border-zinc-200 pl-3 sm:flex">
+            <div className="text-right leading-tight">
+              <p className="text-sm font-medium text-zinc-900">
+                {user.name || "User"}
+              </p>
+              <p className="text-xs text-zinc-500">{user.email || ""}</p>
             </div>
 
             {user.image ? (
               <img
                 src={user.image}
                 alt={user.name || "User"}
-                className="w-10 h-10 rounded-full"
+                className="h-9 w-9 rounded-full object-cover"
               />
             ) : (
-              <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-                <UserIcon className="w-6 h-6 text-blue-600" />
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-100">
+                <UserIcon className="h-5 w-5 text-blue-600" />
               </div>
             )}
-
-            <button
-              onClick={handleSignOut}
-              className="p-2 hover:bg-red-50 rounded-lg transition-colors group"
-              title="Sign Out"
-            >
-              <LogOut className="w-5 h-5 text-gray-600 group-hover:text-red-600" />
-            </button>
           </div>
+
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={handleSignOut}
+            className="h-9 w-9 rounded-lg text-zinc-600 hover:bg-red-50 hover:text-red-600"
+            title="Sign Out"
+          >
+            <LogOut className="h-4 w-4" />
+          </Button>
         </div>
       </div>
     </header>

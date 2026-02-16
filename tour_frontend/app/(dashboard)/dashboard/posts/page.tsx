@@ -141,44 +141,44 @@ export default function PostsPage() {
         </Link>
       </div>
 
-      <DashboardCard className="mb-6" contentClassName="p-0">
-        <div className="p-4 border-b flex flex-wrap gap-4">
-          <div className="flex-1 min-w-[200px]">
-            <Input
-              placeholder="Search posts..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full"
+      <div className="mb-6" contentClassName="p-0">
+        <div className="p-4 sm:p-5 flex flex-row flex-wrap items-end gap-3 justify-between w-full">
+          <Input
+            placeholder="Search posts..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="max-w-[300px]"
+          />
+          <div className="flex flex-row gap-3 ">
+            <Select
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setCurrentPage(1); // Reset to page 1 when filter changes
+              }}
+              options={[
+                { value: "all", label: "All Status" },
+                { value: "draft", label: "Draft" },
+                { value: "published", label: "Published" },
+              ]}
+              className="min-w-[150px]"
+            />
+            <Select
+              value={typeFilter}
+              onChange={(e) => {
+                setTypeFilter(e.target.value);
+                setCurrentPage(1); // Reset to page 1 when filter changes
+              }}
+              options={[
+                { value: "all", label: "All Types" },
+                { value: "article", label: "Article" },
+                { value: "event", label: "Event" },
+                { value: "activity", label: "Activity" },
+                { value: "explore", label: "Explore" },
+              ]}
+              className="min-w-[150px]"
             />
           </div>
-          <Select
-            value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value);
-              setCurrentPage(1); // Reset to page 1 when filter changes
-            }}
-            options={[
-              { value: "all", label: "All Status" },
-              { value: "draft", label: "Draft" },
-              { value: "published", label: "Published" },
-            ]}
-            className="min-w-[150px]"
-          />
-          <Select
-            value={typeFilter}
-            onChange={(e) => {
-              setTypeFilter(e.target.value);
-              setCurrentPage(1); // Reset to page 1 when filter changes
-            }}
-            options={[
-              { value: "all", label: "All Types" },
-              { value: "article", label: "Article" },
-              { value: "event", label: "Event" },
-              { value: "activity", label: "Activity" },
-              { value: "explore", label: "Explore" },
-            ]}
-            className="min-w-[150px]"
-          />
         </div>
 
         {/* Show a subtle loading indicator when refetching in the background */}
@@ -311,7 +311,7 @@ export default function PostsPage() {
             />
           </div>
         )}
-      </DashboardCard>
+      </div>
 
       <ConfirmDialog
         isOpen={deleteDialog.open}

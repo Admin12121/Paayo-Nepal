@@ -33,6 +33,8 @@ const CSRF_COOKIE_NAME: &str = "paayo_csrf";
 
 /// Header the client must send with state-changing requests.
 const CSRF_HEADER_NAME: &str = "x-csrf-token";
+/// Header echoed back so clients can bootstrap token state.
+const CSRF_RESPONSE_HEADER_NAME: &str = "x-csrf-token";
 
 /// Length of the raw random bytes (32 bytes → 64 hex chars).
 const TOKEN_BYTES: usize = 32;
@@ -61,6 +63,7 @@ const EXEMPT_PREFIXES: &[&str] = &["/api/health", "/api/notifications/stream", "
 pub async fn csrf_middleware(request: Request, next: Next) -> Result<Response<Body>, StatusCode> {
     let method = request.method().clone();
     let path = request.uri().path().to_string();
+    let secure_cookie = should_use_secure_cookie(&request);
 
     // 1. Safe methods — skip verification, but still set cookie if missing.
     let needs_verification = matches!(
@@ -115,13 +118,23 @@ pub async fn csrf_middleware(request: Request, next: Next) -> Result<Response<Bo
     // 6. If the client doesn't have a CSRF cookie yet, set one.
     //    This ensures the very first page load provisions a token that
     //    subsequent mutations can use.
-    if cookie_token.is_none() {
+    let response_token = if let Some(existing_token) = cookie_token {
+        existing_token
+    } else {
         let new_token = generate_token();
-        if let Ok(cookie_value) = build_csrf_cookie(&new_token) {
+        if let Ok(cookie_value) = build_csrf_cookie(&new_token, secure_cookie) {
             response
                 .headers_mut()
                 .append(header::SET_COOKIE, cookie_value);
         }
+        new_token
+    };
+
+    if let Ok(header_token) = HeaderValue::from_str(&response_token) {
+        response.headers_mut().insert(
+            header::HeaderName::from_static(CSRF_RESPONSE_HEADER_NAME),
+            header_token,
+        );
     }
 
     Ok(response)
@@ -172,12 +185,8 @@ fn generate_token() -> String {
 ///   - `Max-Age`       — 24 hours (86400 seconds). The token is long-lived within
 ///                        a session; a new one is generated if the cookie expires
 ///                        or is cleared.
-fn build_csrf_cookie(token: &str) -> Result<HeaderValue, header::InvalidHeaderValue> {
-    let secure_flag = if std::env::var("CSRF_INSECURE_DEV").is_ok() {
-        ""
-    } else {
-        "; Secure"
-    };
+fn build_csrf_cookie(token: &str, secure: bool) -> Result<HeaderValue, header::InvalidHeaderValue> {
+    let secure_flag = if secure { "; Secure" } else { "" };
 
     let cookie = format!(
         "{}={}; Path=/; SameSite=Lax; Max-Age=86400{}",
@@ -185,6 +194,28 @@ fn build_csrf_cookie(token: &str) -> Result<HeaderValue, header::InvalidHeaderVa
     );
 
     HeaderValue::from_str(&cookie)
+}
+
+/// Decide whether the CSRF cookie should include the Secure attribute.
+///
+/// Rules:
+/// - `CSRF_INSECURE_DEV` env var forces insecure cookies (local HTTP dev).
+/// - If `x-forwarded-proto` is present, we follow it.
+/// - Otherwise default to secure for safety.
+fn should_use_secure_cookie(request: &Request) -> bool {
+    if std::env::var("CSRF_INSECURE_DEV").is_ok() {
+        return false;
+    }
+
+    if let Some(proto) = request
+        .headers()
+        .get("x-forwarded-proto")
+        .and_then(|v| v.to_str().ok())
+    {
+        return proto.eq_ignore_ascii_case("https");
+    }
+
+    true
 }
 
 /// Constant-time byte comparison to prevent timing side-channels.
@@ -234,7 +265,7 @@ mod tests {
     fn test_build_csrf_cookie_secure() {
         // Without CSRF_INSECURE_DEV, cookie should contain Secure flag
         std::env::remove_var("CSRF_INSECURE_DEV");
-        let val = build_csrf_cookie("abc123").unwrap();
+        let val = build_csrf_cookie("abc123", true).unwrap();
         let s = val.to_str().unwrap();
         assert!(s.contains("paayo_csrf=abc123"));
         assert!(s.contains("SameSite=Lax"));
@@ -242,5 +273,12 @@ mod tests {
         assert!(s.contains("Max-Age=86400"));
         assert!(s.contains("Secure"));
         assert!(!s.contains("HttpOnly"));
+    }
+
+    #[test]
+    fn test_build_csrf_cookie_insecure() {
+        let val = build_csrf_cookie("abc123", false).unwrap();
+        let s = val.to_str().unwrap();
+        assert!(!s.contains("Secure"));
     }
 }

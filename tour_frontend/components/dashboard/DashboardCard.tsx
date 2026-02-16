@@ -16,12 +16,7 @@ export default function DashboardCard({
   contentClassName,
 }: DashboardCardProps) {
   return (
-    <Card
-      className={cn(
-        "gap-0 rounded-lg border border-zinc-200 bg-white py-0 shadow-sm",
-        className,
-      )}
-    >
+    <Card className={cn(className)}>
       <CardContent className={cn("p-6", contentClassName)}>
         {children}
       </CardContent>

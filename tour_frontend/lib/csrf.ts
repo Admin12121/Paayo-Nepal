@@ -108,16 +108,41 @@ export async function apiFetch(
     ...init,
   };
 
-  // Only attach CSRF header on state-changing methods
-  if (CSRF_METHODS.has(method)) {
-    const token = getCsrfToken();
+  const attachToken = async (forceRefresh = false) => {
+    let token = getCsrfToken();
+
+    if (!token || forceRefresh) {
+      if (typeof window !== "undefined") {
+        try {
+          const res = await fetch("/api/health", {
+            method: "GET",
+            credentials: "include",
+            cache: "no-store",
+          });
+          token = getCsrfToken() || res.headers.get("x-csrf-token");
+        } catch {
+          // Ignore; backend response will surface the real failure.
+        }
+      }
+    }
+
     if (token) {
-      // Merge with existing headers, supporting all header formats
       const existingHeaders = new Headers(options.headers as HeadersInit);
       existingHeaders.set("X-CSRF-Token", token);
       options.headers = existingHeaders;
     }
+  };
+
+  // Only attach CSRF header on state-changing methods
+  if (CSRF_METHODS.has(method)) {
+    await attachToken();
   }
 
-  return fetch(input, options);
+  let response = await fetch(input, options);
+  if (!response.ok && response.status === 403 && CSRF_METHODS.has(method)) {
+    await attachToken(true);
+    response = await fetch(input, options);
+  }
+
+  return response;
 }

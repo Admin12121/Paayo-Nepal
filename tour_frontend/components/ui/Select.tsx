@@ -110,7 +110,7 @@ const Select = React.forwardRef<HTMLButtonElement, SelectProps>(
     );
 
     return (
-      <div className={cn("w-full", containerClassName)}>
+      <div className={cn("", containerClassName)}>
         {label && (
           <label
             htmlFor={fieldId}

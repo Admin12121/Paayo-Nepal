@@ -178,7 +178,7 @@ export default function MediaPage() {
       </div>
 
       <DashboardCard className="mb-6" contentClassName="p-0">
-        <div className="p-4 border-b flex flex-wrap gap-4">
+        <div className="border-b border-zinc-200 bg-zinc-50/70 p-4 sm:p-5 flex flex-wrap items-end gap-3">
           <div className="flex-1 min-w-[200px]">
             <Input
               placeholder="Search media..."

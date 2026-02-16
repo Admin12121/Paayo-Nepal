@@ -1,30 +1,24 @@
+import { getCsrfToken } from "@/lib/csrf";
+
 // ---------------------------------------------------------------------------
-// Server-Side API Client — used ONLY by Next.js server components (SSR).
+// Shared API client
 //
-// Client-side data fetching is handled by RTK Query (see lib/store/api/).
-// This file should NOT be imported in client components ("use client").
+// Used by:
+//   - Server components/actions (direct Rust URL via BACKEND_API_URL)
+//   - Client components (same-origin /api through nginx)
 //
-// Architecture:
-//   - Server components → this file → Rust backend (direct, internal network)
-//   - Client components → RTK Query → /api (nginx routes to Rust directly)
-//
-// The old Next.js catch-all proxy (app/api/[...path]/route.ts) has been
-// removed. Server components call Rust directly via BACKEND_API_URL.
-// Client components use RTK Query which sends requests to /api, and nginx
-// routes those directly to Rust — no double-hop through Next.js.
-//
-// Environment variable priority:
-//   BACKEND_API_URL   → e.g. http://localhost:8080/api (dev) or http://backend:8080/api (Docker)
-//   INTERNAL_API_URL  → backwards-compatible alias
-//   Fallback          → Docker-internal default
+// This runtime split avoids browser-side "Failed to fetch" errors caused by
+// server-only hostnames like http://backend:8080.
 // ---------------------------------------------------------------------------
-const API_BASE_URL =
+const SERVER_API_BASE_URL =
   process.env.BACKEND_API_URL ||
   process.env.INTERNAL_API_URL ||
   "http://backend:8080/api";
+const CLIENT_API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "/api";
+const CSRF_METHODS = new Set(["POST", "PUT", "DELETE", "PATCH"]);
 
 type RequestOptions = {
-  method?: "GET" | "POST" | "PUT" | "DELETE";
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
   tags?: string[];
   revalidate?: number | false;
@@ -47,6 +41,20 @@ class ApiClient {
 
   constructor(baseUrl: string) {
     this.baseUrl = baseUrl;
+  }
+
+  private getRuntimeBaseUrl(): string {
+    if (typeof window !== "undefined") {
+      return CLIENT_API_BASE_URL;
+    }
+
+    return this.baseUrl;
+  }
+
+  private buildRequestUrl(endpoint: string): string {
+    const base = this.getRuntimeBaseUrl().replace(/\/+$/, "");
+    const path = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
+    return `${base}${path}`;
   }
 
   private async getHeaders(): Promise<HeadersInit> {
@@ -83,76 +91,136 @@ class ApiClient {
     return headers;
   }
 
+  private async getClientCsrfToken(
+    forceRefresh = false,
+  ): Promise<string | null> {
+    if (typeof window === "undefined") return null;
+
+    let token = getCsrfToken();
+    if (token && !forceRefresh) return token;
+
+    // Warm up CSRF cookie on first mutation-heavy pages that haven't
+    // made any prior backend GET request yet.
+    let responseToken: string | null = null;
+    try {
+      const response = await fetch("/api/health", {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+      });
+      responseToken = response.headers.get("x-csrf-token");
+    } catch {
+      // Ignore preflight failures — request may still succeed if backend
+      // doesn't enforce CSRF for this endpoint.
+    }
+
+    token = getCsrfToken();
+    return token || responseToken;
+  }
+
+  private async parseResponseBody<T>(response: Response): Promise<T> {
+    if (response.status === 204) {
+      return undefined as T;
+    }
+
+    const raw = await response.text();
+    if (!raw) {
+      return undefined as T;
+    }
+
+    try {
+      return JSON.parse(raw) as T;
+    } catch {
+      return raw as T;
+    }
+  }
+
+  private async parseErrorBody(response: Response): Promise<{
+    message?: string;
+    details?: unknown;
+  }> {
+    const raw = await response.text();
+    if (!raw) return {};
+
+    try {
+      return JSON.parse(raw) as { message?: string; details?: unknown };
+    } catch {
+      return {};
+    }
+  }
+
   async request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
     const { method = "GET", body, tags, revalidate, cache } = options;
+    const upperMethod = method.toUpperCase();
+    const url = this.buildRequestUrl(endpoint);
+    const headers = new Headers(await this.getHeaders());
+
+    if (typeof window !== "undefined" && CSRF_METHODS.has(upperMethod)) {
+      const csrfToken = await this.getClientCsrfToken();
+      if (csrfToken) {
+        headers.set("X-CSRF-Token", csrfToken);
+      }
+    }
 
     const fetchOptions: RequestInit & {
       next?: { tags?: string[]; revalidate?: number | false };
     } = {
-      method,
-      headers: await this.getHeaders(),
+      method: upperMethod,
+      headers,
       body: body ? JSON.stringify(body) : undefined,
+      credentials: "include",
     };
 
-    // Add Next.js cache options for server components (SSR).
-    // This file is server-side only, so we always set these.
-    fetchOptions.next = {
-      tags,
-      revalidate,
-    };
+    if (typeof window === "undefined") {
+      fetchOptions.next = { tags, revalidate };
+    }
+
     if (cache) {
       fetchOptions.cache = cache;
     }
 
-    // Server-side requests don't need retry logic (no transient browser
-    // errors). Single attempt is sufficient — failures propagate to the
-    // server component's error boundary.
-    const maxAttempts = 1;
-    const retryDelayMs = 500;
+    try {
+      let response = await fetch(url, fetchOptions);
 
-    let lastError: unknown;
-
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        const response = await fetch(
-          `${this.baseUrl}${endpoint}`,
-          fetchOptions,
-        );
-
-        if (!response.ok) {
-          const error = await response.json().catch(() => ({}));
-          throw new ApiError(
-            response.status,
-            error.message || `API Error: ${response.statusText}`,
-            error.details,
-          );
+      // If CSRF token/cookie state is stale, refresh token and retry once.
+      if (
+        !response.ok &&
+        response.status === 403 &&
+        typeof window !== "undefined" &&
+        CSRF_METHODS.has(upperMethod)
+      ) {
+        const freshCsrfToken = await this.getClientCsrfToken(true);
+        if (freshCsrfToken) {
+          headers.set("X-CSRF-Token", freshCsrfToken);
+          response = await fetch(url, fetchOptions);
         }
-
-        return response.json();
-      } catch (err) {
-        lastError = err;
-
-        // Don't retry non-transient errors (4xx) or non-GET requests
-        if (err instanceof ApiError && err.status >= 400 && err.status < 500) {
-          throw err;
-        }
-
-        // If we have retries left, wait and try again
-        if (attempt < maxAttempts) {
-          await new Promise((resolve) =>
-            setTimeout(resolve, retryDelayMs * attempt),
-          );
-          // Refresh headers in case session changed
-          fetchOptions.headers = await this.getHeaders();
-          continue;
-        }
-
-        throw lastError;
       }
-    }
 
-    // TypeScript: should never reach here, but satisfy the compiler
-    throw lastError;
+      if (!response.ok) {
+        const error = await this.parseErrorBody(response);
+        throw new ApiError(
+          response.status,
+          error.message || `API Error: ${response.statusText}`,
+          error.details,
+        );
+      }
+
+      return this.parseResponseBody<T>(response);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        throw err;
+      }
+
+      if (err instanceof TypeError) {
+        throw new ApiError(
+          0,
+          `Network error while requesting ${url}`,
+          err.message,
+        );
+      }
+
+      throw err;
+    }
   }
 
   // Convenience methods
@@ -184,7 +252,7 @@ class ApiClient {
   }
 }
 
-export const api = new ApiClient(API_BASE_URL);
+export const api = new ApiClient(SERVER_API_BASE_URL);
 
 // Pagination response type
 export interface PaginatedResponse<T> {

@@ -247,9 +247,9 @@ export default function EditPostPage() {
   }
 
   return (
-    <div className="-m-8 min-h-screen bg-white">
+    <div className="h-[calc(100svh-4rem)] overflow-hidden">
       {/* ─── Top Bar ─── */}
-      <div className="sticky top-16 z-40 flex items-center justify-between border-b border-gray-100 bg-white/80 px-4 py-2.5 backdrop-blur-sm">
+      <div className="sticky top-0 z-40 flex items-center justify-between border-b border-gray-100 bg-white/80 px-4 py-2.5 backdrop-blur-sm">
         <div className="flex items-center gap-3">
           <Link
             href="/dashboard/posts"
@@ -319,7 +319,7 @@ export default function EditPostPage() {
         </div>
       </div>
 
-      <div className="flex">
+      <div className="flex  h-[calc(100svh-8rem)] overflow-y-auto overflow-x-hidden">
         {/* ─── Main Editor Area ─── */}
         <div className="flex-1">
           {/* ─── Cover Image ─── */}
@@ -457,7 +457,7 @@ export default function EditPostPage() {
               : "w-0 translate-x-4 overflow-hidden opacity-0"
           }`}
         >
-          <div className="sticky top-[109px] h-[calc(100vh-4rem-45px)] w-[320px] overflow-y-auto">
+          <div className="sticky top-[45px] h-[calc(100svh-4rem-45px)] w-[320px] overflow-y-auto">
             <div className="p-5">
               {/* Panel Header */}
               <div className="mb-5 flex items-center justify-between">

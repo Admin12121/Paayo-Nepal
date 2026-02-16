@@ -93,7 +93,8 @@ const nextConfig: NextConfig = {
   //
   // In production, nginx handles all routing:
   //   /api/auth/*     → Next.js (BetterAuth)
-  //   /api/*          → Rust backend (data API)
+  //   /api/notifications/* → Next.js (notification routes / SSE proxy)
+  //   /api/*          → Rust backend (all other data API)
   //   /uploads/*      → Rust backend (static files)
   //   /*              → Next.js (SSR pages)
   //
