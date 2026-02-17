@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 import type { ComponentProps } from "react";
 
-interface SkeletonProps extends ComponentProps<"div"> {}
+type SkeletonProps = ComponentProps<"div">;
 
 /**
  * Base Skeleton component with shimmer animation
@@ -10,9 +10,10 @@ interface SkeletonProps extends ComponentProps<"div"> {}
 export function Skeleton({ className, ...props }: SkeletonProps) {
   return (
     <div
+      data-slot="skeleton"
       className={cn(
-        "relative overflow-hidden rounded-md bg-gray-200",
-        // Shimmer animation
+        "bg-accent animate-pulse relative overflow-hidden rounded-md",
+        "bg-gray-200",
         "before:absolute before:inset-0 before:-translate-x-full",
         "before:animate-[shimmer_2s_infinite]",
         "before:bg-gradient-to-r before:from-transparent before:via-white/60 before:to-transparent",

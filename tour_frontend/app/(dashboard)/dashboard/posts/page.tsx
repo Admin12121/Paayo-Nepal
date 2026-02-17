@@ -13,7 +13,7 @@ import {
 } from "@/lib/store";
 import Button from "@/components/ui/button";
 import Input from "@/components/ui/input";
-import Select from "@/components/ui/Select";
+import Select from "@/components/ui/select";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import Pagination from "@/components/ui/Pagination";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
@@ -141,7 +141,7 @@ export default function PostsPage() {
         </Link>
       </div>
 
-      <div className="mb-6" contentClassName="p-0">
+      <div className="mb-6">
         <div className="p-4 sm:p-5 flex flex-row flex-wrap items-end gap-3 justify-between w-full">
           <Input
             placeholder="Search posts..."

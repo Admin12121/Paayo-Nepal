@@ -1,7 +1,13 @@
 "use client";
 
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import Button from "./button";
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  MoreHorizontalIcon,
+} from "lucide-react";
+import type { MouseEvent, ReactNode } from "react";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 interface PaginationProps {
   currentPage: number;
@@ -9,16 +15,44 @@ interface PaginationProps {
   onPageChange: (page: number) => void;
 }
 
+function PageLink({
+  active,
+  children,
+  onClick,
+}: {
+  active?: boolean;
+  children: ReactNode;
+  onClick: (event: MouseEvent<HTMLAnchorElement>) => void;
+}) {
+  return (
+    <a
+      href="#"
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        buttonVariants({
+          variant: active ? "outline" : "ghost",
+          size: "icon",
+        }),
+      )}
+      onClick={onClick}
+    >
+      {children}
+    </a>
+  );
+}
+
 export default function Pagination({
   currentPage,
   totalPages,
   onPageChange,
 }: PaginationProps) {
-  const pages = [];
+  if (totalPages <= 1) return null;
+
+  const pages: number[] = [];
   const maxVisible = 5;
 
   let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
-  let endPage = Math.min(totalPages, startPage + maxVisible - 1);
+  const endPage = Math.min(totalPages, startPage + maxVisible - 1);
 
   if (endPage - startPage + 1 < maxVisible) {
     startPage = Math.max(1, endPage - maxVisible + 1);
@@ -28,62 +62,120 @@ export default function Pagination({
     pages.push(i);
   }
 
-  if (totalPages <= 1) return null;
+  const goTo = (page: number) => {
+    if (page < 1 || page > totalPages || page === currentPage) return;
+    onPageChange(page);
+  };
 
   return (
-    <div className="flex items-center justify-center gap-2">
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => onPageChange(currentPage - 1)}
-        disabled={currentPage === 1}
-      >
-        <ChevronLeft className="w-4 h-4" />
-      </Button>
-
-      {startPage > 1 && (
-        <>
-          <Button variant="ghost" size="sm" onClick={() => onPageChange(1)}>
-            1
-          </Button>
-          {startPage > 2 && <span className="px-2 text-gray-500">...</span>}
-        </>
-      )}
-
-      {pages.map((page) => (
-        <Button
-          key={page}
-          variant={page === currentPage ? "primary" : "ghost"}
-          size="sm"
-          onClick={() => onPageChange(page)}
-        >
-          {page}
-        </Button>
-      ))}
-
-      {endPage < totalPages && (
-        <>
-          {endPage < totalPages - 1 && (
-            <span className="px-2 text-gray-500">...</span>
-          )}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => onPageChange(totalPages)}
+    <nav
+      role="navigation"
+      aria-label="pagination"
+      className="mx-auto flex w-full justify-center"
+    >
+      <ul className="flex flex-row items-center gap-1">
+        <li>
+          <a
+            href="#"
+            aria-label="Go to previous page"
+            className={cn(
+              buttonVariants({ variant: "ghost", size: "default" }),
+              "gap-1 px-2.5",
+              currentPage === 1 && "pointer-events-none opacity-50",
+            )}
+            onClick={(e) => {
+              e.preventDefault();
+              goTo(currentPage - 1);
+            }}
           >
-            {totalPages}
-          </Button>
-        </>
-      )}
+            <ChevronLeftIcon className="size-4" />
+            <span className="hidden sm:block">Previous</span>
+          </a>
+        </li>
 
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => onPageChange(currentPage + 1)}
-        disabled={currentPage === totalPages}
-      >
-        <ChevronRight className="w-4 h-4" />
-      </Button>
-    </div>
+        {startPage > 1 ? (
+          <>
+            <li>
+              <PageLink
+                onClick={(e) => {
+                  e.preventDefault();
+                  goTo(1);
+                }}
+              >
+                1
+              </PageLink>
+            </li>
+            {startPage > 2 ? (
+              <li>
+                <span
+                  className="flex size-9 items-center justify-center"
+                  aria-hidden
+                >
+                  <MoreHorizontalIcon className="size-4" />
+                </span>
+              </li>
+            ) : null}
+          </>
+        ) : null}
+
+        {pages.map((page) => (
+          <li key={page}>
+            <PageLink
+              active={page === currentPage}
+              onClick={(e) => {
+                e.preventDefault();
+                goTo(page);
+              }}
+            >
+              {page}
+            </PageLink>
+          </li>
+        ))}
+
+        {endPage < totalPages ? (
+          <>
+            {endPage < totalPages - 1 ? (
+              <li>
+                <span
+                  className="flex size-9 items-center justify-center"
+                  aria-hidden
+                >
+                  <MoreHorizontalIcon className="size-4" />
+                </span>
+              </li>
+            ) : null}
+            <li>
+              <PageLink
+                onClick={(e) => {
+                  e.preventDefault();
+                  goTo(totalPages);
+                }}
+              >
+                {totalPages}
+              </PageLink>
+            </li>
+          </>
+        ) : null}
+
+        <li>
+          <a
+            href="#"
+            aria-label="Go to next page"
+            className={cn(
+              buttonVariants({ variant: "ghost", size: "default" }),
+              "gap-1 px-2.5",
+              currentPage === totalPages && "pointer-events-none opacity-50",
+            )}
+            onClick={(e) => {
+              e.preventDefault();
+              goTo(currentPage + 1);
+            }}
+          >
+            <span className="hidden sm:block">Next</span>
+            <ChevronRightIcon className="size-4" />
+          </a>
+        </li>
+      </ul>
+    </nav>
   );
 }

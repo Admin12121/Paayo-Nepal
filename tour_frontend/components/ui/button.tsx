@@ -24,11 +24,14 @@ const buttonVariants = cva(
         link: "text-blue-600 underline-offset-4 hover:underline focus-visible:ring-blue-500",
       },
       size: {
+        xs: "h-6 px-2 text-xs",
         default: "h-9 px-4 py-2",
         md: "h-9 px-4 py-2",
         sm: "h-8 px-3 text-sm",
         lg: "h-10 px-6 text-base",
         icon: "h-9 w-9 p-0",
+        "icon-xs": "h-6 w-6 p-0",
+        "icon-sm": "h-8 w-8 p-0",
       },
     },
     defaultVariants: {

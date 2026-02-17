@@ -8,7 +8,7 @@ import { apiFetch } from "@/lib/csrf";
 import Button from "@/components/ui/button";
 import Input from "@/components/ui/input";
 import Textarea from "@/components/ui/Textarea";
-import Checkbox from "@/components/ui/Checkbox";
+import Checkbox from "@/components/ui/checkbox";
 import ImageUpload from "@/components/ui/ImageUpload";
 import NotionEditorField from "@/components/editor/NotionEditorField";
 import DashboardCard from "@/components/dashboard/DashboardCard";

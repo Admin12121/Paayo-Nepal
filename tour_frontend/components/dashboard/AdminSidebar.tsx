@@ -64,7 +64,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useTheme } from "next-themes";
 
@@ -245,14 +245,10 @@ function getInitials(name: string | null | undefined): string {
 
 function ThemeSwitcher() {
   const { theme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
+  const isThemeReady =
+    theme === "light" || theme === "dark" || theme === "system";
 
-  // Avoid hydration mismatch — only render after mount
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) {
+  if (!isThemeReady) {
     return (
       <div className="flex items-center justify-between px-2">
         <div className="flex items-center gap-2 text-sm">
@@ -311,7 +307,7 @@ function ThemeSwitcher() {
 export default function AdminSidebar({
   userRole,
   isActive,
-  user,
+  user = {},
 }: {
   userRole: string;
   isActive: boolean;
@@ -324,7 +320,7 @@ export default function AdminSidebar({
   const handleSignOut = async () => {
     setIsLoggingOut(true);
     try {
-      await signOut();
+      await signOutAndClear();
       router.push("/login");
       router.refresh();
     } catch (error) {
@@ -438,7 +434,10 @@ export default function AdminSidebar({
             >
               <div className="relative">
                 <Avatar className="h-8 w-8 rounded-lg grayscale">
-                  <AvatarImage src={user.image} alt={user.name} />
+                  <AvatarImage
+                    src={user.image ?? undefined}
+                    alt={user.name ?? undefined}
+                  />
                   <AvatarFallback className="rounded-lg">
                     {getInitials(user.name)}
                   </AvatarFallback>
@@ -446,7 +445,9 @@ export default function AdminSidebar({
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <div className="flex items-center gap-1.5">
-                  <span className="truncate font-medium">{user.name}</span>
+                  <span className="truncate font-medium">
+                    {user.name || "User"}
+                  </span>
                 </div>
               </div>
               <ChevronsUpDown className="ml-auto size-4" />
@@ -462,7 +463,10 @@ export default function AdminSidebar({
               <div className="flex items-center gap-2 p-2 text-left text-sm bg-muted rounded-lg mb-3">
                 <div className="relative">
                   <Avatar className="h-8 w-8 rounded-lg">
-                    <AvatarImage src={user.image} alt={user.name} />
+                    <AvatarImage
+                      src={user.image ?? undefined}
+                      alt={user.name ?? undefined}
+                    />
                     <AvatarFallback className="rounded-lg">
                       {getInitials(user.name)}
                     </AvatarFallback>
@@ -471,11 +475,11 @@ export default function AdminSidebar({
                 <div className="grid flex-1 text-left text-lg leading-tight">
                   <div className="flex items-center gap-2">
                     <span className="truncate font-medium cooper">
-                      {user.name}
+                      {user.name || "User"}
                     </span>
                   </div>
                   <span className="text-muted-foreground truncate text-xs">
-                    {user.email}
+                    {user.email || ""}
                   </span>
                 </div>
               </div>

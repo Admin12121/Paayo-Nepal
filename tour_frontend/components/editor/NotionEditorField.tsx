@@ -1,7 +1,7 @@
 "use client";
 
 import TiptapEditor from "@/components/editor/TiptapEditor";
-import Label from "@/components/ui/Label";
+import Label from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 

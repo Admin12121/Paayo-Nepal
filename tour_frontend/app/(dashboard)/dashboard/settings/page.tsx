@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import Button from "@/components/ui/button";
 import Input from "@/components/ui/input";
-import Label from "@/components/ui/Label";
+import Label from "@/components/ui/label";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";

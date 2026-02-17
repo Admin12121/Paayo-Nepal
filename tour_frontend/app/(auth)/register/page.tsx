@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Mail, Lock, User, Check, X } from "lucide-react";
 import Button from "@/components/ui/button";
 import Input from "@/components/ui/input";
-import Label from "@/components/ui/Label";
+import Label from "@/components/ui/label";
 import { signUpWithEmail, signInWithSocial } from "@/lib/auth-client";
 import { toast } from "@/lib/utils/toast";
 

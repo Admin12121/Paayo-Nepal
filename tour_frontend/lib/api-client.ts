@@ -1370,6 +1370,8 @@ export const adminStatsApi = {
    * Individual failures are caught so the dashboard still renders partial data.
    */
   getDashboardStats: async (): Promise<DashboardStats> => {
+    const liveFetch = { cache: "no-store" as const };
+
     const defaults: DashboardStats = {
       posts: { total: 0, published: 0, draft: 0, pending: 0 },
       media: { total: 0 },
@@ -1410,32 +1412,41 @@ export const adminStatsApi = {
       photosAll,
     ] = await Promise.allSettled([
       // Posts counts by status — fetch with limit=1 just to get total
-      api.get<PaginatedResponse<PostRaw>>("/posts?limit=1"),
-      api.get<PaginatedResponse<PostRaw>>("/posts?limit=1&status=published"),
-      api.get<PaginatedResponse<PostRaw>>("/posts?limit=1&status=draft"),
+      api.get<PaginatedResponse<PostRaw>>("/posts?limit=1", liveFetch),
+      api.get<PaginatedResponse<PostRaw>>(
+        "/posts?limit=1&status=published",
+        liveFetch,
+      ),
+      api.get<PaginatedResponse<PostRaw>>(
+        "/posts?limit=1&status=draft",
+        liveFetch,
+      ),
       // Events
-      api.get<PaginatedResponse<PostRaw>>("/events?limit=1"),
-      api.get<PaginatedResponse<PostRaw>>("/events/upcoming?limit=1"),
+      api.get<PaginatedResponse<PostRaw>>("/events?limit=1", liveFetch),
+      api.get<PaginatedResponse<PostRaw>>(
+        "/events/upcoming?limit=1",
+        liveFetch,
+      ),
       // Attractions
-      api.get<PaginatedResponse<PostRaw>>("/attractions?limit=1"),
+      api.get<PaginatedResponse<PostRaw>>("/attractions?limit=1", liveFetch),
       // Regions
-      api.get<PaginatedResponse<Region>>("/regions?limit=1"),
+      api.get<PaginatedResponse<Region>>("/regions?limit=1", liveFetch),
       // Media
-      api.get<PaginatedResponse<Media>>("/media?limit=1"),
+      api.get<PaginatedResponse<Media>>("/media?limit=1", liveFetch),
       // Users (admin)
-      api.get<UserCounts>("/users/counts"),
+      api.get<UserCounts>("/users/counts", liveFetch),
       // Views (admin)
-      api.get<ViewSummaryItem[]>("/views/admin/summary"),
+      api.get<ViewSummaryItem[]>("/views/admin/summary", liveFetch),
       // Comments pending (admin) — use the moderation pending-count endpoint
       api
-        .get<{ count: number }>("/comments/moderation/pending-count")
+        .get<{ count: number }>("/comments/moderation/pending-count", liveFetch)
         .catch(() => null),
       // Videos
-      api.get<PaginatedResponse<Video>>("/videos?limit=1"),
+      api.get<PaginatedResponse<Video>>("/videos?limit=1", liveFetch),
       // Hotels
-      api.get<PaginatedResponse<Hotel>>("/hotels?limit=1"),
+      api.get<PaginatedResponse<Hotel>>("/hotels?limit=1", liveFetch),
       // Photo Features
-      api.get<PaginatedResponse<PhotoFeature>>("/photos?limit=1"),
+      api.get<PaginatedResponse<PhotoFeature>>("/photos?limit=1", liveFetch),
     ]);
 
     // Extract totals from paginated responses

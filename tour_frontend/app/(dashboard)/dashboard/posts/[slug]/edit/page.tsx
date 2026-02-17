@@ -38,6 +38,7 @@ export default function EditPostPage() {
   const [coverUploading, setCoverUploading] = useState(false);
   const coverInputRef = useRef<HTMLInputElement>(null);
   const titleRef = useRef<HTMLTextAreaElement>(null);
+  const shortDescriptionRef = useRef<HTMLTextAreaElement>(null);
 
   const [formData, setFormData] = useState({
     title: "",
@@ -94,15 +95,22 @@ export default function EditPostPage() {
     return url;
   }, []);
 
-  // Auto-resize title textarea when post finishes loading
+  const resizeTextarea = useCallback((textarea: HTMLTextAreaElement) => {
+    textarea.style.height = "auto";
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  }, []);
+
+  // Auto-resize textareas when post finishes loading
   useEffect(() => {
-    if (!loading && titleRef.current && formData.title) {
-      titleRef.current.style.height = "auto";
-      titleRef.current.style.height = titleRef.current.scrollHeight + "px";
+    if (!loading) {
+      if (titleRef.current && formData.title) {
+        resizeTextarea(titleRef.current);
+      }
+      if (shortDescriptionRef.current && formData.short_description) {
+        resizeTextarea(shortDescriptionRef.current);
+      }
     }
-    // Only run when loading transitions to false (post loaded), not on every title keystroke
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading]);
+  }, [loading, formData.title, formData.short_description, resizeTextarea]);
 
   const handleCoverFile = async (file: File) => {
     if (!file.type.startsWith("image/")) {
@@ -154,11 +162,10 @@ export default function EditPostPage() {
   const autoResizeTitle = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       const textarea = e.target;
-      textarea.style.height = "auto";
-      textarea.style.height = textarea.scrollHeight + "px";
+      resizeTextarea(textarea);
       setFormData((prev) => ({ ...prev, title: textarea.value }));
     },
-    [],
+    [resizeTextarea],
   );
 
   const handleSubmit = async (publish = false) => {
@@ -319,7 +326,7 @@ export default function EditPostPage() {
         </div>
       </div>
 
-      <div className="flex  h-[calc(100svh-8rem)] overflow-y-auto overflow-x-hidden">
+      <div className="scrollbar-hide flex h-[calc(100svh-8rem)] overflow-y-auto overflow-x-hidden">
         {/* ─── Main Editor Area ─── */}
         <div className="flex-1">
           {/* ─── Cover Image ─── */}
@@ -336,7 +343,7 @@ export default function EditPostPage() {
                   priority
                 />
               </div>
-              <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/0 opacity-0 transition-all group-hover:bg-black/30 group-hover:opacity-100">
+              <div className="absolute inset-0 flex p-2 items-start justify-end gap-2 bg-black/0 opacity-0 transition-all group-hover:bg-black/30 group-hover:opacity-100">
                 <Button
                   type="button"
                   variant="secondary"
@@ -410,27 +417,29 @@ export default function EditPostPage() {
               onChange={autoResizeTitle}
               onKeyDown={handleTitleKeyDown}
               placeholder="Untitled"
-              className="mb-2 w-full min-h-0 resize-none overflow-hidden border-0 bg-transparent px-0 py-0 text-[2.5rem] font-bold leading-tight text-gray-900 placeholder-gray-200 shadow-none focus-visible:ring-0"
+              className="mb-2 w-full text-5xl! min-h-0 resize-none overflow-hidden border-0 bg-transparent px-0 py-0 font-bold leading-tight text-gray-900 placeholder-gray-200 shadow-none focus-visible:ring-0"
               rows={1}
               style={{ minHeight: "3.5rem" }}
             />
 
             {/* Short Description */}
             <Textarea
+              ref={shortDescriptionRef}
               value={formData.short_description}
-              onChange={(e) =>
+              onChange={(e) => {
+                const target = e.target;
+                resizeTextarea(target);
                 setFormData((prev) => ({
                   ...prev,
-                  short_description: e.target.value,
-                }))
-              }
+                  short_description: target.value,
+                }));
+              }}
               placeholder="Add a brief description..."
-              className="mb-8 w-full min-h-0 resize-none border-0 bg-transparent px-0 py-0 text-lg leading-relaxed text-gray-400 placeholder-gray-200 shadow-none focus-visible:ring-0"
+              className="mb-8 w-full min-h-0 resize-none overflow-hidden border-0 bg-transparent px-0 py-0 text-lg leading-relaxed text-gray-400 placeholder-gray-200 shadow-none focus-visible:ring-0"
               rows={1}
               onInput={(e) => {
                 const target = e.target as HTMLTextAreaElement;
-                target.style.height = "auto";
-                target.style.height = target.scrollHeight + "px";
+                resizeTextarea(target);
               }}
             />
 
@@ -457,7 +466,7 @@ export default function EditPostPage() {
               : "w-0 translate-x-4 overflow-hidden opacity-0"
           }`}
         >
-          <div className="sticky top-[45px] h-[calc(100svh-4rem-45px)] w-[320px] overflow-y-auto">
+          <div className="scrollbar-hide sticky top-[45px] h-[calc(100svh-4rem-45px)] w-[320px] overflow-y-auto">
             <div className="p-5">
               {/* Panel Header */}
               <div className="mb-5 flex items-center justify-between">

@@ -22,9 +22,9 @@ import {
 } from "@/lib/store";
 import Button from "@/components/ui/button";
 import Input from "@/components/ui/input";
-import Select from "@/components/ui/Select";
+import Select from "@/components/ui/select";
 import Textarea from "@/components/ui/Textarea";
-import Checkbox from "@/components/ui/Checkbox";
+import Checkbox from "@/components/ui/checkbox";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import Pagination from "@/components/ui/Pagination";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
