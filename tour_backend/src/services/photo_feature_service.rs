@@ -370,6 +370,7 @@ impl PhotoFeatureService {
     pub async fn add_image(
         &self,
         photo_feature_id: &str,
+        uploaded_by: Option<&str>,
         image_url: &str,
         caption: Option<&str>,
         display_order: Option<i32>,
@@ -383,12 +384,13 @@ impl PhotoFeatureService {
 
         sqlx::query(
             r#"
-            INSERT INTO photo_images (id, photo_feature_id, image_url, caption, display_order, created_at)
-            VALUES ($1, $2, $3, $4, $5, NOW())
+            INSERT INTO photo_images (id, photo_feature_id, uploaded_by, image_url, caption, display_order, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6, NOW())
             "#,
         )
         .bind(&id)
         .bind(photo_feature_id)
+        .bind(uploaded_by)
         .bind(image_url)
         .bind(caption)
         .bind(display_order)
@@ -474,7 +476,13 @@ impl PhotoFeatureService {
 
         for (idx, (url, caption)) in images.iter().enumerate() {
             let image = self
-                .add_image(photo_feature_id, url, caption.as_deref(), Some(idx as i32))
+                .add_image(
+                    photo_feature_id,
+                    None,
+                    url,
+                    caption.as_deref(),
+                    Some(idx as i32),
+                )
                 .await?;
             result.push(image);
         }

@@ -71,11 +71,17 @@ export default function TagsPage() {
     data: tagsResponse,
     isLoading,
     isFetching,
-  } = useListTagsQuery({
-    page: currentPage,
-    limit: 30,
-    tag_type: typeFilter !== "all" ? typeFilter : undefined,
-  });
+  } = useListTagsQuery(
+    {
+      page: currentPage,
+      limit: 30,
+      tag_type: typeFilter !== "all" ? typeFilter : undefined,
+    },
+    {
+      refetchOnMountOrArgChange: true,
+      refetchOnFocus: true,
+    },
+  );
 
   // Mutations — each returns a trigger function and a result object.
   // When a mutation succeeds, RTK Query automatically invalidates the

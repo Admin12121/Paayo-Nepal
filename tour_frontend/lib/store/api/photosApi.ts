@@ -65,7 +65,7 @@ export const photosApi = baseApi.injectEndpoints({
           })),
         ];
       },
-      keepUnusedDataFor: 300,
+      keepUnusedDataFor: 0,
     }),
 
     /**
@@ -77,7 +77,7 @@ export const photosApi = baseApi.injectEndpoints({
     getPhotoBySlug: builder.query<PhotoFeature, string>({
       query: (slug) => `/photos/by-slug/${slug}`,
       providesTags: (_result, _error, slug) => [{ type: "Photo", id: slug }],
-      keepUnusedDataFor: 300,
+      keepUnusedDataFor: 0,
     }),
 
     /**
@@ -89,7 +89,7 @@ export const photosApi = baseApi.injectEndpoints({
     getPhotoById: builder.query<PhotoFeature, string>({
       query: (id) => `/photos/${id}`,
       providesTags: (_result, _error, id) => [{ type: "Photo", id }],
-      keepUnusedDataFor: 300,
+      keepUnusedDataFor: 0,
     }),
 
     /**
@@ -103,7 +103,7 @@ export const photosApi = baseApi.injectEndpoints({
       providesTags: (_result, _error, photoId) => [
         { type: "Photo", id: `${photoId}-images` },
       ],
-      keepUnusedDataFor: 300,
+      keepUnusedDataFor: 0,
     }),
 
     // ─── Mutations ───────────────────────────────────────────────────
@@ -114,11 +114,17 @@ export const photosApi = baseApi.injectEndpoints({
      * Invalidates the photo list so it refetches with the new item.
      */
     createPhoto: builder.mutation<PhotoFeature, CreatePhotoFeatureInput>({
-      query: (data) => ({
-        url: "/photos",
-        method: "POST",
-        body: data,
-      }),
+      query: (data) => {
+        const normalized = {
+          ...data,
+          region_id: data.region_id || undefined,
+        };
+        return {
+          url: "/photos",
+          method: "POST",
+          body: normalized,
+        };
+      },
       invalidatesTags: [
         { type: "Photo", id: "LIST" },
         { type: "DashboardStats" },
@@ -138,11 +144,17 @@ export const photosApi = baseApi.injectEndpoints({
         data: Partial<CreatePhotoFeatureInput> & { status?: string };
       }
     >({
-      query: ({ id, data }) => ({
-        url: `/photos/${id}`,
-        method: "PUT",
-        body: data,
-      }),
+      query: ({ id, data }) => {
+        const normalized = {
+          ...data,
+          region_id: data.region_id || undefined,
+        };
+        return {
+          url: `/photos/${id}`,
+          method: "PUT",
+          body: normalized,
+        };
+      },
       invalidatesTags: (result, _error, { id }) => [
         { type: "Photo", id },
         { type: "Photo", id: result?.slug || id },
@@ -251,6 +263,7 @@ export const photosApi = baseApi.injectEndpoints({
       invalidatesTags: (_result, _error, { photoId }) => [
         { type: "Photo", id: `${photoId}-images` },
         { type: "Photo", id: photoId },
+        { type: "Photo", id: "LIST" },
       ],
     }),
 
@@ -275,6 +288,7 @@ export const photosApi = baseApi.injectEndpoints({
       invalidatesTags: (_result, _error, { photoId }) => [
         { type: "Photo", id: `${photoId}-images` },
         { type: "Photo", id: photoId },
+        { type: "Photo", id: "LIST" },
       ],
     }),
 
@@ -294,6 +308,7 @@ export const photosApi = baseApi.injectEndpoints({
       invalidatesTags: (_result, _error, { photoId }) => [
         { type: "Photo", id: `${photoId}-images` },
         { type: "Photo", id: photoId },
+        { type: "Photo", id: "LIST" },
       ],
     }),
 
@@ -318,6 +333,7 @@ export const photosApi = baseApi.injectEndpoints({
       invalidatesTags: (_result, _error, { photoId }) => [
         { type: "Photo", id: `${photoId}-images` },
         { type: "Photo", id: photoId },
+        { type: "Photo", id: "LIST" },
       ],
     }),
   }),

@@ -6,7 +6,7 @@ use serde::Deserialize;
 
 use crate::{
     error::ApiError,
-    extractors::auth::{ActiveEditorUser, AdminUser, AuthenticatedUser, OptionalUser},
+    extractors::auth::{ActiveEditorUser, AdminUser, OptionalUser},
     handlers::posts::PaginatedResponse,
     models::common::ContentStatus,
     models::photo_feature::{PhotoFeature, PhotoFeatureWithImages, PhotoImage},
@@ -196,7 +196,7 @@ pub async fn get_by_id(
 /// Optionally accepts initial images in the same request.
 pub async fn create(
     State(state): State<AppState>,
-    user: ActiveEditorUser,
+    user: AdminUser,
     Json(input): Json<CreatePhotoFeatureInput>,
 ) -> Result<Json<PhotoFeatureWithImages>, ApiError> {
     if input.title.trim().is_empty() {
@@ -207,12 +207,18 @@ pub async fn create(
 
     let service = PhotoFeatureService::new(state.db.clone(), state.cache.clone());
 
+    let normalized_region_id = input
+        .region_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty());
+
     let photo = service
         .create(
             &user.0.id,
             input.title.trim(),
             input.description.as_deref(),
-            input.region_id.as_deref(),
+            normalized_region_id,
             input.is_featured.unwrap_or(false),
         )
         .await?;
@@ -240,28 +246,28 @@ pub async fn create(
 /// Update an existing photo feature (author or admin).
 pub async fn update(
     State(state): State<AppState>,
-    user: AuthenticatedUser,
+    _user: AdminUser,
     Path(id): Path<String>,
     Json(input): Json<UpdatePhotoFeatureInput>,
 ) -> Result<Json<PhotoFeature>, ApiError> {
     let service = PhotoFeatureService::new(state.db.clone(), state.cache.clone());
-
-    // Check existence and permission
-    let existing = service
+    service
         .get_by_id(&id)
         .await?
         .ok_or_else(|| ApiError::NotFound("Photo feature not found".to_string()))?;
 
-    if existing.author_id != user.id && user.role != crate::models::user::UserRole::Admin {
-        return Err(ApiError::Forbidden);
-    }
+    let normalized_region_id = input
+        .region_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty());
 
     let photo = service
         .update(
             &id,
             input.title.as_deref(),
             input.description.as_deref(),
-            input.region_id.as_deref(),
+            normalized_region_id,
             input.is_featured,
             input.status.as_deref(),
         )
@@ -297,19 +303,14 @@ pub async fn update_status(
 /// Soft delete a photo feature (author or admin).
 pub async fn delete(
     State(state): State<AppState>,
-    user: AuthenticatedUser,
+    _user: AdminUser,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let service = PhotoFeatureService::new(state.db.clone(), state.cache.clone());
-
-    let existing = service
+    service
         .get_by_id(&id)
         .await?
         .ok_or_else(|| ApiError::NotFound("Photo feature not found".to_string()))?;
-
-    if existing.author_id != user.id && user.role != crate::models::user::UserRole::Admin {
-        return Err(ApiError::Forbidden);
-    }
 
     service.delete(&id).await?;
 
@@ -402,7 +403,7 @@ pub async fn list_images(
 /// Add an image to a photo feature (admin/editor).
 pub async fn add_image(
     State(state): State<AppState>,
-    _user: ActiveEditorUser,
+    user: ActiveEditorUser,
     Path(photo_id): Path<String>,
     Json(input): Json<AddImageInput>,
 ) -> Result<Json<PhotoImage>, ApiError> {
@@ -417,6 +418,7 @@ pub async fn add_image(
     let image = service
         .add_image(
             &photo_id,
+            Some(&user.0.id),
             input.image_url.trim(),
             input.caption.as_deref(),
             input.display_order,

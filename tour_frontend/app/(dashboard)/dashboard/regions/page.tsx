@@ -173,11 +173,17 @@ export default function RegionsPage() {
     data: regionsResponse,
     isLoading,
     isFetching,
-  } = useListRegionsQuery({
-    page: currentPage,
-    limit: 20,
-    province: provinceFilter !== "all" ? provinceFilter : undefined,
-  });
+  } = useListRegionsQuery(
+    {
+      page: currentPage,
+      limit: 20,
+      province: provinceFilter !== "all" ? provinceFilter : undefined,
+    },
+    {
+      refetchOnMountOrArgChange: true,
+      refetchOnFocus: true,
+    },
+  );
 
   const [deleteRegion, { isLoading: deleting }] = useDeleteRegionMutation();
   const [updateRegion, { isLoading: savingOrder }] = useUpdateRegionMutation();
@@ -185,6 +191,12 @@ export default function RegionsPage() {
   // ── Derived data ────────────────────────────────────────────────────────
   const regions = regionsResponse?.data ?? EMPTY_REGIONS;
   const totalPages = regionsResponse?.total_pages ?? 1;
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(1);
+    }
+  }, [currentPage, totalPages]);
 
   useEffect(() => {
     setOrderedRegions(regions);

@@ -50,6 +50,7 @@ export const baseApi = createApi({
   baseQuery: fetchBaseQuery({
     baseUrl: "/api",
     credentials: "include",
+    cache: "no-store",
 
     prepareHeaders: (headers, { type }) => {
       // Always set JSON content type unless it's a multipart upload
@@ -94,7 +95,10 @@ export const baseApi = createApi({
 
   // Keep unused data in cache for 5 minutes before garbage-collecting.
   // Individual endpoints can override this with `keepUnusedDataFor`.
-  keepUnusedDataFor: 300,
+  keepUnusedDataFor: 0,
+
+  // Always refetch on mount/arg change to avoid stale admin/editor tables.
+  refetchOnMountOrArgChange: true,
 
   // Refetch data when the browser tab regains focus (stale-while-revalidate
   // pattern). This keeps dashboard data fresh without manual refresh.

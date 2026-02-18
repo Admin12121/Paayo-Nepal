@@ -31,6 +31,7 @@ pub struct PhotoFeature {
 pub struct PhotoImage {
     pub id: String,
     pub photo_feature_id: String,
+    pub uploaded_by: Option<String>,
     pub image_url: String,
     pub caption: Option<String>,
     pub display_order: Option<i32>,

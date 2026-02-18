@@ -185,15 +185,27 @@ export default function AttractionsPage() {
     data: attractionsResponse,
     isLoading,
     isFetching,
-  } = useListAttractionsQuery({
-    page: currentPage,
-    limit: 20,
-    region_id: regionFilter !== "all" ? regionFilter : undefined,
-    is_featured: topFilter === "top" ? true : undefined,
-  });
+  } = useListAttractionsQuery(
+    {
+      page: currentPage,
+      limit: 20,
+      region_id: regionFilter !== "all" ? regionFilter : undefined,
+      is_featured: topFilter === "top" ? true : undefined,
+    },
+    {
+      refetchOnMountOrArgChange: true,
+      refetchOnFocus: true,
+    },
+  );
 
   // Load regions for the filter dropdown (large limit to get all)
-  const { data: regionsResponse } = useListRegionsQuery({ limit: 100 });
+  const { data: regionsResponse } = useListRegionsQuery(
+    { limit: 100 },
+    {
+      refetchOnMountOrArgChange: true,
+      refetchOnFocus: true,
+    },
+  );
 
   // Mutations — each returns a trigger function and a result object.
   // When a mutation succeeds, RTK Query automatically invalidates the

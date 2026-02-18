@@ -91,7 +91,8 @@ export default function EditAttractionPage() {
       if (!response.ok) throw new Error("Failed to update attraction");
 
       toast.success("Attraction updated successfully");
-      router.push("/dashboard/attractions");
+      router.replace(`/dashboard/attractions?refresh=${Date.now()}`);
+      router.refresh();
     } catch (error: unknown) {
       const message =
         error instanceof Error ? error.message : "Failed to update attraction";

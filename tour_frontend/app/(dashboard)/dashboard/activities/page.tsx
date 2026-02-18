@@ -191,10 +191,16 @@ export default function ActivitiesPage() {
     data: activitiesResponse,
     isLoading,
     isFetching,
-  } = useListActivitiesQuery({
-    page: currentPage,
-    limit: 20,
-  });
+  } = useListActivitiesQuery(
+    {
+      page: currentPage,
+      limit: 20,
+    },
+    {
+      refetchOnMountOrArgChange: true,
+      refetchOnFocus: true,
+    },
+  );
 
   // Mutations — each returns a trigger function and a result object.
   // When a mutation succeeds, RTK Query automatically invalidates the

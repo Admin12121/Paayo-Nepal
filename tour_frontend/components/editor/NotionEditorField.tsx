@@ -1,9 +1,13 @@
 "use client";
 
-import TiptapEditor from "@/components/editor/TiptapEditor";
+import dynamic from "next/dynamic";
 import Label from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+
+const TiptapEditor = dynamic(() => import("@/components/editor/TiptapEditor"), {
+  ssr: false,
+});
 
 interface NotionEditorFieldProps {
   initialContent?: string;

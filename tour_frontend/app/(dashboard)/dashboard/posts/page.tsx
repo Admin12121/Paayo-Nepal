@@ -182,13 +182,19 @@ export default function PostsPage() {
     data: postsResponse,
     isLoading,
     isFetching,
-  } = useListPostsQuery({
-    page: currentPage,
-    limit: 20,
-    sort_by: "latest",
-    status: statusFilter !== "all" ? statusFilter : undefined,
-    type: typeFilter !== "all" ? typeFilter : undefined,
-  });
+  } = useListPostsQuery(
+    {
+      page: currentPage,
+      limit: 20,
+      sort_by: "latest",
+      status: statusFilter !== "all" ? statusFilter : undefined,
+      type: typeFilter !== "all" ? typeFilter : undefined,
+    },
+    {
+      refetchOnMountOrArgChange: true,
+      refetchOnFocus: true,
+    },
+  );
 
   const [deletePost, { isLoading: deleting }] = useDeletePostMutation();
   const [approvePost] = useApprovePostMutation();
@@ -200,20 +206,16 @@ export default function PostsPage() {
   const totalPages = postsResponse?.total_pages ?? 1;
 
   useEffect(() => {
-    setOrderedPosts((prev) => {
-      if (prev.length === posts.length) {
-        let same = true;
-        for (let i = 0; i < prev.length; i++) {
-          if (prev[i]?.id !== posts[i]?.id) {
-            same = false;
-            break;
-          }
-        }
-        if (same) return prev;
-      }
-      return posts;
-    });
-  }, [posts]);
+    if (currentPage > totalPages) {
+      setCurrentPage(1);
+    }
+  }, [currentPage, totalPages]);
+
+  useEffect(() => {
+    if (!rankingMode) {
+      setOrderedPosts(posts);
+    }
+  }, [posts, rankingMode]);
 
   const filteredPosts = useMemo(() => {
     return orderedPosts.filter((post) => {

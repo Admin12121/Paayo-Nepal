@@ -23,8 +23,10 @@ import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { Separator } from "@/components/ui/separator";
 import Textarea from "@/components/ui/Textarea";
 import { toast } from "@/lib/utils/toast";
+import { baseApi, useAppDispatch } from "@/lib/store";
 
 export default function EditPostPage() {
+  const dispatch = useAppDispatch();
   const router = useRouter();
   const params = useParams();
   const slug = params.slug as string;
@@ -208,7 +210,17 @@ export default function EditPostPage() {
         toast.success("Post updated successfully");
       }
 
-      router.push("/dashboard/posts");
+      dispatch(
+        baseApi.util.invalidateTags([
+          { type: "Post", id: "LIST" },
+          { type: "Event", id: "LIST" },
+          { type: "Activity", id: "LIST" },
+          { type: "DashboardStats" },
+        ]),
+      );
+
+      router.replace(`/dashboard/posts?refresh=${Date.now()}`);
+      router.refresh();
     } catch (error: unknown) {
       const message =
         error instanceof Error ? error.message : "Failed to update post";

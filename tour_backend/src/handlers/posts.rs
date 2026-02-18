@@ -51,6 +51,7 @@ pub struct CreatePostInput {
 #[derive(Debug, Deserialize)]
 pub struct UpdatePostInput {
     pub title: Option<String>,
+    pub post_type: Option<String>,
     #[serde(default, deserialize_with = "deserialize_optional_nullable")]
     pub short_description: Option<Option<String>>,
     #[serde(default, deserialize_with = "deserialize_optional_nullable_value")]
@@ -292,6 +293,7 @@ pub async fn update(
         .update(
             &existing.id,
             input.title.as_deref(),
+            input.post_type.as_deref(),
             input.short_description,
             sanitized_content,
             input.cover_image,

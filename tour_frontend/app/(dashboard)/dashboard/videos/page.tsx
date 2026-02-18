@@ -226,11 +226,17 @@ export default function VideosPage() {
     data: videosResponse,
     isLoading,
     isFetching,
-  } = useListVideosQuery({
-    page: currentPage,
-    limit: 20,
-    status: statusFilter !== "all" ? statusFilter : undefined,
-  });
+  } = useListVideosQuery(
+    {
+      page: currentPage,
+      limit: 20,
+      status: statusFilter !== "all" ? statusFilter : undefined,
+    },
+    {
+      refetchOnMountOrArgChange: true,
+      refetchOnFocus: true,
+    },
+  );
 
   // Mutations — each returns a trigger function and a result object.
   // When a mutation succeeds, RTK Query automatically invalidates the

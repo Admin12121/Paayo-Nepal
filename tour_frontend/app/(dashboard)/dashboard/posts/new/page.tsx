@@ -22,8 +22,10 @@ import Input from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import Textarea from "@/components/ui/Textarea";
 import { toast } from "@/lib/utils/toast";
+import { baseApi, useAppDispatch } from "@/lib/store";
 
 export default function NewPostPage() {
+  const dispatch = useAppDispatch();
   const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -163,7 +165,17 @@ export default function NewPostPage() {
         toast.success("Post saved as draft");
       }
 
-      router.push("/dashboard/posts");
+      dispatch(
+        baseApi.util.invalidateTags([
+          { type: "Post", id: "LIST" },
+          { type: "Event", id: "LIST" },
+          { type: "Activity", id: "LIST" },
+          { type: "DashboardStats" },
+        ]),
+      );
+
+      router.replace(`/dashboard/posts?refresh=${Date.now()}`);
+      router.refresh();
     } catch (error: unknown) {
       const message =
         error instanceof Error ? error.message : "Failed to save post";

@@ -42,7 +42,6 @@ import {
 } from "@/lib/store";
 import Button from "@/components/ui/button";
 import Input from "@/components/ui/input";
-import Select from "@/components/ui/select";
 import Textarea from "@/components/ui/Textarea";
 import Checkbox from "@/components/ui/checkbox";
 import ImageUpload from "@/components/ui/ImageUpload";
@@ -236,12 +235,18 @@ export default function HotelsPage() {
     data: hotelsResponse,
     isLoading,
     isFetching,
-  } = useListHotelsQuery({
-    page: currentPage,
-    limit: 20,
-    status: statusFilter !== "all" ? statusFilter : undefined,
-    price_range: priceFilter !== "all" ? priceFilter : undefined,
-  });
+  } = useListHotelsQuery(
+    {
+      page: currentPage,
+      limit: 20,
+      status: statusFilter !== "all" ? statusFilter : undefined,
+      price_range: priceFilter !== "all" ? priceFilter : undefined,
+    },
+    {
+      refetchOnMountOrArgChange: true,
+      refetchOnFocus: true,
+    },
+  );
 
   // Mutations — each returns a trigger function and a result object.
   // When a mutation succeeds, RTK Query automatically invalidates the
@@ -461,23 +466,23 @@ export default function HotelsPage() {
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Price Range
           </label>
-          <Select
+          <select
             value={formData.price_range || "mid"}
             onChange={(e) =>
               setFormData({ ...formData, price_range: e.target.value })
             }
-            options={[
-              { value: "budget", label: "Budget ($)" },
-              { value: "mid", label: "Mid-range ($$)" },
-              { value: "luxury", label: "Luxury ($$$)" },
-            ]}
-          />
+            className="h-10 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+          >
+            <option value="budget">Budget ($)</option>
+            <option value="mid">Mid-range ($$)</option>
+            <option value="luxury">Luxury ($$$)</option>
+          </select>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Star Rating
           </label>
-          <Select
+          <select
             value={String(formData.star_rating ?? "")}
             onChange={(e) =>
               setFormData({
@@ -487,15 +492,15 @@ export default function HotelsPage() {
                   : undefined,
               })
             }
-            options={[
-              { value: "", label: "No rating" },
-              { value: "1", label: "1 Star" },
-              { value: "2", label: "2 Stars" },
-              { value: "3", label: "3 Stars" },
-              { value: "4", label: "4 Stars" },
-              { value: "5", label: "5 Stars" },
-            ]}
-          />
+            className="h-10 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+          >
+            <option value="">No rating</option>
+            <option value="1">1 Star</option>
+            <option value="2">2 Stars</option>
+            <option value="3">3 Stars</option>
+            <option value="4">4 Stars</option>
+            <option value="5">5 Stars</option>
+          </select>
         </div>
       </div>
       <div className="grid grid-cols-2 gap-4">
@@ -603,35 +608,33 @@ export default function HotelsPage() {
             className="max-w-[300px]"
           />
           <div className="flex flex-row gap-3 ">
-            <Select
+            <select
               value={statusFilter}
               onChange={(e) => {
                 setStatusFilter(e.target.value);
                 setCurrentPage(1);
                 setRankingMode(false);
               }}
-              options={[
-                { value: "all", label: "All Status" },
-                { value: "draft", label: "Draft" },
-                { value: "published", label: "Published" },
-              ]}
-              className="min-w-[150px]"
-            />
-            <Select
+              className="h-9 min-w-[150px] rounded-md border border-input bg-transparent px-3 text-sm"
+            >
+              <option value="all">All Status</option>
+              <option value="draft">Draft</option>
+              <option value="published">Published</option>
+            </select>
+            <select
               value={priceFilter}
               onChange={(e) => {
                 setPriceFilter(e.target.value);
                 setCurrentPage(1);
                 setRankingMode(false);
               }}
-              options={[
-                { value: "all", label: "All Prices" },
-                { value: "budget", label: "Budget" },
-                { value: "mid", label: "Mid-range" },
-                { value: "luxury", label: "Luxury" },
-              ]}
-              className="min-w-[150px]"
-            />
+              className="h-9 min-w-[150px] rounded-md border border-input bg-transparent px-3 text-sm"
+            >
+              <option value="all">All Prices</option>
+              <option value="budget">Budget</option>
+              <option value="mid">Mid-range</option>
+              <option value="luxury">Luxury</option>
+            </select>
             <Button
               variant={rankingMode ? "default" : "outline"}
               size="sm"

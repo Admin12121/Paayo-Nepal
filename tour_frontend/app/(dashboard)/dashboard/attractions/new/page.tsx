@@ -68,7 +68,8 @@ export default function NewAttractionPage() {
       if (!response.ok) throw new Error("Failed to create attraction");
 
       toast.success("Attraction created successfully");
-      router.push("/dashboard/attractions");
+      router.replace(`/dashboard/attractions?refresh=${Date.now()}`);
+      router.refresh();
     } catch (error: unknown) {
       const message =
         error instanceof Error ? error.message : "Failed to create attraction";

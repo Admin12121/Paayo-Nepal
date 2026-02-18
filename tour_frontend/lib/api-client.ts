@@ -1072,6 +1072,7 @@ export const videosApi = {
 export interface PhotoImage {
   id: string;
   photo_feature_id: string;
+  uploaded_by: string | null;
   image_url: string;
   caption: string | null;
   display_order: number;

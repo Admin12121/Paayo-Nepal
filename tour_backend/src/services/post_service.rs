@@ -260,6 +260,7 @@ impl PostService {
         &self,
         id: &str,
         title: Option<&str>,
+        post_type: Option<&str>,
         short_description: Option<Option<String>>,
         content: Option<Option<serde_json::Value>>,
         cover_image: Option<Option<String>>,
@@ -276,12 +277,16 @@ impl PostService {
         // --- Resolve each field to its final value ---
 
         let final_title = title.unwrap_or(&existing.title).to_string();
+        let existing_post_type = existing.post_type.to_string();
+        let final_post_type = post_type
+            .unwrap_or(existing_post_type.as_str())
+            .to_string();
 
         // Regenerate slug only when title changes; handle slug collision with retry loop.
         // Each call to `generate_slug` appends a random UUID fragment, so collisions
         // are extremely unlikely — but this loop guarantees correctness even under
         // high concurrency (mirrors the create-path logic).
-        let final_slug = if title.is_some() {
+        let final_slug = if title.is_some_and(|next| next != existing.title) {
             let mut slug_candidate = generate_slug(&final_title);
             let mut found_unique = false;
 
@@ -349,19 +354,21 @@ impl PostService {
             UPDATE posts SET
                 slug = $1,
                 title = $2,
-                short_description = $3,
-                content = $4,
-                cover_image = $5,
-                region_id = $6,
-                is_featured = $7,
-                event_date = $8::timestamptz,
-                event_end_date = $9::timestamptz,
+                type = $3::post_type,
+                short_description = $4,
+                content = $5,
+                cover_image = $6,
+                region_id = $7,
+                is_featured = $8,
+                event_date = $9::timestamptz,
+                event_end_date = $10::timestamptz,
                 updated_at = NOW()
-            WHERE id = $10 AND deleted_at IS NULL
+            WHERE id = $11 AND deleted_at IS NULL
             "#,
         )
         .bind(&final_slug)
         .bind(&final_title)
+        .bind(&final_post_type)
         .bind(&final_short_description)
         .bind(&final_content)
         .bind(&final_cover_image)

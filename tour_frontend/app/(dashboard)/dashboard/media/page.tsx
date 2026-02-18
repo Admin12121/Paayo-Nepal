@@ -54,11 +54,17 @@ export default function MediaPage() {
     data: mediaResponse,
     isLoading,
     isFetching,
-  } = useListMediaQuery({
-    page: currentPage,
-    limit: 24,
-    type: typeFilter !== "all" ? typeFilter : undefined,
-  });
+  } = useListMediaQuery(
+    {
+      page: currentPage,
+      limit: 24,
+      type: typeFilter !== "all" ? typeFilter : undefined,
+    },
+    {
+      refetchOnMountOrArgChange: true,
+      refetchOnFocus: true,
+    },
+  );
 
   // Mutations — each returns a trigger function and a result object.
   // When a mutation succeeds, RTK Query automatically invalidates the

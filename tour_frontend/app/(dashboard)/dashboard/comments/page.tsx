@@ -76,11 +76,17 @@ export default function CommentsPage() {
     data: commentsResponse,
     isLoading,
     isFetching,
-  } = useListCommentsForModerationQuery({
-    page: currentPage,
-    limit: 20,
-    status: statusFilter !== "all" ? statusFilter : undefined,
-  });
+  } = useListCommentsForModerationQuery(
+    {
+      page: currentPage,
+      limit: 20,
+      status: statusFilter !== "all" ? statusFilter : undefined,
+    },
+    {
+      refetchOnMountOrArgChange: true,
+      refetchOnFocus: true,
+    },
+  );
 
   const { data: pendingCountData } = useGetPendingCommentCountQuery();
   const [approveComment] = useApproveCommentMutation();
@@ -101,9 +107,13 @@ export default function CommentsPage() {
     () =>
       comments.filter((comment) =>
         searchQuery
-          ? comment.guest_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          ? comment.guest_name
+              .toLowerCase()
+              .includes(searchQuery.toLowerCase()) ||
             comment.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            comment.guest_email.toLowerCase().includes(searchQuery.toLowerCase())
+            comment.guest_email
+              .toLowerCase()
+              .includes(searchQuery.toLowerCase())
           : true,
       ),
     [comments, searchQuery],
@@ -300,7 +310,11 @@ export default function CommentsPage() {
             <span className="text-sm font-medium text-blue-700">
               {selectedIds.size} selected
             </span>
-            <Button size="sm" onClick={handleBatchApprove} disabled={batchApproving}>
+            <Button
+              size="sm"
+              onClick={handleBatchApprove}
+              disabled={batchApproving}
+            >
               <CheckCircle className="mr-1 h-3.5 w-3.5" />
               {batchApproving ? "Approving..." : "Approve All"}
             </Button>
@@ -346,8 +360,13 @@ export default function CommentsPage() {
                   <TableHead className="w-12">
                     <div className="flex items-center justify-center">
                       <Checkbox
-                        checked={allPageSelected || (somePageSelected && "indeterminate")}
-                        onCheckedChange={(checked) => toggleSelectAll(Boolean(checked))}
+                        checked={
+                          allPageSelected ||
+                          (somePageSelected && "indeterminate")
+                        }
+                        onCheckedChange={(checked) =>
+                          toggleSelectAll(Boolean(checked))
+                        }
                         aria-label="Select all"
                       />
                     </div>
@@ -393,8 +412,12 @@ export default function CommentsPage() {
                       </p>
                       {(comment.ip_address || comment.viewer_hash) && (
                         <p className="truncate text-xs text-slate-400">
-                          {comment.ip_address ? `IP: ${comment.ip_address}` : ""}
-                          {comment.ip_address && comment.viewer_hash ? " | " : ""}
+                          {comment.ip_address
+                            ? `IP: ${comment.ip_address}`
+                            : ""}
+                          {comment.ip_address && comment.viewer_hash
+                            ? " | "
+                            : ""}
                           {comment.viewer_hash
                             ? `Hash: ${comment.viewer_hash.slice(0, 12)}...`
                             : ""}
@@ -455,7 +478,9 @@ export default function CommentsPage() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => setDeleteDialog({ open: true, comment })}
+                          onClick={() =>
+                            setDeleteDialog({ open: true, comment })
+                          }
                           title="Delete permanently"
                         >
                           <Trash2 className="h-4 w-4 text-red-600" />

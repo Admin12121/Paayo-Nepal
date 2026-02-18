@@ -182,7 +182,11 @@ export default function EventsPage() {
       page: currentPage,
       limit: 20,
     },
-    { skip: timeFilter === "upcoming" },
+    {
+      skip: timeFilter === "upcoming",
+      refetchOnMountOrArgChange: true,
+      refetchOnFocus: true,
+    },
   );
 
   const upcomingEventsQuery = useListUpcomingEventsQuery(
@@ -190,7 +194,11 @@ export default function EventsPage() {
       page: currentPage,
       limit: 20,
     },
-    { skip: timeFilter !== "upcoming" },
+    {
+      skip: timeFilter !== "upcoming",
+      refetchOnMountOrArgChange: true,
+      refetchOnFocus: true,
+    },
   );
 
   // Pick the active query result based on the filter

@@ -117,11 +117,23 @@ export const hotelsApi = baseApi.injectEndpoints({
      * Invalidates the hotel list so it refetches with the new item.
      */
     createHotel: builder.mutation<Hotel, CreateHotelInput>({
-      query: (data) => ({
-        url: "/hotels",
-        method: "POST",
-        body: data,
-      }),
+      query: (data) => {
+        const normalized = {
+          ...data,
+          region_id: data.region_id || undefined,
+          email: data.email || undefined,
+          phone: data.phone || undefined,
+          website: data.website || undefined,
+          description: data.description || undefined,
+          cover_image: data.cover_image || undefined,
+        };
+
+        return {
+          url: "/hotels",
+          method: "POST",
+          body: normalized,
+        };
+      },
       invalidatesTags: [
         { type: "Hotel", id: "LIST" },
         { type: "DashboardStats" },
@@ -138,11 +150,23 @@ export const hotelsApi = baseApi.injectEndpoints({
       Hotel,
       { id: string; data: Partial<CreateHotelInput> & { status?: string } }
     >({
-      query: ({ id, data }) => ({
-        url: `/hotels/${id}`,
-        method: "PUT",
-        body: data,
-      }),
+      query: ({ id, data }) => {
+        const normalized = {
+          ...data,
+          region_id: data.region_id || undefined,
+          email: data.email || undefined,
+          phone: data.phone || undefined,
+          website: data.website || undefined,
+          description: data.description || undefined,
+          cover_image: data.cover_image || undefined,
+        };
+
+        return {
+          url: `/hotels/${id}`,
+          method: "PUT",
+          body: normalized,
+        };
+      },
       invalidatesTags: (result, _error, { id }) => [
         { type: "Hotel", id },
         { type: "Hotel", id: result?.slug || id },
