@@ -170,6 +170,7 @@ impl RegionService {
         district: Option<&str>,
         latitude: Option<f64>,
         longitude: Option<f64>,
+        map_data: Option<serde_json::Value>,
     ) -> Result<Region, ApiError> {
         let id = Uuid::new_v4().to_string();
         let slug = generate_slug(name);
@@ -178,10 +179,10 @@ impl RegionService {
             r#"
             INSERT INTO regions (
                 id, author_id, name, slug, description, cover_image,
-                is_featured, province, district, latitude, longitude,
+                is_featured, province, district, latitude, longitude, map_data,
                 status, created_at, updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'draft', NOW(), NOW())
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'draft', NOW(), NOW())
             "#,
         )
         .bind(&id)
@@ -195,6 +196,7 @@ impl RegionService {
         .bind(district)
         .bind(latitude)
         .bind(longitude)
+        .bind(map_data.map(sqlx::types::Json))
         .execute(&self.db)
         .await?;
 
@@ -263,8 +265,9 @@ impl RegionService {
                 province = COALESCE($7, province),
                 district = COALESCE($8, district),
                 latitude = COALESCE($9, latitude),
-                longitude = COALESCE($10, longitude)
-            WHERE id = $11 AND deleted_at IS NULL
+                longitude = COALESCE($10, longitude),
+                map_data = $11
+            WHERE id = $12 AND deleted_at IS NULL
             "#,
         )
         .bind(new_slug.as_deref())
@@ -277,6 +280,7 @@ impl RegionService {
         .bind(input.district)
         .bind(input.latitude)
         .bind(input.longitude)
+        .bind(input.map_data.map(sqlx::types::Json))
         .bind(id)
         .execute(&self.db)
         .await?;

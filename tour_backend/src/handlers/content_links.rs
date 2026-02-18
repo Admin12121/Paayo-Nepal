@@ -353,8 +353,27 @@ async fn ensure_source_write_permission(
 
             Ok(())
         }
-        // Region lifecycle is admin-managed in this system.
-        "region" => Err(ApiError::Forbidden),
+        "region" => {
+            let region_author = sqlx::query_as::<_, (String,)>(
+                "SELECT author_id FROM regions WHERE id = $1 AND deleted_at IS NULL",
+            )
+            .bind(normalized_source_id)
+            .fetch_optional(&state.db)
+            .await?;
+
+            let Some((author_id,)) = region_author else {
+                return Err(ApiError::NotFound(format!(
+                    "Source 'region' with id '{}' does not exist",
+                    normalized_source_id
+                )));
+            };
+
+            if user.role != UserRole::Editor || author_id != user.id {
+                return Err(ApiError::Forbidden);
+            }
+
+            Ok(())
+        }
         _ => Err(ApiError::ValidationError(format!(
             "Invalid source_type '{}'. Must be one of: {}",
             source_type,

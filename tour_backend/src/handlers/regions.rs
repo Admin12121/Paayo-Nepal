@@ -35,6 +35,7 @@ pub struct CreateRegionInput {
     pub district: Option<String>,
     pub latitude: Option<f64>,
     pub longitude: Option<f64>,
+    pub map_data: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -48,6 +49,7 @@ pub struct UpdateRegionInput {
     pub district: Option<String>,
     pub latitude: Option<f64>,
     pub longitude: Option<f64>,
+    pub map_data: Option<serde_json::Value>,
 }
 
 /// List regions.
@@ -156,6 +158,7 @@ pub async fn create(
             input.district.as_deref(),
             input.latitude,
             input.longitude,
+            input.map_data,
         )
         .await?;
 

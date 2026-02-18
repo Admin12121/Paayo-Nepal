@@ -7,10 +7,8 @@ import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft,
   ImagePlus,
-  MapPin,
   Save,
   Send,
-  Settings2,
   Sparkles,
   X,
 } from "lucide-react";
@@ -30,18 +28,15 @@ import Input from "@/components/ui/input";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { Separator } from "@/components/ui/separator";
 import Textarea from "@/components/ui/Textarea";
+import RegionLocationSettings from "@/components/dashboard/RegionLocationSettings";
 import { toast } from "@/lib/utils/toast";
 import { baseApi, useAppDispatch } from "@/lib/store";
-
-const PROVINCES = [
-  "Koshi",
-  "Madhesh",
-  "Bagmati",
-  "Gandaki",
-  "Lumbini",
-  "Karnali",
-  "Sudurpashchim",
-];
+import {
+  buildRegionMapPayload,
+  deriveCoordinatesFromRegionLocation,
+  normalizeRegionLocation,
+  type RegionMapMode,
+} from "@/lib/region-location";
 
 export default function EditRegionPage() {
   const dispatch = useAppDispatch();
@@ -51,7 +46,6 @@ export default function EditRegionPage() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
   const [coverDragActive, setCoverDragActive] = useState(false);
   const [coverUploading, setCoverUploading] = useState(false);
   const [region, setRegion] = useState<Region | null>(null);
@@ -81,13 +75,22 @@ export default function EditRegionPage() {
     is_featured: false,
     province: "",
     district: "",
-    latitude: "",
-    longitude: "",
+    map_mode: "districts" as RegionMapMode,
+    selected_districts: [] as string[],
+    marker: null as [number, number] | null,
+    polygon: [] as [number, number][],
   });
 
   const loadRegion = useCallback(async () => {
     try {
       const data = await regionsApi.getBySlug(slug);
+      const normalizedLocation = normalizeRegionLocation(
+        data.map_data,
+        data.district,
+        data.longitude,
+        data.latitude,
+      );
+
       setRegion(data);
       setFormData({
         name: data.name,
@@ -96,8 +99,10 @@ export default function EditRegionPage() {
         is_featured: data.is_featured,
         province: data.province || "",
         district: data.district || "",
-        latitude: data.latitude?.toString() || "",
-        longitude: data.longitude?.toString() || "",
+        map_mode: normalizedLocation.mapMode,
+        selected_districts: normalizedLocation.selectedDistricts,
+        marker: normalizedLocation.marker,
+        polygon: normalizedLocation.polygon,
       });
     } catch (error) {
       toast.error("Failed to load region");
@@ -238,12 +243,6 @@ export default function EditRegionPage() {
     [resizeTextarea],
   );
 
-  const parseNumber = (value: string): number | null => {
-    if (!value.trim()) return null;
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  };
-
   const handleSubmit = async (publish = false) => {
     if (!formData.name.trim()) {
       toast.error("Region name is required");
@@ -253,15 +252,27 @@ export default function EditRegionPage() {
 
     setSaving(true);
     try {
+      const locationPayload = buildRegionMapPayload({
+        mapMode: formData.map_mode,
+        selectedDistricts: formData.selected_districts,
+        marker: formData.marker,
+        polygon: formData.polygon,
+      });
+      const derivedCoordinates = deriveCoordinatesFromRegionLocation(
+        formData.marker,
+        formData.polygon,
+      );
+
       const payload: Record<string, unknown> = {
         name: formData.name,
         description: formData.description || null,
         cover_image: formData.cover_image || null,
         is_featured: formData.is_featured,
         province: formData.province || null,
-        district: formData.district || null,
-        latitude: parseNumber(formData.latitude),
-        longitude: parseNumber(formData.longitude),
+        district: formData.selected_districts[0] || formData.district || null,
+        latitude: derivedCoordinates.latitude,
+        longitude: derivedCoordinates.longitude,
+        map_data: locationPayload,
       };
 
       if (publish) {
@@ -405,21 +416,6 @@ export default function EditRegionPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowSettings(!showSettings)}
-            className={`h-auto px-3 py-1.5 text-sm ${
-              showSettings
-                ? "bg-gray-900 text-white"
-                : "text-gray-600 hover:bg-gray-100"
-            }`}
-          >
-            <Settings2 className="h-4 w-4" />
-            <span className="hidden sm:inline">Settings</span>
-          </Button>
-
           <Button
             type="button"
             variant="ghost"
@@ -573,28 +569,13 @@ export default function EditRegionPage() {
         </div>
 
         <div
-          className={`shrink-0 border-l border-gray-200/80 bg-gray-50/70 transition-all duration-300 ease-in-out ${
-            showSettings
-              ? "w-[320px] translate-x-0 opacity-100"
-              : "w-0 translate-x-4 overflow-hidden opacity-0"
-          }`}
+          className="w-[360px] shrink-0 border-l border-gray-200/80 bg-gray-50/70"
         >
-          <div className="scrollbar-hide sticky top-[45px] h-[calc(100svh-4rem-45px)] w-[320px] overflow-y-auto">
+          <div className="scrollbar-hide sticky top-[45px] h-[calc(100svh-4rem-45px)] w-[360px] overflow-y-auto">
             <div className="p-5">
-              <div className="mb-5 flex items-center justify-between">
-                <h3 className="text-[13px] font-semibold text-gray-900">
-                  Region Settings
-                </h3>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowSettings(false)}
-                  className="h-7 w-7 p-0 text-gray-400 hover:bg-gray-200 hover:text-gray-600"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
+              <h3 className="mb-5 text-[13px] font-semibold text-gray-900">
+                Region Settings
+              </h3>
 
               {region && (
                 <div className="mb-5">
@@ -609,82 +590,32 @@ export default function EditRegionPage() {
 
               <Separator className="my-4 bg-gray-200/80" />
 
-              <div className="mb-5">
-                <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wider text-gray-400">
-                  Province
-                </label>
-                <select
-                  value={formData.province}
-                  onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      province: e.target.value,
-                    }))
-                  }
-                  className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-[13px] text-gray-700 shadow-sm outline-none focus:border-blue-300"
-                >
-                  <option value="">Select province...</option>
-                  {PROVINCES.map((province) => (
-                    <option key={province} value={province}>
-                      {province}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="mb-5">
-                <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wider text-gray-400">
-                  District
-                </label>
-                <Input
-                  value={formData.district}
-                  onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      district: e.target.value,
-                    }))
-                  }
-                  placeholder="e.g. Kathmandu"
-                  className="h-10 rounded-lg border-gray-200 bg-white px-3 text-[13px]"
-                />
-              </div>
-
-              <Separator className="my-4 bg-gray-200/80" />
-
-              <div className="mb-5 grid grid-cols-2 gap-2">
-                <div>
-                  <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wider text-gray-400">
-                    Latitude
-                  </label>
-                  <Input
-                    value={formData.latitude}
-                    onChange={(e) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        latitude: e.target.value,
-                      }))
-                    }
-                    placeholder="27.7172"
-                    className="h-10 rounded-lg border-gray-200 bg-white px-3 text-[13px]"
-                  />
-                </div>
-                <div>
-                  <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wider text-gray-400">
-                    Longitude
-                  </label>
-                  <Input
-                    value={formData.longitude}
-                    onChange={(e) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        longitude: e.target.value,
-                      }))
-                    }
-                    placeholder="85.3240"
-                    className="h-10 rounded-lg border-gray-200 bg-white px-3 text-[13px]"
-                  />
-                </div>
-              </div>
+              <RegionLocationSettings
+                province={formData.province}
+                onProvinceChange={(value) =>
+                  setFormData((prev) => ({ ...prev, province: value }))
+                }
+                selectedDistricts={formData.selected_districts}
+                onSelectedDistrictsChange={(value) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    selected_districts: value,
+                    district: value[0] || "",
+                  }))
+                }
+                mapMode={formData.map_mode}
+                onMapModeChange={(value) =>
+                  setFormData((prev) => ({ ...prev, map_mode: value }))
+                }
+                marker={formData.marker}
+                onMarkerChange={(value) =>
+                  setFormData((prev) => ({ ...prev, marker: value }))
+                }
+                polygon={formData.polygon}
+                onPolygonChange={(value) =>
+                  setFormData((prev) => ({ ...prev, polygon: value }))
+                }
+              />
 
               <Separator className="my-4 bg-gray-200/80" />
 
@@ -787,20 +718,6 @@ export default function EditRegionPage() {
                         </div>
                       ))
                     )}
-                  </div>
-                </div>
-              </div>
-
-              <Separator className="my-4 bg-gray-200/80" />
-
-              <div className="rounded-xl border border-gray-100 bg-white p-3.5 shadow-sm">
-                <div className="flex items-start gap-2.5 text-[12px] leading-relaxed text-gray-400">
-                  <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-gray-300" />
-                  <div>
-                    <p className="mb-1">
-                      Add coordinates for accurate map placement.
-                    </p>
-                    <p>Keep description concise for better search previews.</p>
                   </div>
                 </div>
               </div>
