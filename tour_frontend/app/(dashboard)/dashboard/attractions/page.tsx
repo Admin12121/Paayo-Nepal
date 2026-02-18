@@ -1,22 +1,48 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Plus, Edit, Trash2, MapPin, Star, Eye } from "lucide-react";
+import { Plus, Edit, Trash2, MapPin, GripVertical } from "lucide-react";
+import {
+  closestCenter,
+  DndContext,
+  KeyboardSensor,
+  MouseSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type UniqueIdentifier,
+} from "@dnd-kit/core";
+import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
+import {
+  arrayMove,
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import type { Post } from "@/lib/api-client";
 import {
   useListAttractionsQuery,
   useDeleteAttractionMutation,
   useListRegionsQuery,
+  useUpdatePostDisplayOrderMutation,
 } from "@/lib/store";
 import Button from "@/components/ui/button";
 import Input from "@/components/ui/input";
-import Select from "@/components/ui/select";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import Pagination from "@/components/ui/Pagination";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -27,12 +53,117 @@ import {
 } from "@/components/ui/table";
 import { toast } from "@/lib/utils/toast";
 
+const EMPTY_ATTRACTIONS: Post[] = [];
+
+function DraggableAttractionRow({
+  attraction,
+  rankEnabled,
+  regionName,
+  onDelete,
+}: {
+  attraction: Post;
+  rankEnabled: boolean;
+  regionName: string;
+  onDelete: (attraction: Post) => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: attraction.id,
+    disabled: !rankEnabled,
+  });
+
+  return (
+    <TableRow
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={isDragging ? "opacity-70" : undefined}
+    >
+      <TableCell className="max-w-[360px] lg:max-w-[520px]">
+        <div className="flex items-center gap-3">
+          {rankEnabled && (
+            <button
+              type="button"
+              {...attributes}
+              {...listeners}
+              className="cursor-grab text-slate-400 active:cursor-grabbing"
+              aria-label="Drag to reorder"
+            >
+              <GripVertical className="h-4 w-4 shrink-0" />
+            </button>
+          )}
+          {attraction.cover_image && (
+            <Image
+              src={attraction.cover_image}
+              alt={attraction.title}
+              width={48}
+              height={48}
+              className="h-12 w-12 rounded object-cover"
+              unoptimized={attraction.cover_image.startsWith("/uploads")}
+            />
+          )}
+          <div className="min-w-0">
+            <Link
+              href={`/dashboard/attractions/${attraction.slug}/edit`}
+              className="block truncate text-sm text-blue-600 hover:underline"
+              title={attraction.title}
+            >
+              {attraction.title}
+            </Link>
+            <p className="truncate text-xs text-slate-500">
+              /{attraction.slug}
+            </p>
+          </div>
+        </div>
+      </TableCell>
+      <TableCell className="text-slate-600">{regionName}</TableCell>
+      <TableCell>
+        <Badge
+          variant={attraction.status === "published" ? "default" : "outline"}
+          className="capitalize"
+        >
+          {attraction.status}
+        </Badge>
+      </TableCell>
+      <TableCell className="text-right tabular-nums">
+        {(attraction.likes ?? attraction.like_count ?? 0).toLocaleString()}
+      </TableCell>
+      <TableCell className="text-slate-600">
+        {new Date(attraction.created_at).toLocaleDateString()}
+      </TableCell>
+      <TableCell className="text-right">
+        <div className="flex items-center justify-end gap-2">
+          <Link href={`/dashboard/attractions/${attraction.slug}/edit`}>
+            <Button variant="ghost" size="sm">
+              <Edit className="w-4 h-4" />
+            </Button>
+          </Link>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onDelete(attraction)}
+          >
+            <Trash2 className="w-4 h-4 text-red-600" />
+          </Button>
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+}
+
 export default function AttractionsPage() {
   // ── Local UI state ──────────────────────────────────────────────────────
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
   const [regionFilter, setRegionFilter] = useState("all");
   const [topFilter, setTopFilter] = useState("all");
+  const [rankingMode, setRankingMode] = useState(false);
+  const [orderedAttractions, setOrderedAttractions] = useState<Post[]>([]);
   const [deleteDialog, setDeleteDialog] = useState<{
     open: boolean;
     attraction: Post | null;
@@ -70,17 +201,33 @@ export default function AttractionsPage() {
   // No more manual `loadAttractions()` calls after every mutation!
   const [deleteAttraction, { isLoading: deleting }] =
     useDeleteAttractionMutation();
+  const [updatePostDisplayOrder, { isLoading: savingOrder }] =
+    useUpdatePostDisplayOrderMutation();
 
   // ── Derived data ────────────────────────────────────────────────────────
-  const attractions = attractionsResponse?.data ?? [];
+  const attractions = attractionsResponse?.data ?? EMPTY_ATTRACTIONS;
   const totalPages = attractionsResponse?.total_pages ?? 1;
   const regions = regionsResponse?.data ?? [];
 
+  useEffect(() => {
+    setOrderedAttractions(attractions);
+  }, [attractions]);
+
   // Client-side search filter (instant, no network request)
-  const filteredAttractions = attractions.filter((attraction) =>
+  const filteredAttractions = orderedAttractions.filter((attraction) =>
     searchQuery
       ? attraction.title.toLowerCase().includes(searchQuery.toLowerCase())
       : true,
+  );
+  const canRankAttractions = searchQuery.trim() === "";
+  const sensors = useSensors(
+    useSensor(MouseSensor),
+    useSensor(TouchSensor),
+    useSensor(KeyboardSensor),
+  );
+  const dataIds = useMemo<UniqueIdentifier[]>(
+    () => filteredAttractions.map((attraction) => attraction.id),
+    [filteredAttractions],
   );
 
   // ── Handlers ────────────────────────────────────────────────────────────
@@ -96,6 +243,48 @@ export default function AttractionsPage() {
       setDeleteDialog({ open: false, attraction: null });
     } catch (error) {
       toast.error("Failed to delete attraction");
+      console.error(error);
+    }
+  };
+
+  const handleDragEnd = ({ active, over }: DragEndEvent) => {
+    if (!rankingMode || !canRankAttractions || !over || active.id === over.id)
+      return;
+    setOrderedAttractions((prev) => {
+      const oldIndex = prev.findIndex((item) => item.id === active.id);
+      const newIndex = prev.findIndex((item) => item.id === over.id);
+      if (oldIndex === -1 || newIndex === -1) return prev;
+      return arrayMove(prev, oldIndex, newIndex);
+    });
+  };
+
+  const handleSaveOrder = async () => {
+    if (!canRankAttractions) {
+      toast.error("Clear search to reorder.");
+      return;
+    }
+    try {
+      const base = (currentPage - 1) * 20;
+      const changed = orderedAttractions
+        .map((attraction, index) => ({ attraction, index }))
+        .filter(
+          ({ attraction, index }) => attractions[index]?.id !== attraction.id,
+        );
+      if (changed.length === 0) {
+        toast.info("No order changes to save");
+        return;
+      }
+      await Promise.all(
+        changed.map(({ attraction, index }) =>
+          updatePostDisplayOrder({
+            id: attraction.id,
+            display_order: base + index,
+          }).unwrap(),
+        ),
+      );
+      toast.success("Attraction order updated");
+    } catch (error) {
+      toast.error("Failed to update order");
       console.error(error);
     }
   };
@@ -130,28 +319,57 @@ export default function AttractionsPage() {
           <div className="flex flex-row gap-3 ">
             <Select
               value={regionFilter}
-              onChange={(e) => {
-                setRegionFilter(e.target.value);
+              onValueChange={(value) => {
+                setRegionFilter(value);
                 setCurrentPage(1);
+                setRankingMode(false);
               }}
-              options={[
-                { value: "all", label: "All Regions" },
-                ...regions.map((r) => ({ value: r.id, label: r.name })),
-              ]}
-              className="min-w-[150px]"
-            />
+            >
+              <SelectTrigger className="min-w-[150px]">
+                <SelectValue placeholder="All Regions" />
+              </SelectTrigger>
+              <SelectContent position="popper">
+                <SelectItem value="all">All Regions</SelectItem>
+                {regions.map((region) => (
+                  <SelectItem key={region.id} value={region.id}>
+                    {region.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Select
               value={topFilter}
-              onChange={(e) => {
-                setTopFilter(e.target.value);
+              onValueChange={(value) => {
+                setTopFilter(value);
                 setCurrentPage(1);
+                setRankingMode(false);
               }}
-              options={[
-                { value: "all", label: "All Attractions" },
-                { value: "top", label: "Top Attractions" },
-              ]}
-              className="min-w-[150px]"
-            />
+            >
+              <SelectTrigger className="min-w-[150px]">
+                <SelectValue placeholder="All Attractions" />
+              </SelectTrigger>
+              <SelectContent position="popper">
+                <SelectItem value="all">All Attractions</SelectItem>
+                <SelectItem value="top">Top Attractions</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button
+              variant={rankingMode ? "default" : "outline"}
+              size="sm"
+              disabled={!canRankAttractions}
+              onClick={() => setRankingMode((prev) => !prev)}
+            >
+              Rank Mode
+            </Button>
+            {rankingMode && (
+              <Button
+                size="sm"
+                onClick={handleSaveOrder}
+                isLoading={savingOrder}
+              >
+                Save Order
+              </Button>
+            )}
           </div>
         </div>
 
@@ -172,98 +390,47 @@ export default function AttractionsPage() {
         ) : (
           <div className="overflow-hidden rounded-lg border bg-white">
             <div className="overflow-x-auto">
-              <Table className="table-fixed">
-                <TableHeader className="bg-slate-50">
-                  <TableRow>
-                    <TableHead className="w-[44%]">Title</TableHead>
-                    <TableHead className="w-[14%]">Region</TableHead>
-                    <TableHead className="w-[10%]">Status</TableHead>
-                    <TableHead className="w-[8%] text-right">Likes</TableHead>
-                    <TableHead className="w-[12%]">Created</TableHead>
-                    <TableHead className="w-24 text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredAttractions.map((attraction) => (
-                    <TableRow key={attraction.id}>
-                      <TableCell className="max-w-[360px] lg:max-w-[520px]">
-                        <div className="flex items-center gap-3">
-                          {attraction.cover_image && (
-                            <Image
-                              src={attraction.cover_image}
-                              alt={attraction.title}
-                              width={48}
-                              height={48}
-                              className="h-12 w-12 rounded object-cover"
-                              unoptimized={attraction.cover_image.startsWith(
-                                "/uploads",
-                              )}
-                            />
-                          )}
-                          <div className="min-w-0">
-                            <Link
-                              href={`/dashboard/attractions/${attraction.slug}/edit`}
-                              className="block truncate text-sm text-blue-600 hover:underline"
-                              title={attraction.title}
-                            >
-                              {attraction.title}
-                            </Link>
-                            <p className="truncate text-xs text-slate-500">
-                              /{attraction.slug}
-                            </p>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-slate-600">
-                        {regions.find((r) => r.id === attraction.region_id)
-                          ?.name || "—"}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            attraction.status === "published"
-                              ? "default"
-                              : "outline"
-                          }
-                          className="capitalize"
-                        >
-                          {attraction.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {(
-                          attraction.likes ??
-                          attraction.like_count ??
-                          0
-                        ).toLocaleString()}
-                      </TableCell>
-                      <TableCell className="text-slate-600">
-                        {new Date(attraction.created_at).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <Link
-                            href={`/dashboard/attractions/${attraction.slug}/edit`}
-                          >
-                            <Button variant="ghost" size="sm">
-                              <Edit className="w-4 h-4" />
-                            </Button>
-                          </Link>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() =>
-                              setDeleteDialog({ open: true, attraction })
-                            }
-                          >
-                            <Trash2 className="w-4 h-4 text-red-600" />
-                          </Button>
-                        </div>
-                      </TableCell>
+              <DndContext
+                collisionDetection={closestCenter}
+                modifiers={[restrictToVerticalAxis]}
+                sensors={sensors}
+                onDragEnd={handleDragEnd}
+              >
+                <Table className="table-fixed">
+                  <TableHeader className="bg-slate-50">
+                    <TableRow>
+                      <TableHead className="w-[44%]">Title</TableHead>
+                      <TableHead className="w-[14%]">Region</TableHead>
+                      <TableHead className="w-[10%]">Status</TableHead>
+                      <TableHead className="w-[8%] text-right">Likes</TableHead>
+                      <TableHead className="w-[12%]">Created</TableHead>
+                      <TableHead className="w-24 text-right">Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    <SortableContext
+                      items={dataIds}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      {filteredAttractions.map((attraction) => (
+                        <DraggableAttractionRow
+                          key={attraction.id}
+                          attraction={attraction}
+                          rankEnabled={rankingMode && canRankAttractions}
+                          regionName={
+                            regions.find(
+                              (region) => region.id === attraction.region_id,
+                            )?.name || "—"
+                          }
+                          onDelete={(item) =>
+                            setDeleteDialog({ open: true, attraction: item })
+                          }
+                        />
+                      ))}
+                    </SortableContext>
+                  </TableBody>
+                </Table>
+              </DndContext>
             </div>
           </div>
         )}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Plus,
   Edit,
@@ -9,7 +9,27 @@ import {
   Star,
   StarOff,
   CheckCircle,
+  GripVertical,
 } from "lucide-react";
+import {
+  closestCenter,
+  DndContext,
+  KeyboardSensor,
+  MouseSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type UniqueIdentifier,
+} from "@dnd-kit/core";
+import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
+import {
+  arrayMove,
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import Image from "next/image";
 import type { Hotel as HotelType, CreateHotelInput } from "@/lib/api-client";
 import {
@@ -18,6 +38,7 @@ import {
   useUpdateHotelMutation,
   useDeleteHotelMutation,
   usePublishHotelMutation,
+  useUpdateHotelDisplayOrderMutation,
 } from "@/lib/store";
 import Button from "@/components/ui/button";
 import Input from "@/components/ui/input";
@@ -39,12 +60,147 @@ import {
 } from "@/components/ui/table";
 import { toast } from "@/lib/utils/toast";
 
+const EMPTY_HOTELS: HotelType[] = [];
+
+function DraggableHotelRow({
+  hotel,
+  rankEnabled,
+  getPriceLabel,
+  getStatusBadge,
+  onToggleFeatured,
+  onPublish,
+  onEdit,
+  onDelete,
+}: {
+  hotel: HotelType;
+  rankEnabled: boolean;
+  getPriceLabel: (range: string | null) => string;
+  getStatusBadge: (status: string) => string;
+  onToggleFeatured: (hotel: HotelType) => void;
+  onPublish: (hotel: HotelType) => void;
+  onEdit: (hotel: HotelType) => void;
+  onDelete: (hotel: HotelType) => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: hotel.id,
+    disabled: !rankEnabled,
+  });
+
+  return (
+    <TableRow
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={isDragging ? "opacity-70" : undefined}
+    >
+      <TableCell className="max-w-[340px] lg:max-w-[520px]">
+        <div className="flex items-center">
+          {rankEnabled && (
+            <button
+              type="button"
+              {...attributes}
+              {...listeners}
+              className="mr-2 cursor-grab text-slate-400 active:cursor-grabbing"
+              aria-label="Drag to reorder"
+            >
+              <GripVertical className="h-4 w-4 shrink-0" />
+            </button>
+          )}
+          {hotel.cover_image && (
+            <Image
+              src={hotel.cover_image}
+              alt={hotel.name}
+              width={48}
+              height={48}
+              className="w-12 h-12 object-cover rounded mr-3"
+              unoptimized={hotel.cover_image.startsWith("/uploads")}
+            />
+          )}
+          <div className="min-w-0">
+            <div className="truncate text-sm font-medium text-gray-900">
+              {hotel.name}
+            </div>
+            <div className="truncate text-xs text-slate-500">/{hotel.slug}</div>
+          </div>
+        </div>
+      </TableCell>
+      <TableCell className="whitespace-nowrap">
+        <span className="text-sm font-semibold text-green-700">
+          {getPriceLabel(hotel.price_range)}
+        </span>
+      </TableCell>
+      <TableCell className="whitespace-nowrap">
+        <span className="text-sm text-yellow-600">
+          {hotel.star_rating ? "★".repeat(hotel.star_rating) : "—"}
+        </span>
+      </TableCell>
+      <TableCell className="whitespace-nowrap">
+        <span
+          className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusBadge(hotel.status)}`}
+        >
+          {hotel.status}
+        </span>
+      </TableCell>
+      <TableCell className="whitespace-nowrap">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => onToggleFeatured(hotel)}
+          className="h-auto p-0 text-gray-400 hover:bg-transparent hover:text-yellow-500"
+          title={hotel.is_featured ? "Remove from featured" : "Add to featured"}
+        >
+          {hotel.is_featured ? (
+            <Star className="w-5 h-5 text-yellow-500 fill-yellow-500" />
+          ) : (
+            <StarOff className="w-5 h-5" />
+          )}
+        </Button>
+      </TableCell>
+      <TableCell className="whitespace-nowrap text-right tabular-nums text-slate-600">
+        {hotel.view_count.toLocaleString()}
+      </TableCell>
+      <TableCell className="whitespace-nowrap text-slate-600">
+        {new Date(hotel.created_at).toLocaleDateString()}
+      </TableCell>
+      <TableCell className="whitespace-nowrap text-right">
+        <div className="flex items-center justify-end gap-2">
+          {hotel.status === "draft" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onPublish(hotel)}
+              title="Publish"
+            >
+              <CheckCircle className="w-4 h-4" />
+            </Button>
+          )}
+          <Button variant="ghost" size="sm" onClick={() => onEdit(hotel)}>
+            <Edit className="w-4 h-4" />
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => onDelete(hotel)}>
+            <Trash2 className="w-4 h-4 text-red-600" />
+          </Button>
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+}
+
 export default function HotelsPage() {
   // ── Local UI state ──────────────────────────────────────────────────────
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [priceFilter, setPriceFilter] = useState("all");
+  const [rankingMode, setRankingMode] = useState(false);
+  const [orderedHotels, setOrderedHotels] = useState<HotelType[]>([]);
   const [deleteDialog, setDeleteDialog] = useState<{
     open: boolean;
     hotel: HotelType | null;
@@ -95,18 +251,34 @@ export default function HotelsPage() {
   const [updateHotel, { isLoading: updatingHotel }] = useUpdateHotelMutation();
   const [deleteHotel, { isLoading: deleting }] = useDeleteHotelMutation();
   const [publishHotel] = usePublishHotelMutation();
+  const [updateHotelDisplayOrder, { isLoading: savingOrder }] =
+    useUpdateHotelDisplayOrderMutation();
 
   const saving = creating || updatingHotel;
 
   // ── Derived data ────────────────────────────────────────────────────────
-  const hotels = hotelsResponse?.data ?? [];
+  const hotels = hotelsResponse?.data ?? EMPTY_HOTELS;
   const totalPages = hotelsResponse?.total_pages ?? 1;
 
+  useEffect(() => {
+    setOrderedHotels(hotels);
+  }, [hotels]);
+
   // Client-side search filter (instant, no network request)
-  const filteredHotels = hotels.filter((hotel) =>
+  const filteredHotels = orderedHotels.filter((hotel) =>
     searchQuery
       ? hotel.name.toLowerCase().includes(searchQuery.toLowerCase())
       : true,
+  );
+  const canRankHotels = searchQuery.trim() === "";
+  const sensors = useSensors(
+    useSensor(MouseSensor),
+    useSensor(TouchSensor),
+    useSensor(KeyboardSensor),
+  );
+  const dataIds = useMemo<UniqueIdentifier[]>(
+    () => filteredHotels.map((hotel) => hotel.id),
+    [filteredHotels],
   );
 
   // ── Handlers ────────────────────────────────────────────────────────────
@@ -207,6 +379,46 @@ export default function HotelsPage() {
       region_id: "",
       is_featured: false,
     });
+  };
+
+  const handleDragEnd = ({ active, over }: DragEndEvent) => {
+    if (!rankingMode || !canRankHotels || !over || active.id === over.id)
+      return;
+    setOrderedHotels((prev) => {
+      const oldIndex = prev.findIndex((item) => item.id === active.id);
+      const newIndex = prev.findIndex((item) => item.id === over.id);
+      if (oldIndex === -1 || newIndex === -1) return prev;
+      return arrayMove(prev, oldIndex, newIndex);
+    });
+  };
+
+  const handleSaveOrder = async () => {
+    if (!canRankHotels) {
+      toast.error("Clear search to reorder.");
+      return;
+    }
+    try {
+      const base = (currentPage - 1) * 20;
+      const changed = orderedHotels
+        .map((hotel, index) => ({ hotel, index }))
+        .filter(({ hotel, index }) => hotels[index]?.id !== hotel.id);
+      if (changed.length === 0) {
+        toast.info("No order changes to save");
+        return;
+      }
+      await Promise.all(
+        changed.map(({ hotel, index }) =>
+          updateHotelDisplayOrder({
+            id: hotel.id,
+            display_order: base + index,
+          }).unwrap(),
+        ),
+      );
+      toast.success("Hotel order updated");
+    } catch (error) {
+      toast.error("Failed to update order");
+      console.error(error);
+    }
   };
 
   // ── Helpers ─────────────────────────────────────────────────────────────
@@ -396,6 +608,7 @@ export default function HotelsPage() {
               onChange={(e) => {
                 setStatusFilter(e.target.value);
                 setCurrentPage(1);
+                setRankingMode(false);
               }}
               options={[
                 { value: "all", label: "All Status" },
@@ -409,6 +622,7 @@ export default function HotelsPage() {
               onChange={(e) => {
                 setPriceFilter(e.target.value);
                 setCurrentPage(1);
+                setRankingMode(false);
               }}
               options={[
                 { value: "all", label: "All Prices" },
@@ -418,6 +632,23 @@ export default function HotelsPage() {
               ]}
               className="min-w-[150px]"
             />
+            <Button
+              variant={rankingMode ? "default" : "outline"}
+              size="sm"
+              disabled={!canRankHotels}
+              onClick={() => setRankingMode((prev) => !prev)}
+            >
+              Rank Mode
+            </Button>
+            {rankingMode && (
+              <Button
+                size="sm"
+                onClick={handleSaveOrder}
+                isLoading={savingOrder}
+              >
+                Save Order
+              </Button>
+            )}
           </div>
         </div>
 
@@ -438,125 +669,49 @@ export default function HotelsPage() {
         ) : (
           <div className="overflow-hidden rounded-lg border bg-white">
             <div className="overflow-x-auto">
-              <Table className="table-fixed">
-                <TableHeader className="bg-slate-50">
-                  <TableRow>
-                    <TableHead className="w-[34%]">Hotel</TableHead>
-                    <TableHead className="w-[8%]">Price</TableHead>
-                    <TableHead className="w-[9%]">Rating</TableHead>
-                    <TableHead className="w-[10%]">Status</TableHead>
-                    <TableHead className="w-[9%]">Featured</TableHead>
-                    <TableHead className="w-[9%] text-right">Views</TableHead>
-                    <TableHead className="w-[11%]">Date</TableHead>
-                    <TableHead className="w-24 text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredHotels.map((hotel) => (
-                    <TableRow key={hotel.id}>
-                      <TableCell className="max-w-[340px] lg:max-w-[520px]">
-                        <div className="flex items-center">
-                          {hotel.cover_image && (
-                            <Image
-                              src={hotel.cover_image}
-                              alt={hotel.name}
-                              width={48}
-                              height={48}
-                              className="w-12 h-12 object-cover rounded mr-3"
-                              unoptimized={hotel.cover_image.startsWith(
-                                "/uploads",
-                              )}
-                            />
-                          )}
-                          <div className="min-w-0">
-                            <div className="truncate text-sm font-medium text-gray-900">
-                              {hotel.name}
-                            </div>
-                            <div className="truncate text-xs text-slate-500">
-                              /{hotel.slug}
-                            </div>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        <span className="text-sm font-semibold text-green-700">
-                          {getPriceLabel(hotel.price_range)}
-                        </span>
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        <span className="text-sm text-yellow-600">
-                          {hotel.star_rating
-                            ? "★".repeat(hotel.star_rating)
-                            : "—"}
-                        </span>
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        <span
-                          className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusBadge(hotel.status)}`}
-                        >
-                          {hotel.status}
-                        </span>
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleToggleFeatured(hotel)}
-                          className="h-auto p-0 text-gray-400 hover:bg-transparent hover:text-yellow-500"
-                          title={
-                            hotel.is_featured
-                              ? "Remove from featured"
-                              : "Add to featured"
-                          }
-                        >
-                          {hotel.is_featured ? (
-                            <Star className="w-5 h-5 text-yellow-500 fill-yellow-500" />
-                          ) : (
-                            <StarOff className="w-5 h-5" />
-                          )}
-                        </Button>
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap text-right tabular-nums text-slate-600">
-                        {hotel.view_count.toLocaleString()}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap text-slate-600">
-                        {new Date(hotel.created_at).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          {hotel.status === "draft" && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handlePublish(hotel)}
-                              title="Publish"
-                            >
-                              <CheckCircle className="w-4 h-4" />
-                            </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openEditModal(hotel)}
-                          >
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() =>
-                              setDeleteDialog({ open: true, hotel })
-                            }
-                          >
-                            <Trash2 className="w-4 h-4 text-red-600" />
-                          </Button>
-                        </div>
-                      </TableCell>
+              <DndContext
+                collisionDetection={closestCenter}
+                modifiers={[restrictToVerticalAxis]}
+                sensors={sensors}
+                onDragEnd={handleDragEnd}
+              >
+                <Table className="table-fixed">
+                  <TableHeader className="bg-slate-50">
+                    <TableRow>
+                      <TableHead className="w-[34%]">Hotel</TableHead>
+                      <TableHead className="w-[8%]">Price</TableHead>
+                      <TableHead className="w-[9%]">Rating</TableHead>
+                      <TableHead className="w-[10%]">Status</TableHead>
+                      <TableHead className="w-[9%]">Featured</TableHead>
+                      <TableHead className="w-[9%] text-right">Views</TableHead>
+                      <TableHead className="w-[11%]">Date</TableHead>
+                      <TableHead className="w-24 text-right">Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    <SortableContext
+                      items={dataIds}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      {filteredHotels.map((hotel) => (
+                        <DraggableHotelRow
+                          key={hotel.id}
+                          hotel={hotel}
+                          rankEnabled={rankingMode && canRankHotels}
+                          getPriceLabel={getPriceLabel}
+                          getStatusBadge={getStatusBadge}
+                          onToggleFeatured={handleToggleFeatured}
+                          onPublish={handlePublish}
+                          onEdit={openEditModal}
+                          onDelete={(item) =>
+                            setDeleteDialog({ open: true, hotel: item })
+                          }
+                        />
+                      ))}
+                    </SortableContext>
+                  </TableBody>
+                </Table>
+              </DndContext>
             </div>
           </div>
         )}

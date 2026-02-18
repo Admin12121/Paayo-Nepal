@@ -364,13 +364,10 @@ export default function DashboardPage() {
       new Set(rows.map((row) => row.type.toLowerCase()).filter(Boolean)),
     );
     const preferredOrder = ["article", "event", "activity", "explore"];
-    const preferred = preferredOrder.filter((type) =>
-      uniqueTypes.includes(type),
-    );
     const extras = uniqueTypes
       .filter((type) => !preferredOrder.includes(type))
       .sort((a, b) => a.localeCompare(b));
-    return [...preferred, ...extras];
+    return [...preferredOrder, ...extras];
   }, [rows]);
 
   const showPostTypeColumn = postTypeFilter === "all" && columnVisibility.type;

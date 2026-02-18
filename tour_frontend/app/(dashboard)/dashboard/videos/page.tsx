@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Plus,
   Edit,
@@ -10,7 +10,27 @@ import {
   StarOff,
   CheckCircle,
   ExternalLink,
+  GripVertical,
 } from "lucide-react";
+import {
+  closestCenter,
+  DndContext,
+  KeyboardSensor,
+  MouseSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type UniqueIdentifier,
+} from "@dnd-kit/core";
+import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
+import {
+  arrayMove,
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import type { Video as VideoType, CreateVideoInput } from "@/lib/api-client";
 import {
   useListVideosQuery,
@@ -18,6 +38,7 @@ import {
   useUpdateVideoMutation,
   useDeleteVideoMutation,
   usePublishVideoMutation,
+  useUpdateVideoDisplayOrderMutation,
 } from "@/lib/store";
 import Button from "@/components/ui/button";
 import Input from "@/components/ui/input";
@@ -38,11 +59,141 @@ import {
 } from "@/components/ui/table";
 import { toast } from "@/lib/utils/toast";
 
+const EMPTY_VIDEOS: VideoType[] = [];
+
+function DraggableVideoRow({
+  video,
+  rankEnabled,
+  getStatusBadge,
+  onToggleFeatured,
+  onPublish,
+  onEdit,
+  onDelete,
+}: {
+  video: VideoType;
+  rankEnabled: boolean;
+  getStatusBadge: (status: string) => string;
+  onToggleFeatured: (video: VideoType) => void;
+  onPublish: (video: VideoType) => void;
+  onEdit: (video: VideoType) => void;
+  onDelete: (video: VideoType) => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: video.id,
+    disabled: !rankEnabled,
+  });
+
+  return (
+    <TableRow
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={isDragging ? "opacity-70" : undefined}
+    >
+      <TableCell className="max-w-[340px] lg:max-w-[520px]">
+        <div className="flex items-center">
+          {rankEnabled && (
+            <button
+              type="button"
+              {...attributes}
+              {...listeners}
+              className="mr-2 cursor-grab text-slate-400 active:cursor-grabbing"
+              aria-label="Drag to reorder"
+            >
+              <GripVertical className="h-4 w-4 shrink-0" />
+            </button>
+          )}
+          {video.thumbnail_url && (
+            <img
+              src={video.thumbnail_url}
+              alt={video.title}
+              className="w-16 h-10 object-cover rounded mr-3"
+            />
+          )}
+          <div className="min-w-0">
+            <div className="truncate text-sm font-medium text-gray-900">
+              {video.title}
+            </div>
+            <div className="truncate text-xs text-slate-500">/{video.slug}</div>
+          </div>
+        </div>
+      </TableCell>
+      <TableCell className="whitespace-nowrap">
+        <span className="text-sm text-gray-900 capitalize">
+          {video.platform}
+        </span>
+      </TableCell>
+      <TableCell className="whitespace-nowrap">
+        <span
+          className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusBadge(video.status)}`}
+        >
+          {video.status}
+        </span>
+      </TableCell>
+      <TableCell className="whitespace-nowrap">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => onToggleFeatured(video)}
+          className="h-auto p-0 text-gray-400 hover:bg-transparent hover:text-yellow-500"
+          title={video.is_featured ? "Remove from featured" : "Add to featured"}
+        >
+          {video.is_featured ? (
+            <Star className="w-5 h-5 text-yellow-500 fill-yellow-500" />
+          ) : (
+            <StarOff className="w-5 h-5" />
+          )}
+        </Button>
+      </TableCell>
+      <TableCell className="whitespace-nowrap text-right tabular-nums text-slate-600">
+        {video.view_count.toLocaleString()}
+      </TableCell>
+      <TableCell className="whitespace-nowrap text-slate-600">
+        {new Date(video.created_at).toLocaleDateString()}
+      </TableCell>
+      <TableCell className="whitespace-nowrap text-right">
+        <div className="flex items-center justify-end gap-2">
+          {video.status === "draft" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onPublish(video)}
+              title="Publish"
+            >
+              <CheckCircle className="w-4 h-4" />
+            </Button>
+          )}
+          <a href={video.video_url} target="_blank" rel="noopener noreferrer">
+            <Button variant="ghost" size="sm" title="Open URL">
+              <ExternalLink className="w-4 h-4" />
+            </Button>
+          </a>
+          <Button variant="ghost" size="sm" onClick={() => onEdit(video)}>
+            <Edit className="w-4 h-4" />
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => onDelete(video)}>
+            <Trash2 className="w-4 h-4 text-red-600" />
+          </Button>
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+}
+
 export default function VideosPage() {
   // ── Local UI state ──────────────────────────────────────────────────────
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [rankingMode, setRankingMode] = useState(false);
+  const [orderedVideos, setOrderedVideos] = useState<VideoType[]>([]);
   const [deleteDialog, setDeleteDialog] = useState<{
     open: boolean;
     video: VideoType | null;
@@ -89,18 +240,34 @@ export default function VideosPage() {
   const [updateVideo, { isLoading: updatingVideo }] = useUpdateVideoMutation();
   const [deleteVideo, { isLoading: deleting }] = useDeleteVideoMutation();
   const [publishVideo] = usePublishVideoMutation();
+  const [updateVideoDisplayOrder, { isLoading: savingOrder }] =
+    useUpdateVideoDisplayOrderMutation();
 
   const saving = creating || updatingVideo;
 
   // ── Derived data ────────────────────────────────────────────────────────
-  const videos = videosResponse?.data ?? [];
+  const videos = videosResponse?.data ?? EMPTY_VIDEOS;
   const totalPages = videosResponse?.total_pages ?? 1;
 
+  useEffect(() => {
+    setOrderedVideos(videos);
+  }, [videos]);
+
   // Client-side search filter (instant, no network request)
-  const filteredVideos = videos.filter((video) =>
+  const filteredVideos = orderedVideos.filter((video) =>
     searchQuery
       ? video.title.toLowerCase().includes(searchQuery.toLowerCase())
       : true,
+  );
+  const canRankVideos = searchQuery.trim() === "";
+  const sensors = useSensors(
+    useSensor(MouseSensor),
+    useSensor(TouchSensor),
+    useSensor(KeyboardSensor),
+  );
+  const dataIds = useMemo<UniqueIdentifier[]>(
+    () => filteredVideos.map((video) => video.id),
+    [filteredVideos],
   );
 
   // ── Handlers ────────────────────────────────────────────────────────────
@@ -195,6 +362,46 @@ export default function VideosPage() {
       region_id: "",
       is_featured: false,
     });
+  };
+
+  const handleDragEnd = ({ active, over }: DragEndEvent) => {
+    if (!rankingMode || !canRankVideos || !over || active.id === over.id)
+      return;
+    setOrderedVideos((prev) => {
+      const oldIndex = prev.findIndex((item) => item.id === active.id);
+      const newIndex = prev.findIndex((item) => item.id === over.id);
+      if (oldIndex === -1 || newIndex === -1) return prev;
+      return arrayMove(prev, oldIndex, newIndex);
+    });
+  };
+
+  const handleSaveOrder = async () => {
+    if (!canRankVideos) {
+      toast.error("Clear search to reorder.");
+      return;
+    }
+    try {
+      const base = (currentPage - 1) * 20;
+      const changed = orderedVideos
+        .map((video, index) => ({ video, index }))
+        .filter(({ video, index }) => videos[index]?.id !== video.id);
+      if (changed.length === 0) {
+        toast.info("No order changes to save");
+        return;
+      }
+      await Promise.all(
+        changed.map(({ video, index }) =>
+          updateVideoDisplayOrder({
+            id: video.id,
+            display_order: base + index,
+          }).unwrap(),
+        ),
+      );
+      toast.success("Video order updated");
+    } catch (error) {
+      toast.error("Failed to update order");
+      console.error(error);
+    }
   };
 
   // ── Helpers ─────────────────────────────────────────────────────────────
@@ -340,6 +547,7 @@ export default function VideosPage() {
               onChange={(e) => {
                 setStatusFilter(e.target.value);
                 setCurrentPage(1);
+                setRankingMode(false);
               }}
               options={[
                 { value: "all", label: "All Status" },
@@ -348,6 +556,23 @@ export default function VideosPage() {
               ]}
               className="min-w-[150px]"
             />
+            <Button
+              variant={rankingMode ? "default" : "outline"}
+              size="sm"
+              disabled={!canRankVideos}
+              onClick={() => setRankingMode((prev) => !prev)}
+            >
+              Rank Mode
+            </Button>
+            {rankingMode && (
+              <Button
+                size="sm"
+                onClick={handleSaveOrder}
+                isLoading={savingOrder}
+              >
+                Save Order
+              </Button>
+            )}
           </div>
         </div>
 
@@ -368,121 +593,47 @@ export default function VideosPage() {
         ) : (
           <div className="overflow-hidden rounded-lg border bg-white">
             <div className="overflow-x-auto">
-              <Table className="table-fixed">
-                <TableHeader className="bg-slate-50">
-                  <TableRow>
-                    <TableHead className="w-[35%]">Video</TableHead>
-                    <TableHead className="w-[11%]">Platform</TableHead>
-                    <TableHead className="w-[10%]">Status</TableHead>
-                    <TableHead className="w-[10%]">Featured</TableHead>
-                    <TableHead className="w-[8%] text-right">Views</TableHead>
-                    <TableHead className="w-[11%]">Date</TableHead>
-                    <TableHead className="w-28 text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredVideos.map((video) => (
-                    <TableRow key={video.id}>
-                      <TableCell className="max-w-[340px] lg:max-w-[520px]">
-                        <div className="flex items-center">
-                          {video.thumbnail_url && (
-                            <img
-                              src={video.thumbnail_url}
-                              alt={video.title}
-                              className="w-16 h-10 object-cover rounded mr-3"
-                            />
-                          )}
-                          <div className="min-w-0">
-                            <div className="truncate text-sm font-medium text-gray-900">
-                              {video.title}
-                            </div>
-                            <div className="truncate text-xs text-slate-500">
-                              /{video.slug}
-                            </div>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        <span className="text-sm text-gray-900 capitalize">
-                          {video.platform}
-                        </span>
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        <span
-                          className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusBadge(video.status)}`}
-                        >
-                          {video.status}
-                        </span>
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleToggleFeatured(video)}
-                          className="h-auto p-0 text-gray-400 hover:bg-transparent hover:text-yellow-500"
-                          title={
-                            video.is_featured
-                              ? "Remove from featured"
-                              : "Add to featured"
-                          }
-                        >
-                          {video.is_featured ? (
-                            <Star className="w-5 h-5 text-yellow-500 fill-yellow-500" />
-                          ) : (
-                            <StarOff className="w-5 h-5" />
-                          )}
-                        </Button>
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap text-right tabular-nums text-slate-600">
-                        {video.view_count.toLocaleString()}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap text-slate-600">
-                        {new Date(video.created_at).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          {video.status === "draft" && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handlePublish(video)}
-                              title="Publish"
-                            >
-                              <CheckCircle className="w-4 h-4" />
-                            </Button>
-                          )}
-                          <a
-                            href={video.video_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            <Button variant="ghost" size="sm" title="Open URL">
-                              <ExternalLink className="w-4 h-4" />
-                            </Button>
-                          </a>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openEditModal(video)}
-                          >
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() =>
-                              setDeleteDialog({ open: true, video })
-                            }
-                          >
-                            <Trash2 className="w-4 h-4 text-red-600" />
-                          </Button>
-                        </div>
-                      </TableCell>
+              <DndContext
+                collisionDetection={closestCenter}
+                modifiers={[restrictToVerticalAxis]}
+                sensors={sensors}
+                onDragEnd={handleDragEnd}
+              >
+                <Table className="table-fixed">
+                  <TableHeader className="bg-slate-50">
+                    <TableRow>
+                      <TableHead className="w-[35%]">Video</TableHead>
+                      <TableHead className="w-[11%]">Platform</TableHead>
+                      <TableHead className="w-[10%]">Status</TableHead>
+                      <TableHead className="w-[10%]">Featured</TableHead>
+                      <TableHead className="w-[8%] text-right">Views</TableHead>
+                      <TableHead className="w-[11%]">Date</TableHead>
+                      <TableHead className="w-28 text-right">Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    <SortableContext
+                      items={dataIds}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      {filteredVideos.map((video) => (
+                        <DraggableVideoRow
+                          key={video.id}
+                          video={video}
+                          rankEnabled={rankingMode && canRankVideos}
+                          getStatusBadge={getStatusBadge}
+                          onToggleFeatured={handleToggleFeatured}
+                          onPublish={handlePublish}
+                          onEdit={openEditModal}
+                          onDelete={(item) =>
+                            setDeleteDialog({ open: true, video: item })
+                          }
+                        />
+                      ))}
+                    </SortableContext>
+                  </TableBody>
+                </Table>
+              </DndContext>
             </div>
           </div>
         )}

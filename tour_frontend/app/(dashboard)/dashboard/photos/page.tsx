@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Plus,
   Edit,
@@ -10,7 +10,27 @@ import {
   StarOff,
   CheckCircle,
   ImagePlus,
+  GripVertical,
 } from "lucide-react";
+import {
+  closestCenter,
+  DndContext,
+  KeyboardSensor,
+  MouseSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type UniqueIdentifier,
+} from "@dnd-kit/core";
+import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
+import {
+  arrayMove,
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import type {
   PhotoFeature,
   PhotoImage,
@@ -25,6 +45,7 @@ import {
   useListPhotoImagesQuery,
   useAddPhotoImageMutation,
   useRemovePhotoImageMutation,
+  useUpdatePhotoDisplayOrderMutation,
 } from "@/lib/store";
 import Button from "@/components/ui/button";
 import Input from "@/components/ui/input";
@@ -45,11 +66,146 @@ import {
 } from "@/components/ui/table";
 import { toast } from "@/lib/utils/toast";
 
+const EMPTY_PHOTOS: PhotoFeature[] = [];
+
+function DraggablePhotoRow({
+  photo,
+  rankEnabled,
+  getStatusBadge,
+  onImages,
+  onToggleFeatured,
+  onPublish,
+  onEdit,
+  onDelete,
+}: {
+  photo: PhotoFeature;
+  rankEnabled: boolean;
+  getStatusBadge: (status: string) => string;
+  onImages: (photo: PhotoFeature) => void;
+  onToggleFeatured: (photo: PhotoFeature) => void;
+  onPublish: (photo: PhotoFeature) => void;
+  onEdit: (photo: PhotoFeature) => void;
+  onDelete: (photo: PhotoFeature) => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: photo.id,
+    disabled: !rankEnabled,
+  });
+
+  return (
+    <TableRow
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={isDragging ? "opacity-70" : undefined}
+    >
+      <TableCell className="max-w-[340px] lg:max-w-[520px]">
+        <div className="flex items-center gap-2">
+          {rankEnabled && (
+            <button
+              type="button"
+              {...attributes}
+              {...listeners}
+              className="cursor-grab text-slate-400 active:cursor-grabbing"
+              aria-label="Drag to reorder"
+            >
+              <GripVertical className="h-4 w-4 shrink-0" />
+            </button>
+          )}
+          <div>
+            <div className="truncate text-sm font-medium text-gray-900">
+              {photo.title}
+            </div>
+            <div className="truncate text-xs text-slate-500">/{photo.slug}</div>
+          </div>
+        </div>
+      </TableCell>
+      <TableCell className="whitespace-nowrap">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => onImages(photo)}
+          className="h-auto px-0 py-0 text-sm text-blue-600 hover:bg-transparent hover:text-blue-800"
+        >
+          <Camera className="w-4 h-4" />
+          {photo.images?.length ?? 0} images
+        </Button>
+      </TableCell>
+      <TableCell className="whitespace-nowrap">
+        <span
+          className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusBadge(photo.status)}`}
+        >
+          {photo.status}
+        </span>
+      </TableCell>
+      <TableCell className="whitespace-nowrap">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => onToggleFeatured(photo)}
+          className="h-auto p-0 text-gray-400 hover:bg-transparent hover:text-yellow-500"
+          title={photo.is_featured ? "Remove from featured" : "Add to featured"}
+        >
+          {photo.is_featured ? (
+            <Star className="w-5 h-5 text-yellow-500 fill-yellow-500" />
+          ) : (
+            <StarOff className="w-5 h-5" />
+          )}
+        </Button>
+      </TableCell>
+      <TableCell className="whitespace-nowrap text-right tabular-nums text-slate-600">
+        {photo.view_count.toLocaleString()}
+      </TableCell>
+      <TableCell className="whitespace-nowrap text-slate-600">
+        {new Date(photo.created_at).toLocaleDateString()}
+      </TableCell>
+      <TableCell className="whitespace-nowrap text-right">
+        <div className="flex items-center justify-end gap-2">
+          {photo.status === "draft" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onPublish(photo)}
+              title="Publish"
+            >
+              <CheckCircle className="w-4 h-4" />
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onImages(photo)}
+            title="Manage images"
+          >
+            <ImagePlus className="w-4 h-4" />
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => onEdit(photo)}>
+            <Edit className="w-4 h-4" />
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => onDelete(photo)}>
+            <Trash2 className="w-4 h-4 text-red-600" />
+          </Button>
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+}
+
 export default function PhotoFeaturesPage() {
   // ── Local UI state ──────────────────────────────────────────────────────
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [rankingMode, setRankingMode] = useState(false);
+  const [orderedPhotos, setOrderedPhotos] = useState<PhotoFeature[]>([]);
   const [deleteDialog, setDeleteDialog] = useState<{
     open: boolean;
     photo: PhotoFeature | null;
@@ -103,6 +259,8 @@ export default function PhotoFeaturesPage() {
   const [updatePhoto, { isLoading: updatingPhoto }] = useUpdatePhotoMutation();
   const [deletePhoto, { isLoading: deleting }] = useDeletePhotoMutation();
   const [publishPhoto] = usePublishPhotoMutation();
+  const [updatePhotoDisplayOrder, { isLoading: savingOrder }] =
+    useUpdatePhotoDisplayOrderMutation();
   const [addPhotoImage, { isLoading: addingImage }] =
     useAddPhotoImageMutation();
   const [removePhotoImage, { isLoading: deletingImage }] =
@@ -117,14 +275,28 @@ export default function PhotoFeaturesPage() {
     });
 
   // ── Derived data ────────────────────────────────────────────────────────
-  const photos = photosResponse?.data ?? [];
+  const photos = photosResponse?.data ?? EMPTY_PHOTOS;
   const totalPages = photosResponse?.total_pages ?? 1;
 
+  useEffect(() => {
+    setOrderedPhotos(photos);
+  }, [photos]);
+
   // Client-side search filter (instant, no network request)
-  const filteredPhotos = photos.filter((photo) =>
+  const filteredPhotos = orderedPhotos.filter((photo) =>
     searchQuery
       ? photo.title.toLowerCase().includes(searchQuery.toLowerCase())
       : true,
+  );
+  const canRankPhotos = searchQuery.trim() === "";
+  const sensors = useSensors(
+    useSensor(MouseSensor),
+    useSensor(TouchSensor),
+    useSensor(KeyboardSensor),
+  );
+  const dataIds = useMemo<UniqueIdentifier[]>(
+    () => filteredPhotos.map((photo) => photo.id),
+    [filteredPhotos],
   );
 
   // ── Handlers ────────────────────────────────────────────────────────────
@@ -257,6 +429,46 @@ export default function PhotoFeaturesPage() {
     });
   };
 
+  const handleDragEnd = ({ active, over }: DragEndEvent) => {
+    if (!rankingMode || !canRankPhotos || !over || active.id === over.id)
+      return;
+    setOrderedPhotos((prev) => {
+      const oldIndex = prev.findIndex((item) => item.id === active.id);
+      const newIndex = prev.findIndex((item) => item.id === over.id);
+      if (oldIndex === -1 || newIndex === -1) return prev;
+      return arrayMove(prev, oldIndex, newIndex);
+    });
+  };
+
+  const handleSaveOrder = async () => {
+    if (!canRankPhotos) {
+      toast.error("Clear search to reorder.");
+      return;
+    }
+    try {
+      const base = (currentPage - 1) * 20;
+      const changed = orderedPhotos
+        .map((photo, index) => ({ photo, index }))
+        .filter(({ photo, index }) => photos[index]?.id !== photo.id);
+      if (changed.length === 0) {
+        toast.info("No order changes to save");
+        return;
+      }
+      await Promise.all(
+        changed.map(({ photo, index }) =>
+          updatePhotoDisplayOrder({
+            id: photo.id,
+            display_order: base + index,
+          }).unwrap(),
+        ),
+      );
+      toast.success("Photo feature order updated");
+    } catch (error) {
+      toast.error("Failed to update order");
+      console.error(error);
+    }
+  };
+
   // ── Helpers ─────────────────────────────────────────────────────────────
 
   const getStatusBadge = (status: string) => {
@@ -344,6 +556,7 @@ export default function PhotoFeaturesPage() {
               onChange={(e) => {
                 setStatusFilter(e.target.value);
                 setCurrentPage(1);
+                setRankingMode(false);
               }}
               options={[
                 { value: "all", label: "All Status" },
@@ -352,6 +565,23 @@ export default function PhotoFeaturesPage() {
               ]}
               className="min-w-[150px]"
             />
+            <Button
+              variant={rankingMode ? "default" : "outline"}
+              size="sm"
+              disabled={!canRankPhotos}
+              onClick={() => setRankingMode((prev) => !prev)}
+            >
+              Rank Mode
+            </Button>
+            {rankingMode && (
+              <Button
+                size="sm"
+                onClick={handleSaveOrder}
+                isLoading={savingOrder}
+              >
+                Save Order
+              </Button>
+            )}
           </div>
         </div>
 
@@ -372,118 +602,48 @@ export default function PhotoFeaturesPage() {
         ) : (
           <div className="overflow-hidden rounded-lg border bg-white">
             <div className="overflow-x-auto">
-              <Table className="table-fixed">
-                <TableHeader className="bg-slate-50">
-                  <TableRow>
-                    <TableHead className="w-[34%]">Title</TableHead>
-                    <TableHead className="w-[15%]">Images</TableHead>
-                    <TableHead className="w-[10%]">Status</TableHead>
-                    <TableHead className="w-[10%]">Featured</TableHead>
-                    <TableHead className="w-[8%] text-right">Views</TableHead>
-                    <TableHead className="w-[11%]">Date</TableHead>
-                    <TableHead className="w-28 text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredPhotos.map((photo) => (
-                    <TableRow key={photo.id}>
-                      <TableCell className="max-w-[340px] lg:max-w-[520px]">
-                        <div>
-                          <div className="truncate text-sm font-medium text-gray-900">
-                            {photo.title}
-                          </div>
-                          <div className="truncate text-xs text-slate-500">
-                            /{photo.slug}
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => openImagesModal(photo)}
-                          className="h-auto px-0 py-0 text-sm text-blue-600 hover:bg-transparent hover:text-blue-800"
-                        >
-                          <Camera className="w-4 h-4" />
-                          {photo.images?.length ?? 0} images
-                        </Button>
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        <span
-                          className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusBadge(photo.status)}`}
-                        >
-                          {photo.status}
-                        </span>
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleToggleFeatured(photo)}
-                          className="h-auto p-0 text-gray-400 hover:bg-transparent hover:text-yellow-500"
-                          title={
-                            photo.is_featured
-                              ? "Remove from featured"
-                              : "Add to featured"
-                          }
-                        >
-                          {photo.is_featured ? (
-                            <Star className="w-5 h-5 text-yellow-500 fill-yellow-500" />
-                          ) : (
-                            <StarOff className="w-5 h-5" />
-                          )}
-                        </Button>
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap text-right tabular-nums text-slate-600">
-                        {photo.view_count.toLocaleString()}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap text-slate-600">
-                        {new Date(photo.created_at).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          {photo.status === "draft" && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handlePublish(photo)}
-                              title="Publish"
-                            >
-                              <CheckCircle className="w-4 h-4" />
-                            </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openImagesModal(photo)}
-                            title="Manage images"
-                          >
-                            <ImagePlus className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openEditModal(photo)}
-                          >
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() =>
-                              setDeleteDialog({ open: true, photo })
-                            }
-                          >
-                            <Trash2 className="w-4 h-4 text-red-600" />
-                          </Button>
-                        </div>
-                      </TableCell>
+              <DndContext
+                collisionDetection={closestCenter}
+                modifiers={[restrictToVerticalAxis]}
+                sensors={sensors}
+                onDragEnd={handleDragEnd}
+              >
+                <Table className="table-fixed">
+                  <TableHeader className="bg-slate-50">
+                    <TableRow>
+                      <TableHead className="w-[34%]">Title</TableHead>
+                      <TableHead className="w-[15%]">Images</TableHead>
+                      <TableHead className="w-[10%]">Status</TableHead>
+                      <TableHead className="w-[10%]">Featured</TableHead>
+                      <TableHead className="w-[8%] text-right">Views</TableHead>
+                      <TableHead className="w-[11%]">Date</TableHead>
+                      <TableHead className="w-28 text-right">Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    <SortableContext
+                      items={dataIds}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      {filteredPhotos.map((photo) => (
+                        <DraggablePhotoRow
+                          key={photo.id}
+                          photo={photo}
+                          rankEnabled={rankingMode && canRankPhotos}
+                          getStatusBadge={getStatusBadge}
+                          onImages={openImagesModal}
+                          onToggleFeatured={handleToggleFeatured}
+                          onPublish={handlePublish}
+                          onEdit={openEditModal}
+                          onDelete={(item) =>
+                            setDeleteDialog({ open: true, photo: item })
+                          }
+                        />
+                      ))}
+                    </SortableContext>
+                  </TableBody>
+                </Table>
+              </DndContext>
             </div>
           </div>
         )}

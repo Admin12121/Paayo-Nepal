@@ -102,8 +102,7 @@ export const regionsApi = baseApi.injectEndpoints({
         enrichPaginated(response),
       providesTags: (result, _error, { slug }) => {
         const tags: Array<
-          | { type: "Region"; id: string }
-          | { type: "Attraction"; id: string }
+          { type: "Region"; id: string } | { type: "Attraction"; id: string }
         > = [{ type: "Region", id: `${slug}-attractions` }];
 
         if (result?.data) {
@@ -171,6 +170,7 @@ export const regionsApi = baseApi.injectEndpoints({
           longitude?: number | null;
           is_featured?: boolean;
           status?: string;
+          attraction_rank?: number | null;
         };
       }
     >({

@@ -12,11 +12,20 @@ import {
   Ban,
   CheckCircle,
 } from "lucide-react";
+import Button from "@/components/ui/button";
 import Input from "@/components/ui/input";
 import Select from "@/components/ui/select";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import Pagination from "@/components/ui/Pagination";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { toast } from "@/lib/utils/toast";
 import { apiFetch } from "@/lib/csrf";
 
@@ -194,8 +203,8 @@ export default function UsersManagement() {
   return (
     <div>
       {/* Filters */}
-      <div className="mb-6 flex flex-wrap items-center gap-4">
-        <div className="relative flex-1 min-w-[200px]">
+      <div className="mb-6 flex flex-row flex-wrap items-end gap-3 justify-between w-full">
+        <div className="relative w-full max-w-[300px]">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <Input
             placeholder="Search by name or email..."
@@ -207,29 +216,35 @@ export default function UsersManagement() {
             className="pl-10"
           />
         </div>
-        <Select
-          value={roleFilter}
-          onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
-            setRoleFilter(e.target.value);
-            setCurrentPage(1);
-          }}
-        >
-          <option value="all">All Roles</option>
-          <option value="admin">Admin</option>
-          <option value="editor">Editor</option>
-        </Select>
-        <Select
-          value={statusFilter}
-          onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
-            setStatusFilter(e.target.value);
-            setCurrentPage(1);
-          }}
-        >
-          <option value="all">All Status</option>
-          <option value="active">Active</option>
-          <option value="pending">Pending</option>
-          <option value="blocked">Blocked</option>
-        </Select>
+        <div className="flex flex-row gap-3 ">
+          <Select
+            value={roleFilter}
+            onChange={(e) => {
+              setRoleFilter(e.target.value);
+              setCurrentPage(1);
+            }}
+            options={[
+              { value: "all", label: "All Roles" },
+              { value: "admin", label: "Admin" },
+              { value: "editor", label: "Editor" },
+            ]}
+            className="min-w-[150px]"
+          />
+          <Select
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setCurrentPage(1);
+            }}
+            options={[
+              { value: "all", label: "All Status" },
+              { value: "active", label: "Active" },
+              { value: "pending", label: "Pending" },
+              { value: "blocked", label: "Blocked" },
+            ]}
+            className="min-w-[150px]"
+          />
+        </div>
       </div>
 
       {/* Table */}
@@ -242,133 +257,140 @@ export default function UsersManagement() {
           <p className="text-gray-500">No users found</p>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-gray-200 bg-gray-50">
-              <tr>
-                <th className="px-4 py-3 font-medium text-gray-700">User</th>
-                <th className="px-4 py-3 font-medium text-gray-700">Role</th>
-                <th className="px-4 py-3 font-medium text-gray-700">Status</th>
-                <th className="px-4 py-3 font-medium text-gray-700">Joined</th>
-                <th className="px-4 py-3 text-right font-medium text-gray-700">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {users.map((user) => (
-                <tr key={user.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      {user.image ? (
-                        <img
-                          src={user.image}
-                          alt=""
-                          className="h-8 w-8 rounded-full object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-200 text-xs font-semibold text-gray-600">
-                          {(user.name || user.email).charAt(0).toUpperCase()}
+        <div className="overflow-hidden rounded-lg border bg-white">
+          <div className="overflow-x-auto">
+            <Table className="table-fixed">
+              <TableHeader className="bg-slate-50">
+                <TableRow>
+                  <TableHead className="w-[42%]">User</TableHead>
+                  <TableHead className="w-[14%]">Role</TableHead>
+                  <TableHead className="w-[14%]">Status</TableHead>
+                  <TableHead className="w-[14%]">Joined</TableHead>
+                  <TableHead className="w-24 text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {users.map((user) => (
+                  <TableRow key={user.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        {user.image ? (
+                          <img
+                            src={user.image}
+                            alt=""
+                            className="h-8 w-8 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-200 text-xs font-semibold text-gray-600">
+                            {(user.name || user.email).charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <p className="font-medium text-gray-900">
+                            {user.name || "No name"}
+                          </p>
+                          <p className="truncate text-xs text-gray-500">
+                            {user.email}
+                          </p>
                         </div>
-                      )}
-                      <div>
-                        <p className="font-medium text-gray-900">
-                          {user.name || "No name"}
-                        </p>
-                        <p className="text-xs text-gray-500">{user.email}</p>
                       </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">{getRoleBadge(user.role)}</td>
-                  <td className="px-4 py-3">{getStatusBadge(user)}</td>
-                  <td className="px-4 py-3 text-gray-500">
-                    {new Date(user.created_at).toLocaleDateString()}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-end gap-1">
-                      {user.role !== "admin" && (
-                        <>
-                          {user.banned_at ? (
-                            <button
-                              onClick={() =>
-                                setActionDialog({
-                                  open: true,
-                                  user,
-                                  action: "unblock",
-                                })
-                              }
-                              className="rounded p-1.5 text-green-600 hover:bg-green-50"
-                              title="Unblock"
-                            >
-                              <UserCheck className="h-4 w-4" />
-                            </button>
-                          ) : (
-                            <>
-                              {user.is_active ? (
-                                <button
-                                  onClick={() =>
-                                    setActionDialog({
-                                      open: true,
-                                      user,
-                                      action: "deactivate",
-                                    })
-                                  }
-                                  className="rounded p-1.5 text-amber-600 hover:bg-amber-50"
-                                  title="Deactivate"
-                                >
-                                  <ShieldX className="h-4 w-4" />
-                                </button>
-                              ) : (
-                                <button
-                                  onClick={() =>
-                                    setActionDialog({
-                                      open: true,
-                                      user,
-                                      action: "activate",
-                                    })
-                                  }
-                                  className="rounded p-1.5 text-green-600 hover:bg-green-50"
-                                  title="Activate"
-                                >
-                                  <UserCheck className="h-4 w-4" />
-                                </button>
-                              )}
-                              <button
+                    </TableCell>
+                    <TableCell>{getRoleBadge(user.role)}</TableCell>
+                    <TableCell>{getStatusBadge(user)}</TableCell>
+                    <TableCell className="text-slate-600">
+                      {new Date(user.created_at).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        {user.role !== "admin" && (
+                          <>
+                            {user.banned_at ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
                                 onClick={() =>
                                   setActionDialog({
                                     open: true,
                                     user,
-                                    action: "block",
+                                    action: "unblock",
                                   })
                                 }
-                                className="rounded p-1.5 text-red-600 hover:bg-red-50"
-                                title="Block"
+                                title="Unblock"
                               >
-                                <Ban className="h-4 w-4" />
-                              </button>
-                            </>
-                          )}
-                          <button
-                            onClick={() =>
-                              setActionDialog({
-                                open: true,
-                                user,
-                                action: "delete",
-                              })
-                            }
-                            className="rounded p-1.5 text-red-600 hover:bg-red-50"
-                            title="Delete"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                                <UserCheck className="h-4 w-4" />
+                              </Button>
+                            ) : (
+                              <>
+                                {user.is_active ? (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() =>
+                                      setActionDialog({
+                                        open: true,
+                                        user,
+                                        action: "deactivate",
+                                      })
+                                    }
+                                    title="Deactivate"
+                                  >
+                                    <ShieldX className="h-4 w-4" />
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() =>
+                                      setActionDialog({
+                                        open: true,
+                                        user,
+                                        action: "activate",
+                                      })
+                                    }
+                                    title="Activate"
+                                  >
+                                    <UserCheck className="h-4 w-4" />
+                                  </Button>
+                                )}
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() =>
+                                    setActionDialog({
+                                      open: true,
+                                      user,
+                                      action: "block",
+                                    })
+                                  }
+                                  title="Block"
+                                >
+                                  <Ban className="h-4 w-4" />
+                                </Button>
+                              </>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                setActionDialog({
+                                  open: true,
+                                  user,
+                                  action: "delete",
+                                })
+                              }
+                              title="Delete"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         </div>
       )}
 

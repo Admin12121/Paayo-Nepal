@@ -18,11 +18,17 @@ import {
 } from "@/lib/store";
 import Button from "@/components/ui/button";
 import Input from "@/components/ui/input";
-import Select from "@/components/ui/select";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import Pagination from "@/components/ui/Pagination";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Modal from "@/components/ui/Modal";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -31,7 +37,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import DashboardCard from "@/components/dashboard/DashboardCard";
 import { toast } from "@/lib/utils/toast";
 
 export default function TagsPage() {
@@ -196,15 +201,19 @@ export default function TagsPage() {
         </label>
         <Select
           value={formData.tag_type || "general"}
-          onChange={(e) =>
-            setFormData({ ...formData, tag_type: e.target.value })
+          onValueChange={(value) =>
+            setFormData({ ...formData, tag_type: value })
           }
-          options={[
-            { value: "general", label: "General" },
-            { value: "activity", label: "Activity" },
-            { value: "category", label: "Category" },
-          ]}
-        />
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="General" />
+          </SelectTrigger>
+          <SelectContent position="popper">
+            <SelectItem value="general">General</SelectItem>
+            <SelectItem value="activity">Activity</SelectItem>
+            <SelectItem value="category">Category</SelectItem>
+          </SelectContent>
+        </Select>
         <p className="text-xs text-gray-500 mt-1">
           Tag type helps organize tags into groups. &quot;General&quot; is
           suitable for most tags.
@@ -235,7 +244,7 @@ export default function TagsPage() {
         </Button>
       </div>
 
-      <DashboardCard className="mb-6" contentClassName="p-0">
+      <div className="mb-6">
         <div className="border-b border-zinc-200 bg-zinc-50/70 p-4 sm:p-5 flex flex-wrap items-end gap-3">
           <div className="flex-1 min-w-[200px]">
             <Input
@@ -247,18 +256,21 @@ export default function TagsPage() {
           </div>
           <Select
             value={typeFilter}
-            onChange={(e) => {
-              setTypeFilter(e.target.value);
+            onValueChange={(value) => {
+              setTypeFilter(value);
               setCurrentPage(1);
             }}
-            options={[
-              { value: "all", label: "All Types" },
-              { value: "general", label: "General" },
-              { value: "activity", label: "Activity" },
-              { value: "category", label: "Category" },
-            ]}
-            className="min-w-[150px]"
-          />
+          >
+            <SelectTrigger className="min-w-[150px]">
+              <SelectValue placeholder="All Types" />
+            </SelectTrigger>
+            <SelectContent position="popper">
+              <SelectItem value="all">All Types</SelectItem>
+              <SelectItem value="general">General</SelectItem>
+              <SelectItem value="activity">Activity</SelectItem>
+              <SelectItem value="category">Category</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         {/* Show a subtle loading indicator when refetching in the background */}
@@ -381,7 +393,7 @@ export default function TagsPage() {
             )}
           </>
         )}
-      </DashboardCard>
+      </div>
 
       {/* Tag usage info */}
       <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">

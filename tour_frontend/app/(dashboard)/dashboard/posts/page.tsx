@@ -1,19 +1,38 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Plus, Edit, Trash2, CheckCircle } from "lucide-react";
+import { Plus, Edit, Trash2, CheckCircle, GripVertical } from "lucide-react";
+import {
+  closestCenter,
+  DndContext,
+  KeyboardSensor,
+  MouseSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type UniqueIdentifier,
+} from "@dnd-kit/core";
+import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
+import {
+  arrayMove,
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import type { Post } from "@/lib/api-client";
 import {
   useListPostsQuery,
   useDeletePostMutation,
   useApprovePostMutation,
   usePublishPostMutation,
+  useUpdatePostDisplayOrderMutation,
 } from "@/lib/store";
 import Button from "@/components/ui/button";
 import Input from "@/components/ui/input";
-import Select from "@/components/ui/select";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import Pagination from "@/components/ui/Pagination";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
@@ -28,12 +47,129 @@ import {
 } from "@/components/ui/table";
 import { toast } from "@/lib/utils/toast";
 
+const EMPTY_POSTS: Post[] = [];
+
+type PostRowProps = {
+  post: Post;
+  rankEnabled: boolean;
+  onApprove: (post: Post) => void;
+  onDelete: (post: Post) => void;
+  statusBadgeVariant: (status: string) => "default" | "secondary" | "outline";
+};
+
+function DraggablePostRow({
+  post,
+  rankEnabled,
+  onApprove,
+  onDelete,
+  statusBadgeVariant,
+}: PostRowProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: post.id,
+    disabled: !rankEnabled,
+  });
+
+  return (
+    <TableRow
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+      }}
+      className={isDragging ? "opacity-70" : undefined}
+    >
+      <TableCell className="max-w-[360px] lg:max-w-[520px]">
+        <div className="flex items-center gap-3">
+          {rankEnabled && (
+            <button
+              type="button"
+              {...attributes}
+              {...listeners}
+              className="cursor-grab text-slate-400 active:cursor-grabbing"
+              aria-label="Drag to reorder"
+              title="Drag to reorder"
+            >
+              <GripVertical className="h-4 w-4 shrink-0" />
+            </button>
+          )}
+          {post.cover_image && (
+            <Image
+              src={post.cover_image}
+              alt={post.title}
+              width={48}
+              height={48}
+              className="h-12 w-12 rounded object-cover"
+              unoptimized={post.cover_image.startsWith("/uploads")}
+            />
+          )}
+          <div className="min-w-0">
+            <Link
+              href={`/dashboard/posts/${post.slug}/edit`}
+              className="block truncate text-sm text-blue-600 hover:underline"
+              title={post.title}
+            >
+              {post.title}
+            </Link>
+            <p className="truncate text-xs text-slate-500">/{post.slug}</p>
+          </div>
+        </div>
+      </TableCell>
+      <TableCell>
+        <Badge variant="outline" className="capitalize">
+          {post.post_type || post.type}
+        </Badge>
+      </TableCell>
+      <TableCell>
+        <Badge variant={statusBadgeVariant(post.status)} className="capitalize">
+          {post.status}
+        </Badge>
+      </TableCell>
+      <TableCell className="text-right tabular-nums">
+        {post.views.toLocaleString()}
+      </TableCell>
+      <TableCell className="text-slate-600">
+        {new Date(post.created_at).toLocaleDateString()}
+      </TableCell>
+      <TableCell className="text-right">
+        <div className="flex items-center justify-end gap-2">
+          {post.status === "pending" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onApprove(post)}
+              title="Approve"
+            >
+              <CheckCircle className="w-4 h-4" />
+            </Button>
+          )}
+          <Link href={`/dashboard/posts/${post.slug}/edit`}>
+            <Button variant="ghost" size="sm">
+              <Edit className="w-4 h-4" />
+            </Button>
+          </Link>
+          <Button variant="ghost" size="sm" onClick={() => onDelete(post)}>
+            <Trash2 className="w-4 h-4 text-red-600" />
+          </Button>
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+}
+
 export default function PostsPage() {
-  // ── Local UI state ──────────────────────────────────────────────────────
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
+  const [rankingMode, setRankingMode] = useState(false);
+  const [orderedPosts, setOrderedPosts] = useState<Post[]>([]);
   const [deleteDialog, setDeleteDialog] = useState<{
     open: boolean;
     post: Post | null;
@@ -42,15 +178,6 @@ export default function PostsPage() {
     post: null,
   });
 
-  // ── RTK Query hooks ─────────────────────────────────────────────────────
-  //
-  // `useListPostsQuery` automatically:
-  //   - Fetches data on mount and when params change
-  //   - Caches results (deduplicates identical requests)
-  //   - Refetches when the browser tab regains focus
-  //   - Refetches when cache tags are invalidated by mutations
-  //
-  // No more manual `useEffect` + `useState` + `loadPosts()` pattern!
   const {
     data: postsResponse,
     isLoading,
@@ -63,33 +190,63 @@ export default function PostsPage() {
     type: typeFilter !== "all" ? typeFilter : undefined,
   });
 
-  // Mutations — each returns a trigger function and a result object.
-  // When a mutation succeeds, RTK Query automatically invalidates the
-  // relevant cache tags, causing `useListPostsQuery` to refetch.
-  // No more manual `loadPosts()` calls after every mutation!
   const [deletePost, { isLoading: deleting }] = useDeletePostMutation();
   const [approvePost] = useApprovePostMutation();
   const [publishPost] = usePublishPostMutation();
+  const [updatePostDisplayOrder, { isLoading: savingOrder }] =
+    useUpdatePostDisplayOrderMutation();
 
-  // ── Derived data ────────────────────────────────────────────────────────
-  const posts = postsResponse?.data ?? [];
+  const posts = postsResponse?.data ?? EMPTY_POSTS;
   const totalPages = postsResponse?.total_pages ?? 1;
 
-  // Client-side search filter (instant, no network request)
-  const filteredPosts = posts.filter((post) =>
-    searchQuery
-      ? post.title.toLowerCase().includes(searchQuery.toLowerCase())
-      : true,
+  useEffect(() => {
+    setOrderedPosts((prev) => {
+      if (prev.length === posts.length) {
+        let same = true;
+        for (let i = 0; i < prev.length; i++) {
+          if (prev[i]?.id !== posts[i]?.id) {
+            same = false;
+            break;
+          }
+        }
+        if (same) return prev;
+      }
+      return posts;
+    });
+  }, [posts]);
+
+  const filteredPosts = useMemo(() => {
+    return orderedPosts.filter((post) => {
+      const normalizedType = (post.post_type || post.type || "").toLowerCase();
+      const matchesType = typeFilter === "all" || normalizedType === typeFilter;
+      const matchesStatus =
+        statusFilter === "all" || post.status === statusFilter;
+      const matchesSearch =
+        searchQuery.trim() === "" ||
+        post.title.toLowerCase().includes(searchQuery.toLowerCase());
+
+      return matchesType && matchesStatus && matchesSearch;
+    });
+  }, [orderedPosts, searchQuery, statusFilter, typeFilter]);
+
+  const canRankPosts =
+    typeFilter !== "all" && statusFilter === "all" && searchQuery.trim() === "";
+
+  const sensors = useSensors(
+    useSensor(MouseSensor),
+    useSensor(TouchSensor),
+    useSensor(KeyboardSensor),
   );
 
-  // ── Handlers ────────────────────────────────────────────────────────────
+  const dataIds = useMemo<UniqueIdentifier[]>(
+    () => filteredPosts.map((post) => post.id),
+    [filteredPosts],
+  );
 
   const handleDelete = async () => {
     if (!deleteDialog.post) return;
 
     try {
-      // `.unwrap()` throws on error so we can catch it.
-      // On success, RTK Query invalidates 'Post' tags → list refetches automatically.
       await deletePost(deleteDialog.post.slug).unwrap();
       toast.success("Post deleted successfully");
       setDeleteDialog({ open: false, post: null });
@@ -103,7 +260,6 @@ export default function PostsPage() {
     try {
       await approvePost(post.id).unwrap();
       toast.success("Post approved successfully");
-      // No need to manually reload — cache invalidation handles it
     } catch (error) {
       toast.error("Failed to approve post");
       console.error(error);
@@ -114,7 +270,6 @@ export default function PostsPage() {
     try {
       await publishPost(post.id).unwrap();
       toast.success("Post published successfully");
-      // No need to manually reload — cache invalidation handles it
     } catch (error) {
       toast.error("Failed to publish post");
       console.error(error);
@@ -132,7 +287,50 @@ export default function PostsPage() {
     }
   };
 
-  // ── Render ──────────────────────────────────────────────────────────────
+  const handleDragEnd = ({ active, over }: DragEndEvent) => {
+    if (!rankingMode || !canRankPosts || !over || active.id === over.id) return;
+
+    setOrderedPosts((prev) => {
+      const oldIndex = prev.findIndex((item) => item.id === active.id);
+      const newIndex = prev.findIndex((item) => item.id === over.id);
+      if (oldIndex === -1 || newIndex === -1) return prev;
+      return arrayMove(prev, oldIndex, newIndex);
+    });
+  };
+
+  const handleSaveOrder = async () => {
+    if (!canRankPosts) {
+      toast.error(
+        "Select one type, set status to All Status, and clear search.",
+      );
+      return;
+    }
+
+    try {
+      const base = (currentPage - 1) * 20;
+      const changed = orderedPosts
+        .map((post, index) => ({ post, index }))
+        .filter(({ post, index }) => posts[index]?.id !== post.id);
+
+      if (changed.length === 0) {
+        toast.info("No order changes to save");
+        return;
+      }
+
+      await Promise.all(
+        changed.map(({ post, index }) =>
+          updatePostDisplayOrder({
+            id: post.id,
+            display_order: base + index,
+          }).unwrap(),
+        ),
+      );
+      toast.success("Post order updated");
+    } catch (error) {
+      toast.error("Failed to update order");
+      console.error(error);
+    }
+  };
 
   return (
     <div>
@@ -156,42 +354,73 @@ export default function PostsPage() {
           <Input
             placeholder="Search posts..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              if (e.target.value.trim() !== "") {
+                setRankingMode(false);
+              }
+            }}
             className="max-w-[300px]"
           />
-          <div className="flex flex-row gap-3 ">
-            <Select
+          <div className="flex flex-row gap-3">
+            <select
               value={statusFilter}
               onChange={(e) => {
-                setStatusFilter(e.target.value);
-                setCurrentPage(1); // Reset to page 1 when filter changes
+                const value = e.target.value;
+                if (value === statusFilter) return;
+                setStatusFilter(value);
+                setCurrentPage(1);
+                setRankingMode(false);
               }}
-              options={[
-                { value: "all", label: "All Status" },
-                { value: "draft", label: "Draft" },
-                { value: "published", label: "Published" },
-              ]}
-              className="min-w-[150px]"
-            />
-            <Select
+              className="h-9 min-w-[150px] rounded-md border border-input bg-transparent px-3 text-sm"
+            >
+              <option value="all">All Status</option>
+              <option value="draft">Draft</option>
+              <option value="published">Published</option>
+              <option value="pending">Pending</option>
+            </select>
+
+            <select
               value={typeFilter}
               onChange={(e) => {
-                setTypeFilter(e.target.value);
-                setCurrentPage(1); // Reset to page 1 when filter changes
+                const value = e.target.value;
+                if (value === typeFilter) return;
+                setTypeFilter(value);
+                setCurrentPage(1);
+                setRankingMode(false);
               }}
-              options={[
-                { value: "all", label: "All Types" },
-                { value: "article", label: "Article" },
-                { value: "event", label: "Event" },
-                { value: "activity", label: "Activity" },
-                { value: "explore", label: "Explore" },
-              ]}
-              className="min-w-[150px]"
-            />
+              className="h-9 min-w-[150px] rounded-md border border-input bg-transparent px-3 text-sm"
+            >
+              <option value="all">All Types</option>
+              <option value="article">Article</option>
+              <option value="event">Event</option>
+              <option value="activity">Activity</option>
+              <option value="explore">Explore</option>
+            </select>
+
+            <Button
+              variant={rankingMode ? "default" : "outline"}
+              size="sm"
+              disabled={!canRankPosts}
+              onClick={() => {
+                if (!canRankPosts) return;
+                setRankingMode((prev) => !prev);
+              }}
+            >
+              Rank Mode
+            </Button>
+            {rankingMode && (
+              <Button
+                size="sm"
+                onClick={handleSaveOrder}
+                isLoading={savingOrder}
+              >
+                Save Order
+              </Button>
+            )}
           </div>
         </div>
 
-        {/* Show a subtle loading indicator when refetching in the background */}
         {isFetching && !isLoading && (
           <div className="h-0.5 bg-blue-100 overflow-hidden">
             <div className="h-full bg-blue-500 animate-pulse w-full" />
@@ -207,99 +436,44 @@ export default function PostsPage() {
         ) : (
           <div className="overflow-hidden rounded-lg border bg-white">
             <div className="overflow-x-auto">
-              <Table className="table-fixed">
-                <TableHeader className="bg-slate-50">
-                  <TableRow>
-                    <TableHead className="w-[44%]">Title</TableHead>
-                    <TableHead className="w-[10%]">Type</TableHead>
-                    <TableHead className="w-[10%]">Status</TableHead>
-                    <TableHead className="w-[8%] text-right">Views</TableHead>
-                    <TableHead className="w-[12%]">Date</TableHead>
-                    <TableHead className="w-24 text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredPosts.map((post) => (
-                    <TableRow key={post.id}>
-                      <TableCell className="max-w-[360px] lg:max-w-[520px]">
-                        <div className="flex items-center gap-3">
-                          {post.cover_image && (
-                            <Image
-                              src={post.cover_image}
-                              alt={post.title}
-                              width={48}
-                              height={48}
-                              className="h-12 w-12 rounded object-cover"
-                              unoptimized={post.cover_image.startsWith(
-                                "/uploads",
-                              )}
-                            />
-                          )}
-                          <div className="min-w-0">
-                            <Link
-                              href={`/dashboard/posts/${post.slug}/edit`}
-                              className="block truncate text-sm text-blue-600 hover:underline"
-                              title={post.title}
-                            >
-                              {post.title}
-                            </Link>
-                            <p className="truncate text-xs text-slate-500">
-                              /{post.slug}
-                            </p>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="capitalize">
-                          {post.post_type}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={statusBadgeVariant(post.status)}
-                          className="capitalize"
-                        >
-                          {post.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {post.views.toLocaleString()}
-                      </TableCell>
-                      <TableCell className="text-slate-600">
-                        {new Date(post.created_at).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          {post.status === "pending" && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleApprove(post)}
-                              title="Approve"
-                            >
-                              <CheckCircle className="w-4 h-4" />
-                            </Button>
-                          )}
-                          <Link href={`/dashboard/posts/${post.slug}/edit`}>
-                            <Button variant="ghost" size="sm">
-                              <Edit className="w-4 h-4" />
-                            </Button>
-                          </Link>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() =>
-                              setDeleteDialog({ open: true, post })
-                            }
-                          >
-                            <Trash2 className="w-4 h-4 text-red-600" />
-                          </Button>
-                        </div>
-                      </TableCell>
+              <DndContext
+                collisionDetection={closestCenter}
+                modifiers={[restrictToVerticalAxis]}
+                sensors={sensors}
+                onDragEnd={handleDragEnd}
+              >
+                <Table className="table-fixed">
+                  <TableHeader className="bg-slate-50">
+                    <TableRow>
+                      <TableHead className="w-[44%]">Title</TableHead>
+                      <TableHead className="w-[10%]">Type</TableHead>
+                      <TableHead className="w-[10%]">Status</TableHead>
+                      <TableHead className="w-[8%] text-right">Views</TableHead>
+                      <TableHead className="w-[12%]">Date</TableHead>
+                      <TableHead className="w-24 text-right">Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    <SortableContext
+                      items={dataIds}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      {filteredPosts.map((post) => (
+                        <DraggablePostRow
+                          key={post.id}
+                          post={post}
+                          rankEnabled={rankingMode && canRankPosts}
+                          onApprove={handleApprove}
+                          onDelete={(item) =>
+                            setDeleteDialog({ open: true, post: item })
+                          }
+                          statusBadgeVariant={statusBadgeVariant}
+                        />
+                      ))}
+                    </SortableContext>
+                  </TableBody>
+                </Table>
+              </DndContext>
             </div>
           </div>
         )}

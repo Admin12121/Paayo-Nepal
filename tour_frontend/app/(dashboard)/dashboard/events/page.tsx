@@ -1,22 +1,48 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Plus, Edit, Trash2, Calendar, Eye } from "lucide-react";
+import { Plus, Edit, Trash2, Calendar, GripVertical } from "lucide-react";
+import {
+  closestCenter,
+  DndContext,
+  KeyboardSensor,
+  MouseSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type UniqueIdentifier,
+} from "@dnd-kit/core";
+import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
+import {
+  arrayMove,
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import type { Post } from "@/lib/api-client";
 import {
   useListEventsQuery,
   useListUpcomingEventsQuery,
   useDeletePostMutation,
+  useUpdatePostDisplayOrderMutation,
 } from "@/lib/store";
 import Button from "@/components/ui/button";
 import Input from "@/components/ui/input";
-import Select from "@/components/ui/select";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import Pagination from "@/components/ui/Pagination";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -27,11 +53,114 @@ import {
 } from "@/components/ui/table";
 import { toast } from "@/lib/utils/toast";
 
+const EMPTY_EVENTS: Post[] = [];
+
+function DraggableEventRow({
+  event,
+  rankEnabled,
+  formatDate,
+  isUpcoming,
+  onDelete,
+}: {
+  event: Post;
+  rankEnabled: boolean;
+  formatDate: (dateStr: string | null | undefined) => string;
+  isUpcoming: (event: Post) => boolean;
+  onDelete: (event: Post) => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: event.id,
+    disabled: !rankEnabled,
+  });
+
+  return (
+    <TableRow
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={isDragging ? "opacity-70" : undefined}
+    >
+      <TableCell className="max-w-[360px] lg:max-w-[520px]">
+        <div className="flex items-center gap-3">
+          {rankEnabled && (
+            <button
+              type="button"
+              {...attributes}
+              {...listeners}
+              className="cursor-grab text-slate-400 active:cursor-grabbing"
+              aria-label="Drag to reorder"
+            >
+              <GripVertical className="h-4 w-4 shrink-0" />
+            </button>
+          )}
+          {event.cover_image && (
+            <Image
+              src={event.cover_image}
+              alt={event.title}
+              width={48}
+              height={48}
+              className="h-12 w-12 rounded object-cover"
+              unoptimized={event.cover_image.startsWith("/uploads")}
+            />
+          )}
+          <div className="min-w-0">
+            <Link
+              href={`/dashboard/events/${event.slug}/edit`}
+              className="block truncate text-sm text-blue-600 hover:underline"
+              title={event.title}
+            >
+              {event.title}
+            </Link>
+            <p className="truncate text-xs text-slate-500">/{event.slug}</p>
+          </div>
+        </div>
+      </TableCell>
+      <TableCell className="text-slate-600">
+        {formatDate(event.start_time || event.event_date)}
+      </TableCell>
+      <TableCell>
+        <Badge
+          variant={isUpcoming(event) ? "default" : "outline"}
+          className="capitalize"
+        >
+          {isUpcoming(event) ? "upcoming" : "past"}
+        </Badge>
+      </TableCell>
+      <TableCell className="text-right tabular-nums">
+        {(event.likes ?? event.like_count ?? 0).toLocaleString()}
+      </TableCell>
+      <TableCell className="text-slate-600">
+        {formatDate(event.created_at)}
+      </TableCell>
+      <TableCell className="text-right">
+        <div className="flex items-center justify-end gap-2">
+          <Link href={`/dashboard/events/${event.slug}/edit`}>
+            <Button variant="ghost" size="sm">
+              <Edit className="w-4 h-4" />
+            </Button>
+          </Link>
+          <Button variant="ghost" size="sm" onClick={() => onDelete(event)}>
+            <Trash2 className="w-4 h-4 text-red-600" />
+          </Button>
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+}
+
 export default function EventsPage() {
   // ── Local UI state ──────────────────────────────────────────────────────
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
   const [timeFilter, setTimeFilter] = useState("all");
+  const [rankingMode, setRankingMode] = useState(false);
+  const [orderedEvents, setOrderedEvents] = useState<Post[]>([]);
   const [deleteDialog, setDeleteDialog] = useState<{
     open: boolean;
     event: Post | null;
@@ -71,16 +200,32 @@ export default function EventsPage() {
   const { data: eventsResponse, isLoading, isFetching } = activeQuery;
 
   const [deleteEvent, { isLoading: deleting }] = useDeletePostMutation();
+  const [updatePostDisplayOrder, { isLoading: savingOrder }] =
+    useUpdatePostDisplayOrderMutation();
 
   // ── Derived data ────────────────────────────────────────────────────────
-  const events = eventsResponse?.data ?? [];
+  const events = eventsResponse?.data ?? EMPTY_EVENTS;
   const totalPages = eventsResponse?.total_pages ?? 1;
 
+  useEffect(() => {
+    setOrderedEvents(events);
+  }, [events]);
+
   // Client-side search filter (instant, no network request)
-  const filteredEvents = events.filter((event) =>
+  const filteredEvents = orderedEvents.filter((event) =>
     searchQuery
       ? event.title.toLowerCase().includes(searchQuery.toLowerCase())
       : true,
+  );
+  const canRankEvents = searchQuery.trim() === "";
+  const sensors = useSensors(
+    useSensor(MouseSensor),
+    useSensor(TouchSensor),
+    useSensor(KeyboardSensor),
+  );
+  const dataIds = useMemo<UniqueIdentifier[]>(
+    () => filteredEvents.map((event) => event.id),
+    [filteredEvents],
   );
 
   // ── Helpers ─────────────────────────────────────────────────────────────
@@ -110,6 +255,46 @@ export default function EventsPage() {
       setDeleteDialog({ open: false, event: null });
     } catch (error) {
       toast.error("Failed to delete event");
+      console.error(error);
+    }
+  };
+
+  const handleDragEnd = ({ active, over }: DragEndEvent) => {
+    if (!rankingMode || !canRankEvents || !over || active.id === over.id)
+      return;
+    setOrderedEvents((prev) => {
+      const oldIndex = prev.findIndex((item) => item.id === active.id);
+      const newIndex = prev.findIndex((item) => item.id === over.id);
+      if (oldIndex === -1 || newIndex === -1) return prev;
+      return arrayMove(prev, oldIndex, newIndex);
+    });
+  };
+
+  const handleSaveOrder = async () => {
+    if (!canRankEvents) {
+      toast.error("Clear search to reorder.");
+      return;
+    }
+    try {
+      const base = (currentPage - 1) * 20;
+      const changed = orderedEvents
+        .map((event, index) => ({ event, index }))
+        .filter(({ event, index }) => events[index]?.id !== event.id);
+      if (changed.length === 0) {
+        toast.info("No order changes to save");
+        return;
+      }
+      await Promise.all(
+        changed.map(({ event, index }) =>
+          updatePostDisplayOrder({
+            id: event.id,
+            display_order: base + index,
+          }).unwrap(),
+        ),
+      );
+      toast.success("Event order updated");
+    } catch (error) {
+      toast.error("Failed to update order");
       console.error(error);
     }
   };
@@ -144,17 +329,38 @@ export default function EventsPage() {
           <div className="flex flex-row gap-3 ">
             <Select
               value={timeFilter}
-              onChange={(e) => {
-                setTimeFilter(e.target.value);
+              onValueChange={(value) => {
+                setTimeFilter(value);
                 setCurrentPage(1);
+                setRankingMode(false);
               }}
-              options={[
-                { value: "all", label: "All Events" },
-                { value: "upcoming", label: "Upcoming" },
-                { value: "past", label: "Past" },
-              ]}
-              className="min-w-[150px]"
-            />
+            >
+              <SelectTrigger className="min-w-[150px]">
+                <SelectValue placeholder="All Events" />
+              </SelectTrigger>
+              <SelectContent position="popper">
+                <SelectItem value="all">All Events</SelectItem>
+                <SelectItem value="upcoming">Upcoming</SelectItem>
+                <SelectItem value="past">Past</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button
+              variant={rankingMode ? "default" : "outline"}
+              size="sm"
+              disabled={!canRankEvents}
+              onClick={() => setRankingMode((prev) => !prev)}
+            >
+              Rank Mode
+            </Button>
+            {rankingMode && (
+              <Button
+                size="sm"
+                onClick={handleSaveOrder}
+                isLoading={savingOrder}
+              >
+                Save Order
+              </Button>
+            )}
           </div>
         </div>
 
@@ -175,91 +381,44 @@ export default function EventsPage() {
         ) : (
           <div className="overflow-hidden rounded-lg border bg-white">
             <div className="overflow-x-auto">
-              <Table className="table-fixed">
-                <TableHeader className="bg-slate-50">
-                  <TableRow>
-                    <TableHead className="w-[44%]">Title</TableHead>
-                    <TableHead className="w-[18%]">Schedule</TableHead>
-                    <TableHead className="w-[10%]">Status</TableHead>
-                    <TableHead className="w-[8%] text-right">Likes</TableHead>
-                    <TableHead className="w-[12%]">Date</TableHead>
-                    <TableHead className="w-24 text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredEvents.map((event) => (
-                    <TableRow key={event.id}>
-                      <TableCell className="max-w-[360px] lg:max-w-[520px]">
-                        <div className="flex items-center gap-3">
-                          {event.cover_image && (
-                            <Image
-                              src={event.cover_image}
-                              alt={event.title}
-                              width={48}
-                              height={48}
-                              className="h-12 w-12 rounded object-cover"
-                              unoptimized={event.cover_image.startsWith(
-                                "/uploads",
-                              )}
-                            />
-                          )}
-                          <div className="min-w-0">
-                            <Link
-                              href={`/dashboard/events/${event.slug}/edit`}
-                              className="block truncate text-sm text-blue-600 hover:underline"
-                              title={event.title}
-                            >
-                              {event.title}
-                            </Link>
-                            <p className="truncate text-xs text-slate-500">
-                              /{event.slug}
-                            </p>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-slate-600">
-                        {formatDate(event.start_time || event.event_date)}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={isUpcoming(event) ? "default" : "outline"}
-                          className="capitalize"
-                        >
-                          {isUpcoming(event) ? "upcoming" : "past"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {(
-                          event.likes ??
-                          event.like_count ??
-                          0
-                        ).toLocaleString()}
-                      </TableCell>
-                      <TableCell className="text-slate-600">
-                        {formatDate(event.created_at)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <Link href={`/dashboard/events/${event.slug}/edit`}>
-                            <Button variant="ghost" size="sm">
-                              <Edit className="w-4 h-4" />
-                            </Button>
-                          </Link>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() =>
-                              setDeleteDialog({ open: true, event })
-                            }
-                          >
-                            <Trash2 className="w-4 h-4 text-red-600" />
-                          </Button>
-                        </div>
-                      </TableCell>
+              <DndContext
+                collisionDetection={closestCenter}
+                modifiers={[restrictToVerticalAxis]}
+                sensors={sensors}
+                onDragEnd={handleDragEnd}
+              >
+                <Table className="table-fixed">
+                  <TableHeader className="bg-slate-50">
+                    <TableRow>
+                      <TableHead className="w-[44%]">Title</TableHead>
+                      <TableHead className="w-[18%]">Schedule</TableHead>
+                      <TableHead className="w-[10%]">Status</TableHead>
+                      <TableHead className="w-[8%] text-right">Likes</TableHead>
+                      <TableHead className="w-[12%]">Date</TableHead>
+                      <TableHead className="w-24 text-right">Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    <SortableContext
+                      items={dataIds}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      {filteredEvents.map((event) => (
+                        <DraggableEventRow
+                          key={event.id}
+                          event={event}
+                          rankEnabled={rankingMode && canRankEvents}
+                          formatDate={formatDate}
+                          isUpcoming={isUpcoming}
+                          onDelete={(item) =>
+                            setDeleteDialog({ open: true, event: item })
+                          }
+                        />
+                      ))}
+                    </SortableContext>
+                  </TableBody>
+                </Table>
+              </DndContext>
             </div>
           </div>
         )}

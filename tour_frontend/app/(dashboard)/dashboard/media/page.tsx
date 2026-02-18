@@ -11,12 +11,17 @@ import {
 } from "@/lib/store";
 import Button from "@/components/ui/button";
 import Input from "@/components/ui/input";
-import Select from "@/components/ui/select";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import Pagination from "@/components/ui/Pagination";
 import Modal from "@/components/ui/Modal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
-import DashboardCard from "@/components/dashboard/DashboardCard";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "@/lib/utils/toast";
 
 export default function MediaPage() {
@@ -177,29 +182,32 @@ export default function MediaPage() {
         </Button>
       </div>
 
-      <DashboardCard className="mb-6" contentClassName="p-0">
-        <div className="border-b border-zinc-200 bg-zinc-50/70 p-4 sm:p-5 flex flex-wrap items-end gap-3">
-          <div className="flex-1 min-w-[200px]">
-            <Input
-              placeholder="Search media..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full"
-            />
-          </div>
-          <Select
-            value={typeFilter}
-            onChange={(e) => {
-              setTypeFilter(e.target.value);
-              setCurrentPage(1);
-            }}
-            options={[
-              { value: "all", label: "All Types" },
-              { value: "image", label: "Images" },
-              { value: "document", label: "Documents" },
-            ]}
-            className="min-w-[150px]"
+      <div className="mb-6">
+        <div className="p-4 sm:p-5 flex flex-row flex-wrap items-end gap-3 justify-between w-full">
+          <Input
+            placeholder="Search media..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="max-w-[300px]"
           />
+          <div className="flex flex-row gap-3">
+            <Select
+              value={typeFilter}
+              onValueChange={(value) => {
+                setTypeFilter(value);
+                setCurrentPage(1);
+              }}
+            >
+              <SelectTrigger className="min-w-[150px]">
+                <SelectValue placeholder="All Types" />
+              </SelectTrigger>
+              <SelectContent position="popper">
+                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="image">Images</SelectItem>
+                <SelectItem value="document">Documents</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         {/* Show a subtle loading indicator when refetching in the background */}
@@ -282,7 +290,7 @@ export default function MediaPage() {
             )}
           </>
         )}
-      </DashboardCard>
+      </div>
 
       <Modal
         isOpen={uploadModal}
