@@ -50,13 +50,26 @@ pub async fn list_for_content(
         .as_deref()
         .ok_or_else(|| ApiError::BadRequest("target_id is required".to_string()))?;
 
+    let normalized_target_type = target_type.trim().to_lowercase();
+    let normalized_target_id = target_id.trim();
+    let valid_types = ["post", "video", "photo", "hotel"];
+    if !valid_types.contains(&normalized_target_type.as_str()) {
+        return Err(ApiError::BadRequest(format!(
+            "Invalid target_type '{}'. Must be one of: post, video, photo, hotel",
+            target_type
+        )));
+    }
+    if normalized_target_id.is_empty() {
+        return Err(ApiError::BadRequest("target_id is required".to_string()));
+    }
+
     let service = CommentService::new(state.db.clone(), state.cache.clone());
 
     let page = query.page.unwrap_or(1).max(1);
     let limit = query.limit.unwrap_or(20).min(100).max(1);
 
     let (comments, total) = service
-        .list_approved(target_type, target_id, page, limit)
+        .list_approved(&normalized_target_type, normalized_target_id, page, limit)
         .await?;
 
     let total_pages = ((total as f64) / (limit as f64)).ceil() as i32;
@@ -129,6 +142,19 @@ pub async fn create(
             "Invalid email address".to_string(),
         ));
     }
+    let normalized_target_type = input.target_type.trim().to_lowercase();
+    let valid_types = ["post", "video", "photo", "hotel"];
+    if !valid_types.contains(&normalized_target_type.as_str()) {
+        return Err(ApiError::ValidationError(
+            "target_type must be one of: post, video, photo, hotel".to_string(),
+        ));
+    }
+    let normalized_target_id = input.target_id.trim();
+    if normalized_target_id.is_empty() {
+        return Err(ApiError::ValidationError(
+            "target_id cannot be empty".to_string(),
+        ));
+    }
     if input.content.len() > 5000 {
         return Err(ApiError::ValidationError(
             "Comment must be less than 5000 characters".to_string(),
@@ -193,8 +219,8 @@ pub async fn create(
 
     let comment = service
         .create(
-            &input.target_type,
-            &input.target_id,
+            &normalized_target_type,
+            normalized_target_id,
             sanitized_name.trim(),
             input.guest_email.trim(),
             sanitized_content.trim(),
@@ -215,11 +241,11 @@ pub async fn create(
             Some(&format!(
                 "{} commented on {} {}",
                 input.guest_name.trim(),
-                input.target_type,
-                input.target_id
+                normalized_target_type,
+                normalized_target_id
             )),
-            Some(&input.target_type),
-            Some(&input.target_id),
+            Some(&normalized_target_type),
+            Some(normalized_target_id),
             Some("/dashboard/comments"),
         )
         .await;

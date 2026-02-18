@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useParams, notFound } from "next/navigation";
-import { Eye, Play, Calendar, Heart, ExternalLink } from "lucide-react";
+import { Eye, Play, Calendar, ExternalLink } from "lucide-react";
 import { videosApi, Video } from "@/lib/api-client";
 import Link from "next/link";
 import { useViewTracker } from "@/lib/hooks/use-view-tracker";
@@ -32,7 +32,11 @@ function Breadcrumbs({ items }: { items: { label: string; href?: string }[] }) {
   );
 }
 
-function getEmbedUrl(platform: string, videoUrl: string, videoId: string | null): string | null {
+function getEmbedUrl(
+  platform: string,
+  videoUrl: string,
+  videoId: string | null,
+): string | null {
   if (platform === "youtube") {
     const id = videoId || extractYouTubeId(videoUrl);
     if (id) return `https://www.youtube.com/embed/${id}?rel=0`;
@@ -93,13 +97,16 @@ function RelatedVideoCard({ video }: { video: Video }) {
           </div>
           {video.duration && (
             <div className="absolute bottom-1.5 right-1.5 bg-black/80 text-white text-xs font-medium px-1.5 py-0.5 rounded">
-              {Math.floor(video.duration / 60)}:{String(video.duration % 60).padStart(2, "0")}
+              {Math.floor(video.duration / 60)}:
+              {String(video.duration % 60).padStart(2, "0")}
             </div>
           )}
         </div>
         <div className="flex items-center justify-between text-xs text-[#868383] mb-1">
           <span>
-            {new Date(video.published_at || video.created_at).toLocaleDateString()}
+            {new Date(
+              video.published_at || video.created_at,
+            ).toLocaleDateString()}
           </span>
           <span className="flex items-center gap-1">
             <Eye className="w-3 h-3" />
@@ -228,7 +235,9 @@ export default function VideoDetailPage() {
                       className="inline-flex items-center gap-2 px-6 py-3 bg-white text-gray-900 rounded-xl font-medium hover:bg-gray-100 transition-colors"
                     >
                       <ExternalLink className="w-4 h-4" />
-                      Watch on {video.platform.charAt(0).toUpperCase() + video.platform.slice(1)}
+                      Watch on{" "}
+                      {video.platform.charAt(0).toUpperCase() +
+                        video.platform.slice(1)}
                     </a>
                   </div>
                 </div>
@@ -245,7 +254,7 @@ export default function VideoDetailPage() {
                   <span className="flex items-center gap-1">
                     <Calendar className="w-4 h-4" />
                     {new Date(
-                      video.published_at || video.created_at
+                      video.published_at || video.created_at,
                     ).toLocaleDateString("en-US", {
                       month: "long",
                       day: "numeric",
@@ -253,7 +262,7 @@ export default function VideoDetailPage() {
                     })}
                   </span>
                   <span>•</span>
-                  <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-semibold uppercase">
+                  <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold uppercase text-blue-700">
                     {video.platform}
                   </span>
                   {formatDuration(video.duration) && (
@@ -307,7 +316,9 @@ export default function VideoDetailPage() {
                   className="inline-flex items-center gap-1.5 text-sm text-[#0078C0] hover:text-[#0068A0] font-medium transition-colors"
                 >
                   <ExternalLink className="w-4 h-4" />
-                  Watch on {video.platform.charAt(0).toUpperCase() + video.platform.slice(1)}
+                  Watch on{" "}
+                  {video.platform.charAt(0).toUpperCase() +
+                    video.platform.slice(1)}
                 </a>
                 <ShareButtons
                   title={video.title}
@@ -324,40 +335,26 @@ export default function VideoDetailPage() {
           </div>
 
           {/* Sidebar */}
-          <div className="lg:col-span-1">
-            {/* Share card */}
-            <div className="bg-white rounded-xl p-6 shadow-sm mb-6">
-              <h3 className="font-display text-lg font-bold text-[#1A2B49] mb-4">
-                Share this video
-              </h3>
-              <ShareButtons
-                title={video.title}
-                description={video.description || undefined}
-              />
-            </div>
-
-            {/* Related Videos */}
+          <aside className="lg:col-span-1 rounded-xl bg-white p-5 shadow-sm h-fit">
             {relatedVideos.length > 0 && (
               <>
-                <h3 className="font-display text-lg font-bold text-[#1A2B49] mb-6 uppercase tracking-wide">
+                <h3 className="font-display text-lg font-bold text-[#1A2B49] mb-5 uppercase tracking-wide">
                   MORE VIDEOS
                 </h3>
-                <div className="space-y-6">
-                  {relatedVideos.slice(0, 5).map((vid) => (
+                <div className="space-y-4">
+                  {relatedVideos.slice(0, 10).map((vid) => (
                     <RelatedVideoCard key={vid.id} video={vid} />
                   ))}
                 </div>
-                {relatedVideos.length > 5 && (
-                  <Link
-                    href="/videos"
-                    className="block mt-6 text-center text-[#0078C0] font-semibold hover:text-[#0068A0] transition-colors"
-                  >
-                    View All Videos →
-                  </Link>
-                )}
+                <Link
+                  href="/videos"
+                  className="mt-6 block text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-[#0078C0] hover:text-[#0068A0]"
+                >
+                  View All
+                </Link>
               </>
             )}
-          </div>
+          </aside>
         </div>
       </div>
     </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useCallback, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import {
   Dialog,
@@ -27,6 +27,14 @@ export default function Modal({
   footer,
   size = "md",
 }: ModalProps) {
+  const handleOpenChange = useCallback(
+    (open: boolean) => {
+      if (open) return;
+      if (isOpen) onClose();
+    },
+    [isOpen, onClose],
+  );
+
   const sizes = {
     sm: "sm:max-w-md",
     md: "sm:max-w-lg",
@@ -35,26 +43,23 @@ export default function Modal({
   };
 
   return (
-    <Dialog
-      open={isOpen}
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
-    >
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogContent
         className={cn(
-          "w-[calc(100%-2rem)] max-h-[90vh] overflow-hidden rounded-lg p-0",
+          "flex w-[calc(100%-2rem)] max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-lg p-0",
           sizes[size],
         )}
       >
-        <DialogHeader className="border-b px-6 py-4">
+        <DialogHeader className="shrink-0 border-b px-6 py-4">
           <DialogTitle className="text-xl font-semibold text-gray-900">
             {title}
           </DialogTitle>
         </DialogHeader>
-        <div className="p-6 overflow-y-auto flex-1">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-6 pb-4">
+          {children}
+        </div>
         {footer && (
-          <DialogFooter className="border-t bg-gray-50 px-6 py-4 sm:justify-end">
+          <DialogFooter className="shrink-0 border-t bg-gray-50 px-6 py-4 sm:justify-end">
             {footer}
           </DialogFooter>
         )}

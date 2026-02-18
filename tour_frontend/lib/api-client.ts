@@ -411,6 +411,10 @@ export interface CreatePostInput {
   short_description?: string;
   content?: unknown;
   cover_image?: string;
+  region_id?: string | null;
+  is_featured?: boolean;
+  event_date?: string | null;
+  event_end_date?: string | null;
   post_type?: string;
   tags?: string[];
   meta_title?: string;
@@ -423,6 +427,7 @@ export const postsApi = {
     limit?: number;
     status?: string;
     type?: string;
+    region_id?: string;
     sort_by?: string;
     is_featured?: boolean;
   }) => {
@@ -431,6 +436,7 @@ export const postsApi = {
     if (params?.limit) searchParams.set("limit", String(params.limit));
     if (params?.status) searchParams.set("status", params.status);
     if (params?.type) searchParams.set("post_type", params.type);
+    if (params?.region_id) searchParams.set("region_id", params.region_id);
     if (params?.sort_by) searchParams.set("sort_by", params.sort_by);
     if (params?.is_featured !== undefined)
       searchParams.set("is_featured", String(params.is_featured));
@@ -589,10 +595,16 @@ export interface Region {
 }
 
 export const regionsApi = {
-  list: (params?: { page?: number; limit?: number; province?: string }) => {
+  list: (params?: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    province?: string;
+  }) => {
     const searchParams = new URLSearchParams();
     if (params?.page) searchParams.set("page", String(params.page));
     if (params?.limit) searchParams.set("limit", String(params.limit));
+    if (params?.status) searchParams.set("status", params.status);
     if (params?.province) searchParams.set("province", params.province);
     return api.get<PaginatedResponse<Region>>(`/regions?${searchParams}`, {
       tags: ["regions"],
@@ -956,10 +968,27 @@ export const hotelsApi = {
 
   getById: (id: string) => api.get<Hotel>(`/hotels/${id}`),
 
-  create: (data: CreateHotelInput) => api.post<Hotel>("/hotels", data),
+  create: (data: CreateHotelInput) =>
+    api.post<Hotel>("/hotels", {
+      ...data,
+      region_id: data.region_id || undefined,
+      email: data.email || undefined,
+      phone: data.phone || undefined,
+      website: data.website || undefined,
+      description: data.description || undefined,
+      cover_image: data.cover_image || undefined,
+    }),
 
   update: (id: string, data: Partial<CreateHotelInput> & { status?: string }) =>
-    api.put<Hotel>(`/hotels/${id}`, data),
+    api.put<Hotel>(`/hotels/${id}`, {
+      ...data,
+      region_id: data.region_id || undefined,
+      email: data.email || undefined,
+      phone: data.phone || undefined,
+      website: data.website || undefined,
+      description: data.description || undefined,
+      cover_image: data.cover_image || undefined,
+    }),
 
   delete: (id: string) => api.delete(`/hotels/${id}`),
 
@@ -1052,10 +1081,23 @@ export const videosApi = {
 
   getById: (id: string) => api.get<Video>(`/videos/${id}`),
 
-  create: (data: CreateVideoInput) => api.post<Video>("/videos", data),
+  create: (data: CreateVideoInput) =>
+    api.post<Video>("/videos", {
+      ...data,
+      region_id: data.region_id || undefined,
+      description: data.description || undefined,
+      video_id: data.video_id || undefined,
+      thumbnail_url: data.thumbnail_url || undefined,
+    }),
 
   update: (id: string, data: Partial<CreateVideoInput> & { status?: string }) =>
-    api.put<Video>(`/videos/${id}`, data),
+    api.put<Video>(`/videos/${id}`, {
+      ...data,
+      region_id: data.region_id || undefined,
+      description: data.description || undefined,
+      video_id: data.video_id || undefined,
+      thumbnail_url: data.thumbnail_url || undefined,
+    }),
 
   delete: (id: string) => api.delete(`/videos/${id}`),
 
@@ -1092,6 +1134,8 @@ export interface PhotoFeature {
   is_featured: boolean;
   like_count: number;
   view_count: number;
+  image_count?: number | null;
+  cover_image_url?: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -1133,12 +1177,19 @@ export const photoFeaturesApi = {
   getById: (id: string) => api.get<PhotoFeature>(`/photos/${id}`),
 
   create: (data: CreatePhotoFeatureInput) =>
-    api.post<PhotoFeature>("/photos", data),
+    api.post<PhotoFeature>("/photos", {
+      ...data,
+      region_id: data.region_id || undefined,
+    }),
 
   update: (
     id: string,
     data: Partial<CreatePhotoFeatureInput> & { status?: string },
-  ) => api.put<PhotoFeature>(`/photos/${id}`, data),
+  ) =>
+    api.put<PhotoFeature>(`/photos/${id}`, {
+      ...data,
+      region_id: data.region_id || undefined,
+    }),
 
   delete: (id: string) => api.delete(`/photos/${id}`),
 
@@ -1171,7 +1222,75 @@ export const photoFeaturesApi = {
   reorderImages: (
     photoId: string,
     orders: { id: string; display_order: number }[],
-  ) => api.put(`/photos/${photoId}/images/reorder`, { orders }),
+  ) =>
+    api.put(`/photos/${photoId}/images/reorder`, {
+      image_ids: [...orders]
+        .sort((a, b) => a.display_order - b.display_order)
+        .map((item) => item.id),
+    }),
+};
+
+// ============= Content Links API =============
+export type ContentLinkSourceType = "post" | "region";
+export type ContentLinkTargetType = "post" | "photo" | "video";
+
+export interface ContentLink {
+  id: string;
+  source_type: ContentLinkSourceType;
+  source_id: string;
+  target_type: ContentLinkTargetType;
+  target_id: string;
+  display_order: number | null;
+  created_at: string;
+}
+
+export interface CreateContentLinkInput {
+  source_type: ContentLinkSourceType;
+  source_id: string;
+  target_type: ContentLinkTargetType;
+  target_id: string;
+  display_order?: number;
+}
+
+export interface SetContentLinkItemInput {
+  target_type: ContentLinkTargetType;
+  target_id: string;
+  display_order?: number;
+}
+
+export const contentLinksApi = {
+  listForSource: (sourceType: ContentLinkSourceType, sourceId: string) =>
+    api.get<ContentLink[]>(`/content-links/${sourceType}/${sourceId}`),
+
+  listForTarget: (targetType: ContentLinkTargetType, targetId: string) =>
+    api.get<ContentLink[]>(`/content-links/target/${targetType}/${targetId}`),
+
+  countForSource: (sourceType: ContentLinkSourceType, sourceId: string) =>
+    api.get<{ count: number }>(
+      `/content-links/${sourceType}/${sourceId}/count`,
+    ),
+
+  getById: (id: string) => api.get<ContentLink>(`/content-links/by-id/${id}`),
+
+  create: (data: CreateContentLinkInput) =>
+    api.post<ContentLink>("/content-links", data),
+
+  update: (id: string, display_order?: number) =>
+    api.put<ContentLink>(`/content-links/by-id/${id}`, { display_order }),
+
+  remove: (id: string) => api.delete(`/content-links/by-id/${id}`),
+
+  setLinks: (
+    sourceType: ContentLinkSourceType,
+    sourceId: string,
+    links: SetContentLinkItemInput[],
+  ) =>
+    api.put<ContentLink[]>(`/content-links/${sourceType}/${sourceId}`, {
+      links,
+    }),
+
+  clearForSource: (sourceType: ContentLinkSourceType, sourceId: string) =>
+    api.delete<{ deleted: number }>(`/content-links/${sourceType}/${sourceId}`),
 };
 
 // ============= Hero Slides API =============

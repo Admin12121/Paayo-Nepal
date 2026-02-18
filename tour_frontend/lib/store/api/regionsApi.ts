@@ -9,6 +9,7 @@ import { enrichPaginated, type PostRaw } from "./postsApi";
 export interface ListRegionsParams {
   page?: number;
   limit?: number;
+  status?: string;
   province?: string;
 }
 
@@ -49,6 +50,7 @@ export const regionsApi = baseApi.injectEndpoints({
         return `/regions${buildQueryString({
           page: p.page,
           limit: p.limit,
+          status: p.status,
           province: p.province,
         })}`;
       },

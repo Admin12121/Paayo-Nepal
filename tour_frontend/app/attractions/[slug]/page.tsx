@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { attractionsApi, Attraction } from "@/lib/api-client";
 import Image from "next/image";
 import Link from "next/link";
-import { MapPin, Clock, DollarSign, Star, Eye } from "lucide-react";
+import { MapPin, Clock, IndianRupee, Star, Eye } from "lucide-react";
 import { ViewTracker } from "@/components/ui/ViewTracker";
 import { LikeButton } from "@/components/ui/LikeButton";
 import { CommentSection } from "@/components/ui/CommentSection";
@@ -221,7 +221,7 @@ export default async function AttractionDetailPage({
                   )}
                   {attraction.entry_fee && (
                     <div className="flex items-center gap-2 text-gray-700">
-                      <DollarSign className="w-5 h-5 text-[#0078C0]" />
+                      <IndianRupee className="w-5 h-5 text-[#0078C0]" />
                       <span>{attraction.entry_fee}</span>
                     </div>
                   )}

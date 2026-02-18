@@ -26,6 +26,7 @@ export async function VideosSection() {
               key={video.id}
               thumbnail={video.thumbnail_url || ""}
               title={video.title}
+              href={`/videos/${video.slug}`}
               duration={
                 video.duration
                   ? `${Math.floor(video.duration / 60)}:${String(video.duration % 60).padStart(2, "0")}`
@@ -38,7 +39,7 @@ export async function VideosSection() {
           ))}
         </div>
 
-        <ViewMoreButton />
+        <ViewMoreButton href="/videos" />
       </div>
     </section>
   );

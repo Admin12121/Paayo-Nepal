@@ -3,6 +3,7 @@ use axum::{
     Json,
 };
 use serde::Deserialize;
+use std::collections::HashSet;
 
 use crate::{
     error::ApiError,
@@ -386,15 +387,25 @@ pub async fn update_display_order(
 /// List images for a photo feature (public).
 pub async fn list_images(
     State(state): State<AppState>,
+    user: OptionalUser,
     Path(photo_id): Path<String>,
 ) -> Result<Json<Vec<PhotoImage>>, ApiError> {
     let service = PhotoFeatureService::new(state.db.clone(), state.cache.clone());
 
-    // Verify the photo feature exists
-    service
+    // Verify the photo feature exists.
+    let photo = service
         .get_by_id(&photo_id)
         .await?
         .ok_or_else(|| ApiError::NotFound("Photo feature not found".to_string()))?;
+
+    // Prevent draft image leakage to public callers.
+    let is_privileged = user
+        .0
+        .as_ref()
+        .map_or(false, |u| u.role == UserRole::Admin || u.role == UserRole::Editor);
+    if !is_privileged && photo.status != ContentStatus::Published {
+        return Err(ApiError::NotFound("Photo feature not found".to_string()));
+    }
 
     let images = service.list_images(&photo_id).await?;
     Ok(Json(images))
@@ -414,6 +425,14 @@ pub async fn add_image(
     }
 
     let service = PhotoFeatureService::new(state.db.clone(), state.cache.clone());
+    let photo = service
+        .get_by_id(&photo_id)
+        .await?
+        .ok_or_else(|| ApiError::NotFound("Photo feature not found".to_string()))?;
+
+    if photo.author_id != user.0.id && user.0.role != UserRole::Admin {
+        return Err(ApiError::Forbidden);
+    }
 
     let image = service
         .add_image(
@@ -431,11 +450,27 @@ pub async fn add_image(
 /// Update an image's caption or display order (admin/editor).
 pub async fn update_image(
     State(state): State<AppState>,
-    _user: ActiveEditorUser,
-    Path((_photo_id, image_id)): Path<(String, String)>,
+    user: ActiveEditorUser,
+    Path((photo_id, image_id)): Path<(String, String)>,
     Json(input): Json<UpdateImageInput>,
 ) -> Result<Json<PhotoImage>, ApiError> {
     let service = PhotoFeatureService::new(state.db.clone(), state.cache.clone());
+    let photo = service
+        .get_by_id(&photo_id)
+        .await?
+        .ok_or_else(|| ApiError::NotFound("Photo feature not found".to_string()))?;
+
+    if photo.author_id != user.0.id && user.0.role != UserRole::Admin {
+        return Err(ApiError::Forbidden);
+    }
+
+    let existing_image = service
+        .get_image_by_id(&image_id)
+        .await?
+        .ok_or_else(|| ApiError::NotFound("Photo image not found".to_string()))?;
+    if existing_image.photo_feature_id != photo.id {
+        return Err(ApiError::NotFound("Photo image not found".to_string()));
+    }
 
     let image = service
         .update_image(&image_id, input.caption.as_deref(), input.display_order)
@@ -447,10 +482,27 @@ pub async fn update_image(
 /// Remove an image from a photo feature (admin/editor).
 pub async fn remove_image(
     State(state): State<AppState>,
-    _user: ActiveEditorUser,
-    Path((_photo_id, image_id)): Path<(String, String)>,
+    user: ActiveEditorUser,
+    Path((photo_id, image_id)): Path<(String, String)>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let service = PhotoFeatureService::new(state.db.clone(), state.cache.clone());
+    let photo = service
+        .get_by_id(&photo_id)
+        .await?
+        .ok_or_else(|| ApiError::NotFound("Photo feature not found".to_string()))?;
+
+    if photo.author_id != user.0.id && user.0.role != UserRole::Admin {
+        return Err(ApiError::Forbidden);
+    }
+
+    let existing_image = service
+        .get_image_by_id(&image_id)
+        .await?
+        .ok_or_else(|| ApiError::NotFound("Photo image not found".to_string()))?;
+    if existing_image.photo_feature_id != photo.id {
+        return Err(ApiError::NotFound("Photo image not found".to_string()));
+    }
+
     service.remove_image(&image_id).await?;
     Ok(Json(serde_json::json!({ "success": true })))
 }
@@ -459,7 +511,7 @@ pub async fn remove_image(
 /// Accepts a list of image IDs in the desired order.
 pub async fn reorder_images(
     State(state): State<AppState>,
-    _user: ActiveEditorUser,
+    user: ActiveEditorUser,
     Path(photo_id): Path<String>,
     Json(input): Json<ReorderImagesInput>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
@@ -470,6 +522,28 @@ pub async fn reorder_images(
     }
 
     let service = PhotoFeatureService::new(state.db.clone(), state.cache.clone());
+    let photo = service
+        .get_by_id(&photo_id)
+        .await?
+        .ok_or_else(|| ApiError::NotFound("Photo feature not found".to_string()))?;
+
+    if photo.author_id != user.0.id && user.0.role != UserRole::Admin {
+        return Err(ApiError::Forbidden);
+    }
+
+    let existing_images = service.list_images(&photo_id).await?;
+    let existing_ids: HashSet<&str> = existing_images.iter().map(|img| img.id.as_str()).collect();
+    if let Some(missing_id) = input
+        .image_ids
+        .iter()
+        .find(|id| !existing_ids.contains(id.as_str()))
+    {
+        return Err(ApiError::NotFound(format!(
+            "Photo image '{}' not found for this photo feature",
+            missing_id
+        )));
+    }
+
     service.reorder_images(&photo_id, &input.image_ids).await?;
 
     Ok(Json(serde_json::json!({ "success": true })))

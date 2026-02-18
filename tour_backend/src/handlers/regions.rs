@@ -22,6 +22,7 @@ pub struct ListRegionsQuery {
     pub page: Option<i32>,
     pub limit: Option<i32>,
     pub status: Option<String>,
+    pub province: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -78,7 +79,12 @@ pub async fn list(
     };
 
     let (regions, total) = service
-        .list(page, limit, effective_status.as_deref())
+        .list(
+            page,
+            limit,
+            effective_status.as_deref(),
+            query.province.as_deref(),
+        )
         .await?;
 
     let total_pages = ((total as f64) / (limit as f64)).ceil() as i32;

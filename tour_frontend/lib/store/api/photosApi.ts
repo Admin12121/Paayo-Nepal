@@ -328,7 +328,11 @@ export const photosApi = baseApi.injectEndpoints({
       query: ({ photoId, orders }) => ({
         url: `/photos/${photoId}/images/reorder`,
         method: "PUT",
-        body: { orders },
+        body: {
+          image_ids: [...orders]
+            .sort((a, b) => a.display_order - b.display_order)
+            .map((item) => item.id),
+        },
       }),
       invalidatesTags: (_result, _error, { photoId }) => [
         { type: "Photo", id: `${photoId}-images` },

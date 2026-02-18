@@ -15,38 +15,38 @@ export function ArticleCard({
   href = "#",
 }: ArticleCardProps) {
   return (
-    <Link href={href} className="block">
-      <div className="bg-white rounded-3xl overflow-hidden hover:shadow-xl transition-shadow cursor-pointer border border-gray-100 p-6">
-        <div className="flex gap-6">
-          <div className="overflow-hidden rounded-2xl w-64 h-64 flex-shrink-0">
+    <Link href={href} className="block group">
+      <div className="overflow-hidden rounded-xl border border-[#E8EDF5] bg-white p-3 shadow-[0_6px_16px_rgba(16,33,58,0.08)] transition-shadow hover:shadow-[0_10px_24px_rgba(16,33,58,0.14)]">
+        <div className="flex gap-3">
+          <div className="h-[96px] w-[128px] flex-shrink-0 overflow-hidden rounded-lg md:h-[104px] md:w-[146px]">
             <img
               src={image}
               alt={title}
-              className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
+              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
             />
           </div>
-          <div className="flex-1 flex flex-col justify-between py-4">
+          <div className="flex flex-1 flex-col justify-between py-1">
             <div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-4">
+              <h3 className="mb-1.5 line-clamp-2 text-sm font-semibold leading-snug text-[#1A2B49] md:text-base">
                 {title}
               </h3>
-              <p className="text-base text-gray-500 leading-relaxed">
+              <p className="line-clamp-2 text-xs leading-relaxed text-[#66758F] md:text-sm">
                 {description}
               </p>
             </div>
-            <span className="text-blue-600 text-sm font-bold hover:text-blue-700 self-end flex items-center gap-2 uppercase tracking-wide mt-4">
-              READ MORE
+            <span className="mt-2 inline-flex items-center gap-1 self-end text-[11px] font-semibold uppercase tracking-[0.08em] text-[#008CFF]">
+              View All
               <svg
-                className="w-4 h-4"
+                className="h-3.5 w-3.5"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
-                strokeWidth={2.5}
+                strokeWidth={2}
               >
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  d="M17 8l4 4m0 0l-4 4m4-4H3"
+                  d="M9 18l6-6-6-6"
                 />
               </svg>
             </span>

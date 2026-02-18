@@ -96,6 +96,11 @@ impl ContentLinkService {
         Self::validate_source_type(source_type)?;
         Self::validate_target_type(target_type)?;
         Self::validate_no_self_link(source_type, source_id, target_type, target_id)?;
+        self.validate_source_exists(source_type, source_id).await?;
+        self.validate_target_exists(target_type, target_id).await?;
+        self
+            .validate_no_duplicate(source_type, source_id, target_type, target_id)
+            .await?;
 
         let id = Uuid::new_v4().to_string();
         let order = display_order.unwrap_or(0);
@@ -173,9 +178,17 @@ impl ContentLinkService {
         links: &[SetContentLinkItem],
     ) -> Result<Vec<ContentLink>, ApiError> {
         Self::validate_source_type(source_type)?;
+        self.validate_source_exists(source_type, source_id).await?;
 
         // Validate all target types up front before starting the transaction
+        let mut seen = std::collections::HashSet::<String>::new();
         for (i, item) in links.iter().enumerate() {
+            if item.target_id.trim().is_empty() {
+                return Err(ApiError::ValidationError(format!(
+                    "target_id cannot be empty at index {}",
+                    i
+                )));
+            }
             Self::validate_target_type(&item.target_type).map_err(|_| {
                 ApiError::ValidationError(format!(
                     "Invalid target_type '{}' at index {}. Must be one of: {}",
@@ -190,6 +203,16 @@ impl ContentLinkService {
                 &item.target_type,
                 &item.target_id,
             )?;
+            self.validate_target_exists(&item.target_type, &item.target_id)
+                .await?;
+
+            let key = format!("{}:{}", item.target_type, item.target_id);
+            if !seen.insert(key) {
+                return Err(ApiError::ValidationError(format!(
+                    "Duplicate target in links payload at index {}",
+                    i
+                )));
+            }
         }
 
         let mut tx = self.db.begin().await?;
@@ -286,7 +309,8 @@ impl ContentLinkService {
     // ── Validation helpers ───────────────────────────────────────────────
 
     fn validate_source_type(source_type: &str) -> Result<(), ApiError> {
-        ContentLinkSource::from_str(source_type).ok_or_else(|| {
+        let normalized = source_type.trim();
+        ContentLinkSource::from_str(normalized).ok_or_else(|| {
             ApiError::ValidationError(format!(
                 "Invalid source_type '{}'. Must be one of: {}",
                 source_type,
@@ -297,7 +321,8 @@ impl ContentLinkService {
     }
 
     fn validate_target_type(target_type: &str) -> Result<(), ApiError> {
-        ContentLinkTarget::from_str(target_type).ok_or_else(|| {
+        let normalized = target_type.trim();
+        ContentLinkTarget::from_str(normalized).ok_or_else(|| {
             ApiError::ValidationError(format!(
                 "Invalid target_type '{}'. Must be one of: {}",
                 target_type,
@@ -314,13 +339,134 @@ impl ContentLinkService {
         target_type: &str,
         target_id: &str,
     ) -> Result<(), ApiError> {
+        let normalized_source_type = source_type.trim();
+        let normalized_source_id = source_id.trim();
+        let normalized_target_type = target_type.trim();
+        let normalized_target_id = target_id.trim();
+
         // A "post" source linking to a "post" target with the same ID is a self-link.
         // (cross-type links like region→post are always fine, even if IDs happen to match.)
-        if source_type == target_type && source_id == target_id {
+        if normalized_source_type == normalized_target_type
+            && normalized_source_id == normalized_target_id
+        {
             return Err(ApiError::ValidationError(
                 "Cannot link a content item to itself".to_string(),
             ));
         }
+        Ok(())
+    }
+
+    async fn validate_source_exists(
+        &self,
+        source_type: &str,
+        source_id: &str,
+    ) -> Result<(), ApiError> {
+        let exists: (bool,) = match source_type {
+            "post" => {
+                sqlx::query_as("SELECT EXISTS(SELECT 1 FROM posts WHERE id = $1 AND deleted_at IS NULL)")
+                    .bind(source_id)
+                    .fetch_one(&self.db)
+                    .await?
+            }
+            "region" => {
+                sqlx::query_as("SELECT EXISTS(SELECT 1 FROM regions WHERE id = $1 AND deleted_at IS NULL)")
+                    .bind(source_id)
+                    .fetch_one(&self.db)
+                    .await?
+            }
+            _ => {
+                return Err(ApiError::ValidationError(format!(
+                    "Invalid source_type '{}'",
+                    source_type
+                )));
+            }
+        };
+
+        if !exists.0 {
+            return Err(ApiError::NotFound(format!(
+                "Source '{}' with id '{}' does not exist",
+                source_type, source_id
+            )));
+        }
+
+        Ok(())
+    }
+
+    async fn validate_target_exists(
+        &self,
+        target_type: &str,
+        target_id: &str,
+    ) -> Result<(), ApiError> {
+        let exists: (bool,) = match target_type {
+            "post" => {
+                sqlx::query_as("SELECT EXISTS(SELECT 1 FROM posts WHERE id = $1 AND deleted_at IS NULL)")
+                    .bind(target_id)
+                    .fetch_one(&self.db)
+                    .await?
+            }
+            "photo" => {
+                sqlx::query_as(
+                    "SELECT EXISTS(SELECT 1 FROM photo_features WHERE id = $1 AND deleted_at IS NULL)",
+                )
+                .bind(target_id)
+                .fetch_one(&self.db)
+                .await?
+            }
+            "video" => {
+                sqlx::query_as("SELECT EXISTS(SELECT 1 FROM videos WHERE id = $1 AND deleted_at IS NULL)")
+                    .bind(target_id)
+                    .fetch_one(&self.db)
+                    .await?
+            }
+            _ => {
+                return Err(ApiError::ValidationError(format!(
+                    "Invalid target_type '{}'",
+                    target_type
+                )));
+            }
+        };
+
+        if !exists.0 {
+            return Err(ApiError::NotFound(format!(
+                "Target '{}' with id '{}' does not exist",
+                target_type, target_id
+            )));
+        }
+
+        Ok(())
+    }
+
+    async fn validate_no_duplicate(
+        &self,
+        source_type: &str,
+        source_id: &str,
+        target_type: &str,
+        target_id: &str,
+    ) -> Result<(), ApiError> {
+        let exists: (bool,) = sqlx::query_as(
+            r#"
+            SELECT EXISTS(
+                SELECT 1 FROM content_links
+                WHERE source_type = $1::content_link_source
+                  AND source_id = $2
+                  AND target_type = $3::content_link_target
+                  AND target_id = $4
+            )
+            "#,
+        )
+        .bind(source_type)
+        .bind(source_id)
+        .bind(target_type)
+        .bind(target_id)
+        .fetch_one(&self.db)
+        .await?;
+
+        if exists.0 {
+            return Err(ApiError::Conflict(
+                "Content link already exists for this source/target pair".to_string(),
+            ));
+        }
+
         Ok(())
     }
 }

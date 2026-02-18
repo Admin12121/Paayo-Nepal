@@ -1,5 +1,5 @@
-import React from 'react';
-import { cn } from '@/lib/utils';
+import React from "react";
+import { cn } from "@/lib/utils";
 
 interface SectionHeadingProps {
   title: string;
@@ -7,15 +7,17 @@ interface SectionHeadingProps {
   className?: string;
 }
 
-export function SectionHeading({ title, subtitle, className }: SectionHeadingProps) {
+export function SectionHeading({
+  title,
+  subtitle,
+  className,
+}: SectionHeadingProps) {
   return (
-    <div className={cn("text-left mb-10", className)}>
-      <h2 className="font-display text-[56px] font-medium text-[#1E1E1E] tracking-[0.04em] uppercase">
+    <div className={cn("mb-6 text-left", className)}>
+      <h2 className="font-display text-[22px] font-semibold tracking-[0.08em] text-[#1A2B49] uppercase sm:text-[24px]">
         {title}
       </h2>
-      {subtitle && (
-        <p className="text-[#868383] mt-3 text-lg">{subtitle}</p>
-      )}
+      {subtitle && <p className="mt-2 text-sm text-[#6A7898]">{subtitle}</p>}
     </div>
   );
 }

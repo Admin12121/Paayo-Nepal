@@ -483,6 +483,16 @@ impl HotelService {
         Ok(branches)
     }
 
+    /// Get a single branch by ID.
+    pub async fn get_branch_by_id(&self, branch_id: &str) -> Result<Option<HotelBranch>, ApiError> {
+        let branch = sqlx::query_as::<_, HotelBranch>("SELECT * FROM hotel_branches WHERE id = $1")
+            .bind(branch_id)
+            .fetch_optional(&self.db)
+            .await?;
+
+        Ok(branch)
+    }
+
     /// Add a branch to a hotel.
     pub async fn add_branch(
         &self,
@@ -591,18 +601,23 @@ impl HotelService {
 
         let branch = sqlx::query_as::<_, HotelBranch>("SELECT * FROM hotel_branches WHERE id = $1")
             .bind(branch_id)
-            .fetch_one(&self.db)
-            .await?;
+            .fetch_optional(&self.db)
+            .await?
+            .ok_or_else(|| ApiError::NotFound("Branch not found".to_string()))?;
 
         Ok(branch)
     }
 
     /// Remove a branch.
     pub async fn remove_branch(&self, branch_id: &str) -> Result<(), ApiError> {
-        sqlx::query("DELETE FROM hotel_branches WHERE id = $1")
+        let result = sqlx::query("DELETE FROM hotel_branches WHERE id = $1")
             .bind(branch_id)
             .execute(&self.db)
             .await?;
+
+        if result.rows_affected() == 0 {
+            return Err(ApiError::NotFound("Branch not found".to_string()));
+        }
 
         let _ = self.cache.invalidate("hotels:*").await;
 

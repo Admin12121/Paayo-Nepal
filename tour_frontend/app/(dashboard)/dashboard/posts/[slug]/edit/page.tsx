@@ -15,7 +15,17 @@ import {
 import Link from "next/link";
 import { apiFetch } from "@/lib/csrf";
 import Image from "next/image";
-import { postsApi, Post } from "@/lib/api-client";
+import {
+  postsApi,
+  type Post,
+  regionsApi,
+  type Region,
+  type ContentLink,
+  type ContentLinkTargetType,
+  contentLinksApi,
+  photoFeaturesApi,
+  videosApi,
+} from "@/lib/api-client";
 import NotionEditorField from "@/components/editor/NotionEditorField";
 import Button from "@/components/ui/button";
 import Input from "@/components/ui/input";
@@ -35,6 +45,21 @@ export default function EditPostPage() {
   const [saving, setSaving] = useState(false);
   const [post, setPost] = useState<Post | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [regions, setRegions] = useState<Region[]>([]);
+  const [contentLinks, setContentLinks] = useState<ContentLink[]>([]);
+  const [linkTargetType, setLinkTargetType] =
+    useState<ContentLinkTargetType>("post");
+  const [linkTargetId, setLinkTargetId] = useState("");
+  const [savingLink, setSavingLink] = useState(false);
+  const [postsOptions, setPostsOptions] = useState<
+    { id: string; title: string }[]
+  >([]);
+  const [photosOptions, setPhotosOptions] = useState<
+    { id: string; title: string }[]
+  >([]);
+  const [videosOptions, setVideosOptions] = useState<
+    { id: string; title: string }[]
+  >([]);
 
   const [coverDragActive, setCoverDragActive] = useState(false);
   const [coverUploading, setCoverUploading] = useState(false);
@@ -47,6 +72,7 @@ export default function EditPostPage() {
     short_description: "",
     content: "",
     cover_image: "",
+    region_id: "",
     post_type: "article",
     tags: "",
   });
@@ -63,6 +89,7 @@ export default function EditPostPage() {
             ? data.content
             : JSON.stringify(data.content ?? ""),
         cover_image: data.cover_image || "",
+        region_id: data.region_id || "",
         post_type: data.post_type,
         tags: data.tags?.join(", ") || "",
       });
@@ -77,6 +104,62 @@ export default function EditPostPage() {
   useEffect(() => {
     loadPost();
   }, [loadPost]);
+
+  useEffect(() => {
+    const loadRegions = async () => {
+      try {
+        const response = await regionsApi.list({ limit: 100 });
+        setRegions(response.data);
+      } catch (error) {
+        console.error(error);
+        toast.error("Failed to load regions");
+      }
+    };
+
+    loadRegions();
+  }, []);
+
+  const loadContentLinks = useCallback(async (sourceId: string) => {
+    try {
+      const links = await contentLinksApi.listForSource("post", sourceId);
+      setContentLinks(links);
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to load content links");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (post?.id) {
+      loadContentLinks(post.id);
+    }
+  }, [post?.id, loadContentLinks]);
+
+  useEffect(() => {
+    const loadOptions = async () => {
+      try {
+        const [postsRes, photosRes, videosRes] = await Promise.all([
+          postsApi.list({ limit: 100 }),
+          photoFeaturesApi.list({ limit: 100 }),
+          videosApi.list({ limit: 100 }),
+        ]);
+
+        setPostsOptions(
+          postsRes.data.map((item) => ({ id: item.id, title: item.title })),
+        );
+        setPhotosOptions(
+          photosRes.data.map((item) => ({ id: item.id, title: item.title })),
+        );
+        setVideosOptions(
+          videosRes.data.map((item) => ({ id: item.id, title: item.title })),
+        );
+      } catch (error) {
+        console.error(error);
+      }
+    };
+
+    loadOptions();
+  }, []);
 
   const uploadToMedia = useCallback(async (file: File): Promise<string> => {
     const fd = new FormData();
@@ -195,6 +278,7 @@ export default function EditPostPage() {
         short_description: formData.short_description || undefined,
         content: formData.content,
         cover_image: formData.cover_image || undefined,
+        region_id: formData.region_id || undefined,
         post_type: formData.post_type,
         tags: tags.length > 0 ? tags : undefined,
         meta_title: formData.title || undefined,
@@ -228,6 +312,66 @@ export default function EditPostPage() {
       console.error(error);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const getTargetOptions = () => {
+    if (linkTargetType === "photo") return photosOptions;
+    if (linkTargetType === "video") return videosOptions;
+    return postsOptions.filter((item) => item.id !== post?.id);
+  };
+
+  const getLinkLabel = (link: ContentLink) => {
+    const pool =
+      link.target_type === "photo"
+        ? photosOptions
+        : link.target_type === "video"
+          ? videosOptions
+          : postsOptions;
+    return (
+      pool.find((item) => item.id === link.target_id)?.title || link.target_id
+    );
+  };
+
+  const handleAddContentLink = async () => {
+    if (!post?.id) return;
+    if (!linkTargetId) {
+      toast.error("Select an item to link");
+      return;
+    }
+
+    try {
+      setSavingLink(true);
+      await contentLinksApi.create({
+        source_type: "post",
+        source_id: post.id,
+        target_type: linkTargetType,
+        target_id: linkTargetId,
+      });
+      await loadContentLinks(post.id);
+      setLinkTargetId("");
+      toast.success("Content link added");
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to add content link");
+    } finally {
+      setSavingLink(false);
+    }
+  };
+
+  const handleRemoveContentLink = async (linkId: string) => {
+    if (!post?.id) return;
+
+    try {
+      setSavingLink(true);
+      await contentLinksApi.remove(linkId);
+      await loadContentLinks(post.id);
+      toast.success("Content link removed");
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to remove content link");
+    } finally {
+      setSavingLink(false);
     }
   };
 
@@ -543,6 +687,31 @@ export default function EditPostPage() {
 
               <Separator className="my-4 bg-gray-200/80" />
 
+              <div className="mb-5">
+                <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+                  Region
+                </label>
+                <select
+                  value={formData.region_id}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      region_id: e.target.value,
+                    }))
+                  }
+                  className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-[13px] text-gray-700 shadow-sm outline-none focus:border-blue-300"
+                >
+                  <option value="">Select region...</option>
+                  {regions.map((region) => (
+                    <option key={region.id} value={region.id}>
+                      {region.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <Separator className="my-4 bg-gray-200/80" />
+
               {/* Tags */}
               <div className="mb-5">
                 <label className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
@@ -561,6 +730,84 @@ export default function EditPostPage() {
                 <p className="mt-1.5 text-[11px] text-gray-400">
                   Separate with commas
                 </p>
+              </div>
+
+              <Separator className="my-4 bg-gray-200/80" />
+
+              <div className="mb-5">
+                <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+                  Connected Content
+                </label>
+                <div className="space-y-2 rounded-lg border border-gray-200 bg-white p-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <select
+                      value={linkTargetType}
+                      onChange={(e) => {
+                        setLinkTargetType(
+                          e.target.value as ContentLinkTargetType,
+                        );
+                        setLinkTargetId("");
+                      }}
+                      className="h-9 w-full rounded-lg border border-gray-200 bg-white px-2 text-[12px] text-gray-700"
+                    >
+                      <option value="post">Post</option>
+                      <option value="photo">Photo</option>
+                      <option value="video">Video</option>
+                    </select>
+                    <select
+                      value={linkTargetId}
+                      onChange={(e) => setLinkTargetId(e.target.value)}
+                      className="h-9 w-full rounded-lg border border-gray-200 bg-white px-2 text-[12px] text-gray-700"
+                    >
+                      <option value="">Select item...</option>
+                      {getTargetOptions().map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.title}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={handleAddContentLink}
+                    disabled={savingLink}
+                    className="h-8 w-full text-xs"
+                  >
+                    Add Link
+                  </Button>
+
+                  <div className="space-y-1">
+                    {contentLinks.length === 0 ? (
+                      <p className="text-[11px] text-gray-400">
+                        No linked content yet.
+                      </p>
+                    ) : (
+                      contentLinks.map((link) => (
+                        <div
+                          key={link.id}
+                          className="flex items-center justify-between rounded border border-gray-100 px-2 py-1.5"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-[11px] font-medium text-gray-700">
+                              {getLinkLabel(link)}
+                            </p>
+                            <p className="text-[10px] uppercase tracking-wide text-gray-400">
+                              {link.target_type}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveContentLink(link.id)}
+                            className="text-[11px] text-red-500 hover:text-red-600"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
               </div>
 
               <Separator className="my-4 bg-gray-200/80" />

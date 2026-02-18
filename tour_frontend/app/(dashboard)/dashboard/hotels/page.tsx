@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Plus,
   Edit,
@@ -10,6 +10,7 @@ import {
   StarOff,
   CheckCircle,
   GripVertical,
+  MoreHorizontal,
 } from "lucide-react";
 import {
   closestCenter,
@@ -31,7 +32,14 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import Image from "next/image";
-import type { Hotel as HotelType, CreateHotelInput } from "@/lib/api-client";
+import {
+  type Hotel as HotelType,
+  type HotelBranch,
+  type CreateHotelInput,
+  type Region,
+  hotelsApi as hotelsClientApi,
+  regionsApi,
+} from "@/lib/api-client";
 import {
   useListHotelsQuery,
   useCreateHotelMutation,
@@ -57,9 +65,61 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { toast } from "@/lib/utils/toast";
 
 const EMPTY_HOTELS: HotelType[] = [];
+
+interface BranchFormData {
+  id?: string;
+  name: string;
+  address: string;
+  phone: string;
+  email: string;
+  is_main: boolean;
+}
+
+interface HotelFormData {
+  name: string;
+  description: string;
+  email: string;
+  website: string;
+  star_rating?: number;
+  price_range: string;
+  cover_image: string;
+  region_id: string;
+  is_featured: boolean;
+  phone_numbers: string[];
+  gallery_images: string[];
+}
+
+const EMPTY_BRANCH: BranchFormData = {
+  name: "",
+  address: "",
+  phone: "",
+  email: "",
+  is_main: false,
+};
+
+const EMPTY_HOTEL_FORM: HotelFormData = {
+  name: "",
+  description: "",
+  email: "",
+  website: "",
+  star_rating: undefined,
+  price_range: "mid",
+  cover_image: "",
+  region_id: "",
+  is_featured: false,
+  phone_numbers: [""],
+  gallery_images: [],
+};
 
 function DraggableHotelRow({
   hotel,
@@ -169,24 +229,33 @@ function DraggableHotelRow({
         {new Date(hotel.created_at).toLocaleDateString()}
       </TableCell>
       <TableCell className="whitespace-nowrap text-right">
-        <div className="flex items-center justify-end gap-2">
-          {hotel.status === "draft" && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onPublish(hotel)}
-              title="Publish"
-            >
-              <CheckCircle className="w-4 h-4" />
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-8 w-8">
+              <MoreHorizontal className="h-4 w-4" />
             </Button>
-          )}
-          <Button variant="ghost" size="sm" onClick={() => onEdit(hotel)}>
-            <Edit className="w-4 h-4" />
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => onDelete(hotel)}>
-            <Trash2 className="w-4 h-4 text-red-600" />
-          </Button>
-        </div>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44">
+            {hotel.status === "draft" && (
+              <DropdownMenuItem onClick={() => onPublish(hotel)}>
+                <CheckCircle className="mr-2 h-4 w-4" />
+                Publish
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem onClick={() => onEdit(hotel)}>
+              <Edit className="mr-2 h-4 w-4" />
+              Edit
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              variant="destructive"
+              onClick={() => onDelete(hotel)}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </TableCell>
     </TableRow>
   );
@@ -209,18 +278,11 @@ export default function HotelsPage() {
     open: boolean;
     hotel: HotelType | null;
   }>({ open: false, hotel: null });
-  const [formData, setFormData] = useState<CreateHotelInput>({
-    name: "",
-    description: "",
-    email: "",
-    phone: "",
-    website: "",
-    star_rating: undefined,
-    price_range: "mid",
-    cover_image: "",
-    region_id: "",
-    is_featured: false,
-  });
+  const [formData, setFormData] = useState<HotelFormData>(EMPTY_HOTEL_FORM);
+  const [branches, setBranches] = useState<BranchFormData[]>([]);
+  const [removedBranchIds, setRemovedBranchIds] = useState<string[]>([]);
+  const [branchesLoading, setBranchesLoading] = useState(false);
+  const [regions, setRegions] = useState<Region[]>([]);
 
   // ── RTK Query hooks ─────────────────────────────────────────────────────
   //
@@ -269,6 +331,20 @@ export default function HotelsPage() {
     setOrderedHotels(hotels);
   }, [hotels]);
 
+  useEffect(() => {
+    const loadRegions = async () => {
+      try {
+        const response = await regionsApi.list({ limit: 100 });
+        setRegions(response.data);
+      } catch (error) {
+        console.error(error);
+        toast.error("Failed to load regions");
+      }
+    };
+
+    loadRegions();
+  }, []);
+
   // Client-side search filter (instant, no network request)
   const filteredHotels = orderedHotels.filter((hotel) =>
     searchQuery
@@ -287,6 +363,194 @@ export default function HotelsPage() {
   );
 
   // ── Handlers ────────────────────────────────────────────────────────────
+
+  const parsePhoneNumbers = useCallback(
+    (rawPhone: string | null | undefined) => {
+      const numbers = (rawPhone ?? "")
+        .split(/[,;\n]+/)
+        .map((value) => value.trim())
+        .filter(Boolean);
+      return numbers.length > 0 ? numbers : [""];
+    },
+    [],
+  );
+
+  const parseGalleryImages = useCallback((rawGallery: unknown) => {
+    if (!Array.isArray(rawGallery)) return [];
+    return rawGallery
+      .filter((value): value is string => typeof value === "string")
+      .map((value) => value.trim())
+      .filter(Boolean);
+  }, []);
+
+  const buildHotelPayload = useCallback(
+    (data: HotelFormData): CreateHotelInput => {
+      const normalizedPhones = data.phone_numbers
+        .map((value) => value.trim())
+        .filter(Boolean);
+      const normalizedGallery = data.gallery_images
+        .map((value) => value.trim())
+        .filter(Boolean);
+
+      return {
+        name: data.name.trim(),
+        description: data.description.trim() || undefined,
+        email: data.email.trim() || undefined,
+        phone: normalizedPhones.join(", ") || undefined,
+        website: data.website.trim() || undefined,
+        star_rating: data.star_rating,
+        price_range: data.price_range || undefined,
+        cover_image: data.cover_image.trim() || undefined,
+        region_id: data.region_id || undefined,
+        is_featured: data.is_featured,
+        gallery: normalizedGallery.length > 0 ? normalizedGallery : undefined,
+      };
+    },
+    [],
+  );
+
+  const normalizeBranches = useCallback((rows: BranchFormData[]) => {
+    const cleaned = rows
+      .map((row) => ({
+        ...row,
+        name: row.name.trim(),
+        address: row.address.trim(),
+        phone: row.phone.trim(),
+        email: row.email.trim(),
+      }))
+      .filter((row) => row.name.length > 0);
+
+    if (cleaned.length === 0) return cleaned;
+    if (cleaned.some((row) => row.is_main)) {
+      let mainAssigned = false;
+      return cleaned.map((row) => {
+        const shouldBeMain = row.is_main && !mainAssigned;
+        if (shouldBeMain) mainAssigned = true;
+        return { ...row, is_main: shouldBeMain };
+      });
+    }
+
+    return cleaned.map((row, index) => ({ ...row, is_main: index === 0 }));
+  }, []);
+
+  const syncHotelBranches = useCallback(
+    async (hotelId: string) => {
+      for (const branchId of removedBranchIds) {
+        await hotelsClientApi.removeBranch(hotelId, branchId);
+      }
+
+      const validBranches = normalizeBranches(branches);
+      for (const branch of validBranches) {
+        const payload = {
+          name: branch.name,
+          address: branch.address || undefined,
+          phone: branch.phone || undefined,
+          email: branch.email || undefined,
+          is_main: branch.is_main,
+        };
+
+        if (branch.id) {
+          await hotelsClientApi.updateBranch(hotelId, branch.id, payload);
+        } else {
+          await hotelsClientApi.addBranch(hotelId, payload);
+        }
+      }
+
+      setRemovedBranchIds([]);
+    },
+    [branches, normalizeBranches, removedBranchIds],
+  );
+
+  const handlePhoneChange = (index: number, value: string) => {
+    setFormData((prev) => {
+      const next = [...prev.phone_numbers];
+      next[index] = value;
+      return { ...prev, phone_numbers: next };
+    });
+  };
+
+  const addPhoneField = () => {
+    setFormData((prev) => ({
+      ...prev,
+      phone_numbers: [...prev.phone_numbers, ""],
+    }));
+  };
+
+  const removePhoneField = (index: number) => {
+    setFormData((prev) => {
+      const next = prev.phone_numbers.filter((_, idx) => idx !== index);
+      return {
+        ...prev,
+        phone_numbers: next.length > 0 ? next : [""],
+      };
+    });
+  };
+
+  const addGalleryImage = () => {
+    setFormData((prev) => ({
+      ...prev,
+      gallery_images: [...prev.gallery_images, ""],
+    }));
+  };
+
+  const updateGalleryImage = (index: number, url: string) => {
+    setFormData((prev) => {
+      const next = [...prev.gallery_images];
+      next[index] = url;
+      return { ...prev, gallery_images: next };
+    });
+  };
+
+  const removeGalleryImage = (index: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      gallery_images: prev.gallery_images.filter((_, idx) => idx !== index),
+    }));
+  };
+
+  const addBranchField = () => {
+    setBranches((prev) => [
+      ...prev,
+      { ...EMPTY_BRANCH, is_main: prev.length === 0 },
+    ]);
+  };
+
+  const updateBranchField = (
+    index: number,
+    field: keyof Omit<BranchFormData, "id">,
+    value: string | boolean,
+  ) => {
+    setBranches((prev) =>
+      prev.map((branch, idx) =>
+        idx === index ? { ...branch, [field]: value } : branch,
+      ),
+    );
+  };
+
+  const setMainBranch = (index: number) => {
+    setBranches((prev) =>
+      prev.map((branch, idx) => ({ ...branch, is_main: idx === index })),
+    );
+  };
+
+  const removeBranchField = (index: number) => {
+    const branchToRemove = branches[index];
+    if (branchToRemove?.id) {
+      setRemovedBranchIds((prev) =>
+        prev.includes(branchToRemove.id as string)
+          ? prev
+          : [...prev, branchToRemove.id as string],
+      );
+    }
+
+    setBranches((prev) => {
+      const next = prev.filter((_, idx) => idx !== index);
+      if (next.length > 0 && !next.some((branch) => branch.is_main)) {
+        next[0] = { ...next[0], is_main: true };
+      }
+      return next;
+    });
+  };
 
   const handleDelete = async () => {
     if (!deleteDialog.hotel) return;
@@ -330,7 +594,9 @@ export default function HotelsPage() {
     }
 
     try {
-      await createHotel(formData).unwrap();
+      const payload = buildHotelPayload(formData);
+      const createdHotel = await createHotel(payload).unwrap();
+      await syncHotelBranches(createdHotel.id);
       toast.success("Hotel created successfully");
       setCreateModal(false);
       resetForm();
@@ -343,10 +609,12 @@ export default function HotelsPage() {
     if (!editModal.hotel) return;
 
     try {
+      const payload = buildHotelPayload(formData);
       await updateHotel({
         id: editModal.hotel.id,
-        data: formData,
+        data: payload,
       }).unwrap();
+      await syncHotelBranches(editModal.hotel.id);
       toast.success("Hotel updated successfully");
       setEditModal({ open: false, hotel: null });
       resetForm();
@@ -360,30 +628,50 @@ export default function HotelsPage() {
       name: hotel.name,
       description: hotel.description || "",
       email: hotel.email || "",
-      phone: hotel.phone || "",
       website: hotel.website || "",
       star_rating: hotel.star_rating ?? undefined,
       price_range: hotel.price_range || "mid",
       cover_image: hotel.cover_image || "",
       region_id: hotel.region_id || "",
       is_featured: hotel.is_featured,
+      phone_numbers: parsePhoneNumbers(hotel.phone),
+      gallery_images: parseGalleryImages(hotel.gallery),
     });
+    setRemovedBranchIds([]);
     setEditModal({ open: true, hotel });
+    setBranchesLoading(true);
+
+    void (async () => {
+      try {
+        const branchRows = await hotelsClientApi.getBranches(hotel.id);
+        setBranches(
+          branchRows.map((branch: HotelBranch) => ({
+            id: branch.id,
+            name: branch.name,
+            address: branch.address || "",
+            phone: branch.phone || "",
+            email: branch.email || "",
+            is_main: branch.is_main,
+          })),
+        );
+      } catch {
+        setBranches([]);
+        toast.error("Failed to load hotel branches");
+      } finally {
+        setBranchesLoading(false);
+      }
+    })();
   };
 
   const resetForm = () => {
     setFormData({
-      name: "",
-      description: "",
-      email: "",
-      phone: "",
-      website: "",
-      star_rating: undefined,
-      price_range: "mid",
-      cover_image: "",
-      region_id: "",
-      is_featured: false,
+      ...EMPTY_HOTEL_FORM,
+      phone_numbers: [""],
+      gallery_images: [],
     });
+    setBranches([]);
+    setRemovedBranchIds([]);
+    setBranchesLoading(false);
   };
 
   const handleDragEnd = ({ active, over }: DragEndEvent) => {
@@ -439,18 +727,18 @@ export default function HotelsPage() {
   const getPriceLabel = (range: string | null) => {
     switch (range) {
       case "budget":
-        return "$";
+        return "रु";
       case "mid":
-        return "$$";
+        return "रु रु";
       case "luxury":
-        return "$$$";
+        return "रु रु रु";
       default:
         return "—";
     }
   };
 
   const hotelForm = (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
           Hotel Name *
@@ -461,7 +749,26 @@ export default function HotelsPage() {
           placeholder="Hotel name"
         />
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Region
+          </label>
+          <select
+            value={formData.region_id || ""}
+            onChange={(e) =>
+              setFormData({ ...formData, region_id: e.target.value })
+            }
+            className="h-10 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+          >
+            <option value="">Select region...</option>
+            {regions.map((region) => (
+              <option key={region.id} value={region.id}>
+                {region.name}
+              </option>
+            ))}
+          </select>
+        </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Price Range
@@ -473,9 +780,9 @@ export default function HotelsPage() {
             }
             className="h-10 w-full rounded-md border border-input bg-transparent px-3 text-sm"
           >
-            <option value="budget">Budget ($)</option>
-            <option value="mid">Mid-range ($$)</option>
-            <option value="luxury">Luxury ($$$)</option>
+            <option value="budget">Budget (रु)</option>
+            <option value="mid">Mid-range (रु रु)</option>
+            <option value="luxury">Luxury (रु रु रु)</option>
           </select>
         </div>
         <div>
@@ -503,7 +810,7 @@ export default function HotelsPage() {
           </select>
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Email
@@ -519,37 +826,195 @@ export default function HotelsPage() {
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Phone
+            Website
           </label>
           <Input
-            value={formData.phone || ""}
+            value={formData.website || ""}
             onChange={(e) =>
-              setFormData({ ...formData, phone: e.target.value })
+              setFormData({ ...formData, website: e.target.value })
             }
-            placeholder="+977-..."
+            placeholder="https://..."
           />
         </div>
       </div>
+
+      <div className="space-y-2 rounded-lg border border-gray-200 p-3">
+        <div className="flex items-center justify-between">
+          <label className="text-sm font-medium text-gray-700">
+            Phone Numbers
+          </label>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={addPhoneField}
+          >
+            <Plus className="mr-1 h-3.5 w-3.5" />
+            Add Phone
+          </Button>
+        </div>
+        <div className="space-y-2">
+          {formData.phone_numbers.map((phone, index) => (
+            <div key={`phone-${index}`} className="flex items-center gap-2">
+              <Input
+                value={phone}
+                onChange={(e) => handlePhoneChange(index, e.target.value)}
+                placeholder="+977-..."
+              />
+              {formData.phone_numbers.length > 1 && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => removePhoneField(index)}
+                >
+                  <Trash2 className="h-4 w-4 text-red-500" />
+                </Button>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
-          Website
+          Cover Image
         </label>
-        <Input
-          value={formData.website || ""}
-          onChange={(e) =>
-            setFormData({ ...formData, website: e.target.value })
-          }
-          placeholder="https://..."
-        />
-      </div>
-      <div>
         <ImageUpload
-          label="Cover Image"
+          label=""
           value={formData.cover_image || ""}
           onChange={(url) => setFormData({ ...formData, cover_image: url })}
           onRemove={() => setFormData({ ...formData, cover_image: "" })}
+          previewHeightClass="h-44"
         />
       </div>
+
+      <div className="space-y-3 rounded-lg border border-gray-200 p-3">
+        <div className="flex items-center justify-between">
+          <label className="text-sm font-medium text-gray-700">
+            Gallery Images
+          </label>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={addGalleryImage}
+          >
+            <Plus className="mr-1 h-3.5 w-3.5" />
+            Add Image
+          </Button>
+        </div>
+        {formData.gallery_images.length === 0 ? (
+          <p className="text-xs text-gray-500">
+            Add optional gallery images for the hotel detail page.
+          </p>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2">
+            {formData.gallery_images.map((url, index) => (
+              <div
+                key={`gallery-${index}`}
+                className="rounded-md border border-gray-200 p-2"
+              >
+                <ImageUpload
+                  label={`Image ${index + 1}`}
+                  value={url}
+                  onChange={(nextUrl) => updateGalleryImage(index, nextUrl)}
+                  onRemove={() => removeGalleryImage(index)}
+                  previewHeightClass="h-32"
+                />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-3 rounded-lg border border-gray-200 p-3">
+        <div className="flex items-center justify-between">
+          <label className="text-sm font-medium text-gray-700">
+            Branches & Locations
+          </label>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={addBranchField}
+          >
+            <Plus className="mr-1 h-3.5 w-3.5" />
+            Add Branch
+          </Button>
+        </div>
+
+        {branchesLoading ? (
+          <p className="text-sm text-gray-500">Loading branches...</p>
+        ) : branches.length === 0 ? (
+          <p className="text-xs text-gray-500">
+            No branches added yet. Add at least one if this hotel has multiple
+            locations.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {branches.map((branch, index) => (
+              <div
+                key={branch.id ?? `branch-${index}`}
+                className="rounded-md border border-gray-200 p-3"
+              >
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-xs font-semibold uppercase text-gray-500">
+                    Branch {index + 1}
+                  </p>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => removeBranchField(index)}
+                  >
+                    <Trash2 className="h-4 w-4 text-red-500" />
+                  </Button>
+                </div>
+                <div className="grid gap-2 md:grid-cols-2">
+                  <Input
+                    value={branch.name}
+                    onChange={(e) =>
+                      updateBranchField(index, "name", e.target.value)
+                    }
+                    placeholder="Branch name"
+                  />
+                  <Input
+                    value={branch.address}
+                    onChange={(e) =>
+                      updateBranchField(index, "address", e.target.value)
+                    }
+                    placeholder="Address"
+                  />
+                  <Input
+                    value={branch.phone}
+                    onChange={(e) =>
+                      updateBranchField(index, "phone", e.target.value)
+                    }
+                    placeholder="Phone"
+                  />
+                  <Input
+                    value={branch.email}
+                    onChange={(e) =>
+                      updateBranchField(index, "email", e.target.value)
+                    }
+                    placeholder="Email"
+                  />
+                </div>
+                <label className="mt-2 inline-flex items-center gap-2 text-xs text-gray-600">
+                  <input
+                    type="checkbox"
+                    checked={branch.is_main}
+                    onChange={() => setMainBranch(index)}
+                  />
+                  Mark as main branch
+                </label>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
           Description
@@ -735,7 +1200,7 @@ export default function HotelsPage() {
         isOpen={createModal}
         onClose={() => setCreateModal(false)}
         title="Create New Hotel"
-        size="lg"
+        size="xl"
         footer={
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setCreateModal(false)}>
@@ -755,7 +1220,7 @@ export default function HotelsPage() {
         isOpen={editModal.open}
         onClose={() => setEditModal({ open: false, hotel: null })}
         title="Edit Hotel"
-        size="lg"
+        size="xl"
         footer={
           <div className="flex justify-end gap-2">
             <Button

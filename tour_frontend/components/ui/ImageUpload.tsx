@@ -15,6 +15,7 @@ interface ImageUploadProps {
   label?: string;
   accept?: string;
   maxSizeMB?: number;
+  previewHeightClass?: string;
 }
 
 export default function ImageUpload({
@@ -24,6 +25,7 @@ export default function ImageUpload({
   label = "Upload Image",
   accept = "image/*",
   maxSizeMB = 20,
+  previewHeightClass = "h-64",
 }: ImageUploadProps) {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -187,7 +189,7 @@ export default function ImageUpload({
 
       {value ? (
         <div className="relative group overflow-hidden rounded-lg border border-gray-300">
-          <div className="relative w-full h-64">
+          <div className={`relative w-full ${previewHeightClass}`}>
             <Image
               src={value}
               alt="Preview"

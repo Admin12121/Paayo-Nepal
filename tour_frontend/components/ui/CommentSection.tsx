@@ -9,7 +9,12 @@ import {
   Clock,
   AlertCircle,
 } from "lucide-react";
-import { commentsApi, Comment, PaginatedResponse } from "@/lib/api-client";
+import {
+  ApiError,
+  commentsApi,
+  Comment,
+  PaginatedResponse,
+} from "@/lib/api-client";
 
 interface CommentSectionProps {
   targetType: string;
@@ -312,11 +317,37 @@ export function CommentSection({ targetType, targetId }: CommentSectionProps) {
         }
         setError(null);
 
-        const response: PaginatedResponse<Comment> =
-          await commentsApi.listForPost(targetId, {
+        let response: PaginatedResponse<Comment>;
+        try {
+          response = await commentsApi.listForContent({
+            target_type: targetType,
+            target_id: targetId,
             page: pageNum,
             limit: COMMENTS_PER_PAGE,
           });
+        } catch (err) {
+          const status =
+            err instanceof ApiError
+              ? err.status
+              : typeof err === "object" &&
+                  err !== null &&
+                  "status" in err &&
+                  typeof (err as { status?: unknown }).status === "number"
+                ? ((err as { status: number }).status ?? undefined)
+                : undefined;
+          if (status === 404) {
+            // Compatibility fallback: treat missing comments route/content as empty.
+            response = {
+              data: [],
+              total: 0,
+              page: pageNum,
+              limit: COMMENTS_PER_PAGE,
+              total_pages: 1,
+            };
+          } else {
+            throw err;
+          }
+        }
 
         if (append) {
           setComments((prev) => [...prev, ...response.data]);
@@ -338,7 +369,7 @@ export function CommentSection({ targetType, targetId }: CommentSectionProps) {
         setLoadingMore(false);
       }
     },
-    [targetId],
+    [targetId, targetType],
   );
 
   useEffect(() => {

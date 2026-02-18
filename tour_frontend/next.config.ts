@@ -115,8 +115,10 @@ const nextConfig: NextConfig = {
   // take priority automatically.
   // -------------------------------------------------------------------------
   async rewrites() {
-    // In Docker with nginx, no rewrites needed — nginx handles everything
-    if (process.env.DOCKER_ENV) {
+    // Allow explicit opt-out when an external reverse-proxy is guaranteed.
+    // Keeping rewrites enabled by default avoids localhost `/api/*` 404s
+    // when Next.js is accessed directly (without nginx in front).
+    if (process.env.DISABLE_DEV_API_REWRITES === "true") {
       return [];
     }
 

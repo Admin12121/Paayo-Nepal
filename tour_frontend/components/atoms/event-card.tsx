@@ -19,22 +19,19 @@ export function EventCard({
     <Link
       href={href}
       className={cn(
-        "block bg-white rounded-[20px] overflow-hidden cursor-pointer group transition-all duration-300",
+        "group block overflow-hidden rounded-xl border border-[#E7ECF4] bg-white shadow-[0_6px_16px_rgba(16,33,58,0.08)] transition-all duration-300 hover:shadow-[0_10px_24px_rgba(16,33,58,0.14)]",
         className,
       )}
-      style={{
-        boxShadow: "0px 4px 20px rgba(0, 0, 0, 0.08)",
-      }}
     >
-      <div className="overflow-hidden rounded-[16px] h-[320px]">
+      <div className="h-[170px] overflow-hidden">
         <img
           src={image}
           alt={title}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
         />
       </div>
-      <div className="px-4 pb-3 pt-2 bg-white">
-        <h3 className="font-display text-[32px] font-semibold text-[#1A2B49] text-center">
+      <div className="px-3 py-2.5">
+        <h3 className="line-clamp-2 text-sm font-semibold leading-tight text-[#1A2B49] md:text-base">
           {title}
         </h3>
       </div>

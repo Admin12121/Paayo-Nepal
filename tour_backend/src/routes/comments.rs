@@ -9,6 +9,7 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         // Public routes
         .route("/", get(handlers::comments::list_for_content))
+        .route("/post/:post_id", get(handlers::comments::list_for_post))
         .route("/", post(handlers::comments::create))
         .route("/:id/replies", get(handlers::comments::replies))
         // Admin moderation routes

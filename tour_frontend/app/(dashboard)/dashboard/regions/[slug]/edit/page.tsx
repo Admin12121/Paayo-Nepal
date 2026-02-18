@@ -15,7 +15,16 @@ import {
   X,
 } from "lucide-react";
 import { apiFetch } from "@/lib/csrf";
-import { Region, regionsApi } from "@/lib/api-client";
+import {
+  type Region,
+  type ContentLink,
+  type ContentLinkTargetType,
+  contentLinksApi,
+  photoFeaturesApi,
+  postsApi,
+  regionsApi,
+  videosApi,
+} from "@/lib/api-client";
 import Button from "@/components/ui/button";
 import Input from "@/components/ui/input";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
@@ -46,6 +55,20 @@ export default function EditRegionPage() {
   const [coverDragActive, setCoverDragActive] = useState(false);
   const [coverUploading, setCoverUploading] = useState(false);
   const [region, setRegion] = useState<Region | null>(null);
+  const [contentLinks, setContentLinks] = useState<ContentLink[]>([]);
+  const [linkTargetType, setLinkTargetType] =
+    useState<ContentLinkTargetType>("post");
+  const [linkTargetId, setLinkTargetId] = useState("");
+  const [savingLink, setSavingLink] = useState(false);
+  const [postsOptions, setPostsOptions] = useState<
+    { id: string; title: string }[]
+  >([]);
+  const [photosOptions, setPhotosOptions] = useState<
+    { id: string; title: string }[]
+  >([]);
+  const [videosOptions, setVideosOptions] = useState<
+    { id: string; title: string }[]
+  >([]);
 
   const coverInputRef = useRef<HTMLInputElement>(null);
   const titleRef = useRef<HTMLTextAreaElement>(null);
@@ -87,6 +110,48 @@ export default function EditRegionPage() {
   useEffect(() => {
     loadRegion();
   }, [loadRegion]);
+
+  const loadContentLinks = useCallback(async (sourceId: string) => {
+    try {
+      const links = await contentLinksApi.listForSource("region", sourceId);
+      setContentLinks(links);
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to load content links");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (region?.id) {
+      loadContentLinks(region.id);
+    }
+  }, [region?.id, loadContentLinks]);
+
+  useEffect(() => {
+    const loadOptions = async () => {
+      try {
+        const [postsRes, photosRes, videosRes] = await Promise.all([
+          postsApi.list({ limit: 100 }),
+          photoFeaturesApi.list({ limit: 100 }),
+          videosApi.list({ limit: 100 }),
+        ]);
+
+        setPostsOptions(
+          postsRes.data.map((item) => ({ id: item.id, title: item.title })),
+        );
+        setPhotosOptions(
+          photosRes.data.map((item) => ({ id: item.id, title: item.title })),
+        );
+        setVideosOptions(
+          videosRes.data.map((item) => ({ id: item.id, title: item.title })),
+        );
+      } catch (error) {
+        console.error(error);
+      }
+    };
+
+    loadOptions();
+  }, []);
 
   const uploadToMedia = useCallback(async (file: File): Promise<string> => {
     const fd = new FormData();
@@ -233,6 +298,66 @@ export default function EditRegionPage() {
       console.error(error);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const getTargetOptions = () => {
+    if (linkTargetType === "photo") return photosOptions;
+    if (linkTargetType === "video") return videosOptions;
+    return postsOptions;
+  };
+
+  const getLinkLabel = (link: ContentLink) => {
+    const pool =
+      link.target_type === "photo"
+        ? photosOptions
+        : link.target_type === "video"
+          ? videosOptions
+          : postsOptions;
+    return (
+      pool.find((item) => item.id === link.target_id)?.title || link.target_id
+    );
+  };
+
+  const handleAddContentLink = async () => {
+    if (!region?.id) return;
+    if (!linkTargetId) {
+      toast.error("Select an item to link");
+      return;
+    }
+
+    try {
+      setSavingLink(true);
+      await contentLinksApi.create({
+        source_type: "region",
+        source_id: region.id,
+        target_type: linkTargetType,
+        target_id: linkTargetId,
+      });
+      await loadContentLinks(region.id);
+      setLinkTargetId("");
+      toast.success("Content link added");
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to add content link");
+    } finally {
+      setSavingLink(false);
+    }
+  };
+
+  const handleRemoveContentLink = async (linkId: string) => {
+    if (!region?.id) return;
+
+    try {
+      setSavingLink(true);
+      await contentLinksApi.remove(linkId);
+      await loadContentLinks(region.id);
+      toast.success("Content link removed");
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to remove content link");
+    } finally {
+      setSavingLink(false);
     }
   };
 
@@ -586,6 +711,84 @@ export default function EditRegionPage() {
                 <p className="mt-1.5 text-[11px] text-gray-400">
                   Featured regions are highlighted on the website.
                 </p>
+              </div>
+
+              <Separator className="my-4 bg-gray-200/80" />
+
+              <div className="mb-5">
+                <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+                  Connected Content
+                </label>
+                <div className="space-y-2 rounded-lg border border-gray-200 bg-white p-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <select
+                      value={linkTargetType}
+                      onChange={(e) => {
+                        setLinkTargetType(
+                          e.target.value as ContentLinkTargetType,
+                        );
+                        setLinkTargetId("");
+                      }}
+                      className="h-9 w-full rounded-lg border border-gray-200 bg-white px-2 text-[12px] text-gray-700"
+                    >
+                      <option value="post">Post</option>
+                      <option value="photo">Photo</option>
+                      <option value="video">Video</option>
+                    </select>
+                    <select
+                      value={linkTargetId}
+                      onChange={(e) => setLinkTargetId(e.target.value)}
+                      className="h-9 w-full rounded-lg border border-gray-200 bg-white px-2 text-[12px] text-gray-700"
+                    >
+                      <option value="">Select item...</option>
+                      {getTargetOptions().map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.title}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={handleAddContentLink}
+                    disabled={savingLink}
+                    className="h-8 w-full text-xs"
+                  >
+                    Add Link
+                  </Button>
+
+                  <div className="space-y-1">
+                    {contentLinks.length === 0 ? (
+                      <p className="text-[11px] text-gray-400">
+                        No linked content yet.
+                      </p>
+                    ) : (
+                      contentLinks.map((link) => (
+                        <div
+                          key={link.id}
+                          className="flex items-center justify-between rounded border border-gray-100 px-2 py-1.5"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-[11px] font-medium text-gray-700">
+                              {getLinkLabel(link)}
+                            </p>
+                            <p className="text-[10px] uppercase tracking-wide text-gray-400">
+                              {link.target_type}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveContentLink(link.id)}
+                            className="text-[11px] text-red-500 hover:text-red-600"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
               </div>
 
               <Separator className="my-4 bg-gray-200/80" />

@@ -24,49 +24,114 @@ impl RegionService {
         page: i32,
         limit: i32,
         status: Option<&str>,
+        province: Option<&str>,
     ) -> Result<(Vec<Region>, i64), ApiError> {
         let offset = (page - 1) * limit;
 
-        let regions: Vec<Region> = if let Some(s) = status {
-            sqlx::query_as(
-                r#"
-                SELECT * FROM regions
-                WHERE status = $1::content_status AND deleted_at IS NULL
-                ORDER BY attraction_rank ASC NULLS LAST, name ASC
-                LIMIT $2 OFFSET $3
-                "#,
-            )
-            .bind(s)
-            .bind(limit as i64)
-            .bind(offset as i64)
-            .fetch_all(&self.db)
-            .await?
-        } else {
-            sqlx::query_as(
-                r#"
-                SELECT * FROM regions
-                WHERE deleted_at IS NULL
-                ORDER BY attraction_rank ASC NULLS LAST, name ASC
-                LIMIT $1 OFFSET $2
-                "#,
-            )
-            .bind(limit as i64)
-            .bind(offset as i64)
-            .fetch_all(&self.db)
-            .await?
+        let regions: Vec<Region> = match (status, province) {
+            (Some(s), Some(p)) => {
+                sqlx::query_as(
+                    r#"
+                    SELECT * FROM regions
+                    WHERE status = $1::content_status
+                      AND province = $2
+                      AND deleted_at IS NULL
+                    ORDER BY attraction_rank ASC NULLS LAST, name ASC
+                    LIMIT $3 OFFSET $4
+                    "#,
+                )
+                .bind(s)
+                .bind(p)
+                .bind(limit as i64)
+                .bind(offset as i64)
+                .fetch_all(&self.db)
+                .await?
+            }
+            (Some(s), None) => {
+                sqlx::query_as(
+                    r#"
+                    SELECT * FROM regions
+                    WHERE status = $1::content_status
+                      AND deleted_at IS NULL
+                    ORDER BY attraction_rank ASC NULLS LAST, name ASC
+                    LIMIT $2 OFFSET $3
+                    "#,
+                )
+                .bind(s)
+                .bind(limit as i64)
+                .bind(offset as i64)
+                .fetch_all(&self.db)
+                .await?
+            }
+            (None, Some(p)) => {
+                sqlx::query_as(
+                    r#"
+                    SELECT * FROM regions
+                    WHERE province = $1
+                      AND deleted_at IS NULL
+                    ORDER BY attraction_rank ASC NULLS LAST, name ASC
+                    LIMIT $2 OFFSET $3
+                    "#,
+                )
+                .bind(p)
+                .bind(limit as i64)
+                .bind(offset as i64)
+                .fetch_all(&self.db)
+                .await?
+            }
+            (None, None) => {
+                sqlx::query_as(
+                    r#"
+                    SELECT * FROM regions
+                    WHERE deleted_at IS NULL
+                    ORDER BY attraction_rank ASC NULLS LAST, name ASC
+                    LIMIT $1 OFFSET $2
+                    "#,
+                )
+                .bind(limit as i64)
+                .bind(offset as i64)
+                .fetch_all(&self.db)
+                .await?
+            }
         };
 
-        let total: (i64,) = if let Some(s) = status {
-            sqlx::query_as(
-                "SELECT COUNT(*) FROM regions WHERE status = $1::content_status AND deleted_at IS NULL",
-            )
-            .bind(s)
-            .fetch_one(&self.db)
-            .await?
-        } else {
-            sqlx::query_as("SELECT COUNT(*) FROM regions WHERE deleted_at IS NULL")
+        let total: (i64,) = match (status, province) {
+            (Some(s), Some(p)) => {
+                sqlx::query_as(
+                    r#"
+                    SELECT COUNT(*)
+                    FROM regions
+                    WHERE status = $1::content_status
+                      AND province = $2
+                      AND deleted_at IS NULL
+                    "#,
+                )
+                .bind(s)
+                .bind(p)
                 .fetch_one(&self.db)
                 .await?
+            }
+            (Some(s), None) => {
+                sqlx::query_as(
+                    "SELECT COUNT(*) FROM regions WHERE status = $1::content_status AND deleted_at IS NULL",
+                )
+                .bind(s)
+                .fetch_one(&self.db)
+                .await?
+            }
+            (None, Some(p)) => {
+                sqlx::query_as(
+                    "SELECT COUNT(*) FROM regions WHERE province = $1 AND deleted_at IS NULL",
+                )
+                .bind(p)
+                .fetch_one(&self.db)
+                .await?
+            }
+            (None, None) => {
+                sqlx::query_as("SELECT COUNT(*) FROM regions WHERE deleted_at IS NULL")
+                    .fetch_one(&self.db)
+                    .await?
+            }
         };
 
         Ok((regions, total.0))

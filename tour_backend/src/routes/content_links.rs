@@ -16,7 +16,7 @@ use crate::{handlers, AppState};
 ///   GET  /target/:target_type/:target_id — List links pointing to a target
 ///   GET  /by-id/:id                      — Get a single link by ID
 ///
-/// ## Admin (write) routes
+/// ## Editor/Admin (write) routes
 ///
 ///   POST /                               — Create a single content link
 ///   PUT  /by-id/:id                      — Update display order of a link

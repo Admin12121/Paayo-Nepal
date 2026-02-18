@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Search, MapPin, Star, Eye, DollarSign } from "lucide-react";
+import { Search, MapPin, Star, Eye, IndianRupee } from "lucide-react";
 import { hotelsApi, Hotel } from "@/lib/api-client";
 import Link from "next/link";
 
@@ -44,11 +44,23 @@ function HotelCard({ hotel }: { hotel: Hotel }) {
   const getPriceLabel = (range: string | null) => {
     switch (range) {
       case "budget":
-        return { label: "Budget", symbol: "$", color: "text-green-600 bg-green-50" };
+        return {
+          label: "Budget",
+          symbol: "रु",
+          color: "text-green-600 bg-green-50",
+        };
       case "mid":
-        return { label: "Mid-range", symbol: "$$", color: "text-blue-600 bg-blue-50" };
+        return {
+          label: "Mid-range",
+          symbol: "रु रु",
+          color: "text-blue-600 bg-blue-50",
+        };
       case "luxury":
-        return { label: "Luxury", symbol: "$$$", color: "text-purple-600 bg-purple-50" };
+        return {
+          label: "Luxury",
+          symbol: "रु रु रु",
+          color: "text-purple-600 bg-purple-50",
+        };
       default:
         return { label: "N/A", symbol: "—", color: "text-gray-600 bg-gray-50" };
     }
@@ -126,7 +138,7 @@ function HotelCard({ hotel }: { hotel: Hotel }) {
           <div className="flex items-center justify-between text-xs text-gray-400 mt-auto pt-3 border-t border-gray-100">
             <span>
               {new Date(
-                hotel.published_at || hotel.created_at
+                hotel.published_at || hotel.created_at,
               ).toLocaleDateString("en-US", {
                 month: "short",
                 day: "numeric",
@@ -282,9 +294,7 @@ export default function HotelsPage() {
     ? hotels.filter(
         (hotel) =>
           hotel.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          hotel.description
-            ?.toLowerCase()
-            .includes(searchQuery.toLowerCase())
+          hotel.description?.toLowerCase().includes(searchQuery.toLowerCase()),
       )
     : hotels;
 
@@ -311,16 +321,16 @@ export default function HotelsPage() {
           <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
             {/* Price Filter */}
             <div className="flex items-center gap-2 flex-wrap">
-              <DollarSign className="w-5 h-5 text-gray-600" />
+              <IndianRupee className="w-5 h-5 text-gray-600" />
               <span className="text-sm font-medium text-gray-700">
                 Price range:
               </span>
               <div className="flex gap-2">
                 {[
                   { value: "all", label: "All" },
-                  { value: "budget", label: "Budget ($)" },
-                  { value: "mid", label: "Mid ($$)" },
-                  { value: "luxury", label: "Luxury ($$$)" },
+                  { value: "budget", label: "Budget (रु)" },
+                  { value: "mid", label: "Mid (रु रु)" },
+                  { value: "luxury", label: "Luxury (रु रु रु)" },
                 ].map((option) => (
                   <button
                     key={option.value}

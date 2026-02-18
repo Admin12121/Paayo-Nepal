@@ -220,6 +220,11 @@ pub async fn create(
     let thumbnail_url = input.thumbnail_url.as_deref().or(auto_thumbnail.as_deref());
 
     let service = VideoService::new(state.db.clone(), state.cache.clone());
+    let normalized_region_id = input
+        .region_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
 
     let video = service
         .create(
@@ -231,7 +236,7 @@ pub async fn create(
             video_id_str,
             thumbnail_url,
             input.duration,
-            input.region_id.as_deref(),
+            normalized_region_id,
             input.is_featured.unwrap_or(false),
         )
         .await?;
@@ -257,6 +262,11 @@ pub async fn update(
     if existing.author_id != user.id && user.role != crate::models::user::UserRole::Admin {
         return Err(ApiError::Forbidden);
     }
+    let normalized_region_id = input
+        .region_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
 
     let video = service
         .update(
@@ -267,7 +277,7 @@ pub async fn update(
             input.video_id.as_deref(),
             input.thumbnail_url.as_deref(),
             input.duration,
-            input.region_id.as_deref(),
+            normalized_region_id,
             input.is_featured,
             input.status.as_deref(),
         )

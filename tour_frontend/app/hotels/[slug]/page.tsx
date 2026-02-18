@@ -10,7 +10,7 @@ import {
   Mail,
   Globe,
   Calendar,
-  DollarSign,
+  IndianRupee,
   Building2,
   ChevronRight,
 } from "lucide-react";
@@ -48,11 +48,11 @@ function RelatedHotelCard({ hotel }: { hotel: Hotel }) {
   const getPriceSymbol = (range: string | null) => {
     switch (range) {
       case "budget":
-        return "$";
+        return "रु";
       case "mid":
-        return "$$";
+        return "रु रु";
       case "luxury":
-        return "$$$";
+        return "रु रु रु";
       default:
         return "—";
     }
@@ -79,9 +79,7 @@ function RelatedHotelCard({ hotel }: { hotel: Hotel }) {
         </div>
         <div className="flex items-center justify-between text-xs text-[#868383] mb-1">
           <span>
-            {hotel.star_rating
-              ? "★".repeat(hotel.star_rating)
-              : "No rating"}
+            {hotel.star_rating ? "★".repeat(hotel.star_rating) : "No rating"}
           </span>
           <span className="flex items-center gap-1">
             <Eye className="w-3 h-3" />
@@ -226,19 +224,19 @@ export default function HotelDetailPage() {
       case "budget":
         return {
           label: "Budget",
-          symbol: "$",
+          symbol: "रु",
           color: "text-green-700 bg-green-50 border-green-200",
         };
       case "mid":
         return {
           label: "Mid-range",
-          symbol: "$$",
+          symbol: "रु रु",
           color: "text-blue-700 bg-blue-50 border-blue-200",
         };
       case "luxury":
         return {
           label: "Luxury",
-          symbol: "$$$",
+          symbol: "रु रु रु",
           color: "text-purple-700 bg-purple-50 border-purple-200",
         };
       default:
@@ -256,6 +254,11 @@ export default function HotelDetailPage() {
     hotel.amenities && Array.isArray(hotel.amenities)
       ? (hotel.amenities as string[])
       : [];
+  const phoneNumbers =
+    hotel.phone
+      ?.split(/[,;\n]+/)
+      .map((value) => value.trim())
+      .filter(Boolean) ?? [];
 
   const galleryImages: string[] =
     hotel.gallery && Array.isArray(hotel.gallery)
@@ -299,7 +302,7 @@ export default function HotelDetailPage() {
                             key={`empty-${i}`}
                             className="w-5 h-5 text-gray-200"
                           />
-                        )
+                        ),
                       )}
                       <span className="text-sm text-gray-500 ml-2">
                         {hotel.star_rating}-star hotel
@@ -311,7 +314,7 @@ export default function HotelDetailPage() {
                 <div
                   className={`px-4 py-2 rounded-xl border text-sm font-bold ${priceInfo.color}`}
                 >
-                  <DollarSign className="w-4 h-4 inline mr-1" />
+                  <IndianRupee className="w-4 h-4 inline mr-1" />
                   {priceInfo.symbol} — {priceInfo.label}
                 </div>
               </div>
@@ -321,7 +324,7 @@ export default function HotelDetailPage() {
                   <span className="flex items-center gap-1">
                     <Calendar className="w-4 h-4" />
                     {new Date(
-                      hotel.published_at || hotel.created_at
+                      hotel.published_at || hotel.created_at,
                     ).toLocaleDateString("en-US", {
                       month: "long",
                       day: "numeric",
@@ -426,7 +429,7 @@ export default function HotelDetailPage() {
                 <div className="space-y-3">
                   {branches
                     .sort((a, b) =>
-                      a.is_main === b.is_main ? 0 : a.is_main ? -1 : 1
+                      a.is_main === b.is_main ? 0 : a.is_main ? -1 : 1,
                     )
                     .map((branch) => (
                       <BranchCard key={branch.id} branch={branch} />
@@ -477,20 +480,23 @@ export default function HotelDetailPage() {
                   Contact
                 </h3>
                 <div className="space-y-3">
-                  {hotel.phone && (
+                  {phoneNumbers.map((phone, index) => (
                     <a
-                      href={`tel:${hotel.phone}`}
+                      key={`${phone}-${index}`}
+                      href={`tel:${phone}`}
                       className="flex items-center gap-3 text-sm text-gray-700 hover:text-[#0078C0] transition-colors group"
                     >
                       <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center group-hover:bg-blue-100 transition-colors">
                         <Phone className="w-4 h-4 text-[#0078C0]" />
                       </div>
                       <div>
-                        <p className="text-xs text-gray-400">Phone</p>
-                        <p className="font-medium">{hotel.phone}</p>
+                        <p className="text-xs text-gray-400">
+                          {index === 0 ? "Phone" : `Phone ${index + 1}`}
+                        </p>
+                        <p className="font-medium">{phone}</p>
                       </div>
                     </a>
-                  )}
+                  ))}
                   {hotel.email && (
                     <a
                       href={`mailto:${hotel.email}`}

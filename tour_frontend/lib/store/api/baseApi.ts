@@ -42,6 +42,7 @@ const tagTypes = [
   "ViewStats",
   "LikeStatus",
   "User",
+  "ContentLink",
 ] as const;
 
 export const baseApi = createApi({

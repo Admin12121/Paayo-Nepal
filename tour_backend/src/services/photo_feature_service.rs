@@ -33,25 +33,25 @@ impl PhotoFeatureService {
     ) -> Result<(Vec<PhotoFeature>, i64), ApiError> {
         let offset = (page - 1) * limit;
 
-        let mut where_clauses = vec!["deleted_at IS NULL".to_string()];
+        let mut where_clauses = vec!["pf.deleted_at IS NULL".to_string()];
         let mut param_idx: usize = 0;
         let mut bind_values: Vec<String> = Vec::new();
 
         if let Some(s) = status {
             param_idx += 1;
-            where_clauses.push(format!("status = ${}::content_status", param_idx));
+            where_clauses.push(format!("pf.status = ${}::content_status", param_idx));
             bind_values.push(s.to_string());
         }
 
         if let Some(r) = region_id {
             param_idx += 1;
-            where_clauses.push(format!("region_id = ${}", param_idx));
+            where_clauses.push(format!("pf.region_id = ${}", param_idx));
             bind_values.push(r.to_string());
         }
 
         if let Some(f) = is_featured {
             param_idx += 1;
-            where_clauses.push(format!("is_featured = ${}", param_idx));
+            where_clauses.push(format!("pf.is_featured = ${}::boolean", param_idx));
             bind_values.push(f.to_string());
         }
 
@@ -60,10 +60,31 @@ impl PhotoFeatureService {
         let limit_idx = param_idx + 1;
         let offset_idx = param_idx + 2;
         let data_sql = format!(
-            "SELECT * FROM photo_features WHERE {} ORDER BY display_order ASC NULLS LAST, created_at DESC LIMIT ${} OFFSET ${}",
+            r#"
+            SELECT
+                pf.*,
+                COALESCE(image_meta.image_count, 0)::bigint AS image_count,
+                cover_image.image_url AS cover_image_url
+            FROM photo_features pf
+            LEFT JOIN LATERAL (
+                SELECT COUNT(*) AS image_count
+                FROM photo_images pi
+                WHERE pi.photo_feature_id = pf.id
+            ) image_meta ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT pi.image_url
+                FROM photo_images pi
+                WHERE pi.photo_feature_id = pf.id
+                ORDER BY pi.display_order ASC NULLS LAST, pi.created_at ASC
+                LIMIT 1
+            ) cover_image ON TRUE
+            WHERE {}
+            ORDER BY pf.display_order ASC NULLS LAST, pf.created_at DESC
+            LIMIT ${} OFFSET ${}
+            "#,
             where_sql, limit_idx, offset_idx
         );
-        let count_sql = format!("SELECT COUNT(*) FROM photo_features WHERE {}", where_sql);
+        let count_sql = format!("SELECT COUNT(*) FROM photo_features pf WHERE {}", where_sql);
 
         let mut data_q = sqlx::query_as::<_, PhotoFeature>(&data_sql);
         for b in &bind_values {
@@ -366,6 +387,16 @@ impl PhotoFeatureService {
         Ok(images)
     }
 
+    /// Get a single image by ID.
+    pub async fn get_image_by_id(&self, image_id: &str) -> Result<Option<PhotoImage>, ApiError> {
+        let image = sqlx::query_as::<_, PhotoImage>("SELECT * FROM photo_images WHERE id = $1")
+            .bind(image_id)
+            .fetch_optional(&self.db)
+            .await?;
+
+        Ok(image)
+    }
+
     /// Add an image to a photo feature.
     pub async fn add_image(
         &self,
@@ -437,10 +468,14 @@ impl PhotoFeatureService {
 
     /// Remove an image from a photo feature.
     pub async fn remove_image(&self, image_id: &str) -> Result<(), ApiError> {
-        sqlx::query("DELETE FROM photo_images WHERE id = $1")
+        let result = sqlx::query("DELETE FROM photo_images WHERE id = $1")
             .bind(image_id)
             .execute(&self.db)
             .await?;
+
+        if result.rows_affected() == 0 {
+            return Err(ApiError::NotFound("Photo image not found".to_string()));
+        }
 
         Ok(())
     }

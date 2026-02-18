@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -15,7 +15,7 @@ import {
 import Link from "next/link";
 import { apiFetch } from "@/lib/csrf";
 import Image from "next/image";
-import { postsApi } from "@/lib/api-client";
+import { postsApi, regionsApi, type Region } from "@/lib/api-client";
 import NotionEditorField from "@/components/editor/NotionEditorField";
 import Button from "@/components/ui/button";
 import Input from "@/components/ui/input";
@@ -31,6 +31,7 @@ export default function NewPostPage() {
   const [showSettings, setShowSettings] = useState(false);
   const [coverDragActive, setCoverDragActive] = useState(false);
   const [coverUploading, setCoverUploading] = useState(false);
+  const [regions, setRegions] = useState<Region[]>([]);
   const coverInputRef = useRef<HTMLInputElement>(null);
   const titleRef = useRef<HTMLTextAreaElement>(null);
   const shortDescriptionRef = useRef<HTMLTextAreaElement>(null);
@@ -40,9 +41,24 @@ export default function NewPostPage() {
     short_description: "",
     content: "",
     cover_image: "",
+    region_id: "",
     post_type: "article",
     tags: "",
   });
+
+  useEffect(() => {
+    const loadRegions = async () => {
+      try {
+        const response = await regionsApi.list({ limit: 100 });
+        setRegions(response.data);
+      } catch (error) {
+        console.error(error);
+        toast.error("Failed to load regions");
+      }
+    };
+
+    loadRegions();
+  }, []);
 
   const uploadToMedia = useCallback(async (file: File): Promise<string> => {
     const fd = new FormData();
@@ -150,6 +166,7 @@ export default function NewPostPage() {
         short_description: formData.short_description || undefined,
         content: formData.content,
         cover_image: formData.cover_image || undefined,
+        region_id: formData.region_id || undefined,
         post_type: formData.post_type,
         tags: tags.length > 0 ? tags : undefined,
         meta_title: formData.title || undefined,
@@ -454,6 +471,31 @@ export default function NewPostPage() {
                     </Button>
                   ))}
                 </div>
+              </div>
+
+              <Separator className="my-4 bg-gray-200/80" />
+
+              <div className="mb-5">
+                <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+                  Region
+                </label>
+                <select
+                  value={formData.region_id}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      region_id: e.target.value,
+                    }))
+                  }
+                  className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-[13px] text-gray-700 shadow-sm outline-none focus:border-blue-300"
+                >
+                  <option value="">Select region...</option>
+                  {regions.map((region) => (
+                    <option key={region.id} value={region.id}>
+                      {region.name}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <Separator className="my-4 bg-gray-200/80" />

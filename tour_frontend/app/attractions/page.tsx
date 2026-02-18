@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { MapPin, Star, Clock, DollarSign, Filter } from "lucide-react";
+import { MapPin, Star, Clock, IndianRupee, Filter } from "lucide-react";
 import {
   attractionsApi,
   Attraction,
@@ -119,7 +119,7 @@ function AttractionCard({ attraction }: { attraction: Attraction }) {
 
             {attraction.entry_fee && (
               <div className="flex items-center gap-2 text-sm text-gray-600">
-                <DollarSign className="w-4 h-4 text-[#0078C0] shrink-0" />
+                <IndianRupee className="w-4 h-4 text-[#0078C0] shrink-0" />
                 <span>{attraction.entry_fee}</span>
               </div>
             )}

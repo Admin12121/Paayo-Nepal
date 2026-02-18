@@ -1,5 +1,16 @@
 import { notFound } from "next/navigation";
-import { regionsApi, Region, Attraction } from "@/lib/api-client";
+import {
+  regionsApi,
+  Region,
+  Attraction,
+  Post,
+  Video,
+  PhotoFeature,
+  contentLinksApi,
+  postsApi,
+  videosApi,
+  photoFeaturesApi,
+} from "@/lib/api-client";
 import Image from "next/image";
 import Link from "next/link";
 import { MapPin, Star } from "lucide-react";
@@ -77,6 +88,37 @@ function AttractionCard({ attraction }: { attraction: Attraction }) {
   );
 }
 
+function LinkedContentCard({
+  href,
+  title,
+  image,
+  meta,
+}: {
+  href: string;
+  title: string;
+  image?: string | null;
+  meta: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="group overflow-hidden rounded-xl bg-white shadow-sm transition-shadow hover:shadow-md"
+    >
+      <div className="relative h-[150px] w-full bg-[#DDE4EF]">
+        {image ? (
+          <Image src={image} alt={title} fill className="object-cover" />
+        ) : null}
+      </div>
+      <div className="p-4">
+        <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#0078C0]">
+          {meta}
+        </p>
+        <h3 className="line-clamp-2 font-semibold text-[#1A2B49]">{title}</h3>
+      </div>
+    </Link>
+  );
+}
+
 export default async function RegionDetailPage({
   params,
 }: {
@@ -86,6 +128,9 @@ export default async function RegionDetailPage({
 
   let region: Region;
   let attractions: Attraction[] = [];
+  let linkedPosts: Post[] = [];
+  let linkedPhotos: PhotoFeature[] = [];
+  let linkedVideos: Video[] = [];
 
   try {
     region = await regionsApi.getBySlug(slug);
@@ -98,6 +143,66 @@ export default async function RegionDetailPage({
       attractions = attractionsResponse.data;
     } catch (err) {
       console.error("Failed to fetch attractions:", err);
+    }
+
+    try {
+      const links = await contentLinksApi.listForSource("region", region.id);
+      const postIds = links
+        .filter((link) => link.target_type === "post")
+        .map((link) => link.target_id);
+      const photoIds = links
+        .filter((link) => link.target_type === "photo")
+        .map((link) => link.target_id);
+      const videoIds = links
+        .filter((link) => link.target_type === "video")
+        .map((link) => link.target_id);
+
+      if (postIds.length > 0) {
+        const postsResponse = await postsApi.list({
+          limit: 100,
+          status: "published",
+        });
+        const postOrder = new Map(postIds.map((id, idx) => [id, idx]));
+        linkedPosts = postsResponse.data
+          .filter((item) => postOrder.has(item.id))
+          .sort(
+            (a, b) => (postOrder.get(a.id) ?? 0) - (postOrder.get(b.id) ?? 0),
+          );
+      }
+
+      if (photoIds.length > 0) {
+        const photosResult = await Promise.allSettled(
+          photoIds.map((id) => photoFeaturesApi.getById(id)),
+        );
+        const photoOrder = new Map(photoIds.map((id, idx) => [id, idx]));
+        linkedPhotos = photosResult
+          .filter(
+            (item): item is PromiseFulfilledResult<PhotoFeature> =>
+              item.status === "fulfilled",
+          )
+          .map((item) => item.value)
+          .sort(
+            (a, b) => (photoOrder.get(a.id) ?? 0) - (photoOrder.get(b.id) ?? 0),
+          );
+      }
+
+      if (videoIds.length > 0) {
+        const videosResult = await Promise.allSettled(
+          videoIds.map((id) => videosApi.getById(id)),
+        );
+        const videoOrder = new Map(videoIds.map((id, idx) => [id, idx]));
+        linkedVideos = videosResult
+          .filter(
+            (item): item is PromiseFulfilledResult<Video> =>
+              item.status === "fulfilled",
+          )
+          .map((item) => item.value)
+          .sort(
+            (a, b) => (videoOrder.get(a.id) ?? 0) - (videoOrder.get(b.id) ?? 0),
+          );
+      }
+    } catch (err) {
+      console.error("Failed to fetch linked region content:", err);
     }
   } catch (error) {
     notFound();
@@ -224,6 +329,69 @@ export default async function RegionDetailPage({
                 >
                   View All Attractions
                 </Link>
+              </div>
+            )}
+          </div>
+        )}
+
+        {(linkedPosts.length > 0 ||
+          linkedPhotos.length > 0 ||
+          linkedVideos.length > 0) && (
+          <div className="mt-12 space-y-8">
+            {linkedPosts.length > 0 && (
+              <div>
+                <h2 className="font-display text-2xl font-bold text-[#1A2B49] mb-4">
+                  Related Articles
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {linkedPosts.map((item) => (
+                    <LinkedContentCard
+                      key={item.id}
+                      href={`/blogs/${item.slug}`}
+                      title={item.title}
+                      image={item.cover_image}
+                      meta="Article"
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {linkedPhotos.length > 0 && (
+              <div>
+                <h2 className="font-display text-2xl font-bold text-[#1A2B49] mb-4">
+                  Related Photo Stories
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {linkedPhotos.map((item) => (
+                    <LinkedContentCard
+                      key={item.id}
+                      href={`/photos/${item.slug}`}
+                      title={item.title}
+                      image={item.images?.[0]?.image_url || null}
+                      meta="Photo Feature"
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {linkedVideos.length > 0 && (
+              <div>
+                <h2 className="font-display text-2xl font-bold text-[#1A2B49] mb-4">
+                  Related Videos
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {linkedVideos.map((item) => (
+                    <LinkedContentCard
+                      key={item.id}
+                      href={`/videos/${item.slug}`}
+                      title={item.title}
+                      image={item.thumbnail_url}
+                      meta="Video"
+                    />
+                  ))}
+                </div>
               </div>
             )}
           </div>

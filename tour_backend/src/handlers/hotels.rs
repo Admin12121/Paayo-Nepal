@@ -238,6 +238,11 @@ pub async fn create(
     }
 
     let service = HotelService::new(state.db.clone(), state.cache.clone());
+    let normalized_region_id = input
+        .region_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
 
     // Sanitize rich HTML description before storage (defence-in-depth)
     let sanitized_description = input.description.as_deref().map(sanitize_rich_html);
@@ -255,7 +260,7 @@ pub async fn create(
             input.amenities.as_ref(),
             input.cover_image.as_deref(),
             input.gallery.as_ref(),
-            input.region_id.as_deref(),
+            normalized_region_id,
             input.is_featured.unwrap_or(false),
         )
         .await?;
@@ -301,6 +306,12 @@ pub async fn update(
         }
     }
 
+    let normalized_region_id = input
+        .region_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+
     // Sanitize rich HTML description before storage (defence-in-depth)
     let sanitized_description = input.description.as_deref().map(sanitize_rich_html);
 
@@ -317,7 +328,7 @@ pub async fn update(
             input.amenities.as_ref(),
             input.cover_image.as_deref(),
             input.gallery.as_ref(),
-            input.region_id.as_deref(),
+            normalized_region_id,
             input.is_featured,
             input.status.as_deref(),
         )
@@ -441,15 +452,23 @@ pub async fn update_display_order(
 /// List branches for a hotel (public).
 pub async fn list_branches(
     State(state): State<AppState>,
+    user: OptionalUser,
     Path(hotel_id): Path<String>,
 ) -> Result<Json<Vec<HotelBranch>>, ApiError> {
     let service = HotelService::new(state.db.clone(), state.cache.clone());
 
-    // Verify hotel exists
-    service
+    let hotel = service
         .get_by_id(&hotel_id)
         .await?
         .ok_or_else(|| ApiError::NotFound("Hotel not found".to_string()))?;
+
+    let is_privileged = user
+        .0
+        .as_ref()
+        .map_or(false, |u| u.role == UserRole::Admin || u.role == UserRole::Editor);
+    if !is_privileged && hotel.status != ContentStatus::Published {
+        return Err(ApiError::NotFound("Hotel not found".to_string()));
+    }
 
     let branches = service.list_branches(&hotel_id).await?;
     Ok(Json(branches))
@@ -458,7 +477,7 @@ pub async fn list_branches(
 /// Add a branch to a hotel (admin/editor).
 pub async fn add_branch(
     State(state): State<AppState>,
-    _user: ActiveEditorUser,
+    user: AuthenticatedUser,
     Path(hotel_id): Path<String>,
     Json(input): Json<CreateBranchInput>,
 ) -> Result<Json<HotelBranch>, ApiError> {
@@ -469,6 +488,14 @@ pub async fn add_branch(
     }
 
     let service = HotelService::new(state.db.clone(), state.cache.clone());
+    let hotel = service
+        .get_by_id(&hotel_id)
+        .await?
+        .ok_or_else(|| ApiError::NotFound("Hotel not found".to_string()))?;
+
+    if hotel.author_id != user.id && user.role != crate::models::user::UserRole::Admin {
+        return Err(ApiError::Forbidden);
+    }
 
     let branch = service
         .add_branch(
@@ -488,11 +515,28 @@ pub async fn add_branch(
 /// Update a branch (admin/editor).
 pub async fn update_branch(
     State(state): State<AppState>,
-    _user: ActiveEditorUser,
-    Path((_hotel_id, branch_id)): Path<(String, String)>,
+    user: AuthenticatedUser,
+    Path((hotel_id, branch_id)): Path<(String, String)>,
     Json(input): Json<UpdateBranchInput>,
 ) -> Result<Json<HotelBranch>, ApiError> {
     let service = HotelService::new(state.db.clone(), state.cache.clone());
+    let hotel = service
+        .get_by_id(&hotel_id)
+        .await?
+        .ok_or_else(|| ApiError::NotFound("Hotel not found".to_string()))?;
+
+    if hotel.author_id != user.id && user.role != crate::models::user::UserRole::Admin {
+        return Err(ApiError::Forbidden);
+    }
+
+    let branch = service
+        .get_branch_by_id(&branch_id)
+        .await?
+        .ok_or_else(|| ApiError::NotFound("Branch not found".to_string()))?;
+
+    if branch.hotel_id != hotel.id {
+        return Err(ApiError::NotFound("Branch not found".to_string()));
+    }
 
     let branch = service
         .update_branch(
@@ -512,10 +556,28 @@ pub async fn update_branch(
 /// Remove a branch (admin/editor).
 pub async fn remove_branch(
     State(state): State<AppState>,
-    _user: ActiveEditorUser,
-    Path((_hotel_id, branch_id)): Path<(String, String)>,
+    user: AuthenticatedUser,
+    Path((hotel_id, branch_id)): Path<(String, String)>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let service = HotelService::new(state.db.clone(), state.cache.clone());
+    let hotel = service
+        .get_by_id(&hotel_id)
+        .await?
+        .ok_or_else(|| ApiError::NotFound("Hotel not found".to_string()))?;
+
+    if hotel.author_id != user.id && user.role != crate::models::user::UserRole::Admin {
+        return Err(ApiError::Forbidden);
+    }
+
+    let branch = service
+        .get_branch_by_id(&branch_id)
+        .await?
+        .ok_or_else(|| ApiError::NotFound("Branch not found".to_string()))?;
+
+    if branch.hotel_id != hotel.id {
+        return Err(ApiError::NotFound("Branch not found".to_string()));
+    }
+
     service.remove_branch(&branch_id).await?;
     Ok(Json(serde_json::json!({ "success": true })))
 }

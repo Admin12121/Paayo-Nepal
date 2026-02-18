@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useParams, notFound } from "next/navigation";
 import { Eye } from "lucide-react";
-import { postsApi, Post } from "@/lib/api-client";
+import { postsApi, Post, contentLinksApi } from "@/lib/api-client";
 import Image from "next/image";
 import Link from "next/link";
 import { useViewTracker } from "@/lib/hooks/use-view-tracker";
@@ -86,7 +86,6 @@ export default function BlogDetailPage() {
   useEffect(() => {
     if (slug) {
       fetchPost();
-      fetchRelatedArticles();
     }
   }, [slug]);
 
@@ -96,6 +95,7 @@ export default function BlogDetailPage() {
       setError(null);
       const data = await postsApi.getBySlug(slug);
       setPost(data);
+      await fetchRelatedArticles(data.id, slug);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to load article");
     } finally {
@@ -103,12 +103,36 @@ export default function BlogDetailPage() {
     }
   };
 
-  const fetchRelatedArticles = async () => {
+  const fetchRelatedArticles = async (postId: string, currentSlug: string) => {
     try {
-      const response = await postsApi.list({ limit: 5, status: "published" });
-      setRelatedArticles(response.data.filter((p) => p.slug !== slug));
+      const links = await contentLinksApi.listForSource("post", postId);
+      const linkedPostIds = links
+        .filter((link) => link.target_type === "post")
+        .map((link) => link.target_id);
+
+      if (linkedPostIds.length > 0) {
+        const response = await postsApi.list({
+          limit: 100,
+          status: "published",
+        });
+        const order = new Map(linkedPostIds.map((id, idx) => [id, idx]));
+        const linked = response.data
+          .filter((item) => order.has(item.id) && item.slug !== currentSlug)
+          .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+        setRelatedArticles(linked.slice(0, 5));
+        return;
+      }
+
+      const fallback = await postsApi.list({ limit: 5, status: "published" });
+      setRelatedArticles(fallback.data.filter((p) => p.slug !== currentSlug));
     } catch (err) {
       console.error("Failed to fetch related articles:", err);
+      try {
+        const fallback = await postsApi.list({ limit: 5, status: "published" });
+        setRelatedArticles(fallback.data.filter((p) => p.slug !== currentSlug));
+      } catch {
+        setRelatedArticles([]);
+      }
     }
   };
 
@@ -253,36 +277,22 @@ export default function BlogDetailPage() {
           </div>
 
           {/* Sidebar */}
-          <div className="lg:col-span-1">
-            {/* Share card */}
-            <div className="bg-white rounded-xl p-6 shadow-sm mb-6">
-              <h3 className="font-display text-lg font-bold text-[#1A2B49] mb-4">
-                Share this article
-              </h3>
-              <ShareButtons
-                title={post.title}
-                description={post.short_description || undefined}
-              />
-            </div>
-
-            {/* Related Articles */}
-            <h3 className="font-display text-lg font-bold text-[#1A2B49] mb-6 uppercase tracking-wide">
+          <aside className="lg:col-span-1 rounded-xl bg-white p-5 shadow-sm h-fit">
+            <h3 className="font-display text-lg font-bold text-[#1A2B49] mb-5 uppercase tracking-wide">
               MORE ARTICLES
             </h3>
-            <div className="space-y-6">
-              {relatedArticles.slice(0, 5).map((article) => (
+            <div className="space-y-4">
+              {relatedArticles.slice(0, 10).map((article) => (
                 <RelatedArticleCard key={article.id} article={article} />
               ))}
             </div>
-            {relatedArticles.length > 5 && (
-              <Link
-                href="/articles"
-                className="block mt-6 text-center text-[#0078C0] font-semibold hover:text-[#0068A0] transition-colors"
-              >
-                View All Articles →
-              </Link>
-            )}
-          </div>
+            <Link
+              href="/articles"
+              className="mt-6 block text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-[#0078C0] hover:text-[#0068A0]"
+            >
+              View All
+            </Link>
+          </aside>
         </div>
       </div>
     </div>

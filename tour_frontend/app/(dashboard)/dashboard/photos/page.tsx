@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Plus,
   Trash2,
@@ -37,7 +36,9 @@ import type {
   PhotoFeature,
   PhotoImage,
   CreatePhotoFeatureInput,
+  Region,
 } from "@/lib/api-client";
+import { photoFeaturesApi, regionsApi } from "@/lib/api-client";
 import {
   useListPhotosQuery,
   useCreatePhotoMutation,
@@ -77,10 +78,48 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "@/lib/utils/toast";
 
 const EMPTY_PHOTOS: PhotoFeature[] = [];
+const PHOTO_VIEW_MODE_STORAGE_KEY = "dashboard:photos:view-mode";
+
+function pickDeterministicImage(
+  photoId: string,
+  urls: Array<string | null | undefined>,
+): string | null {
+  const imageCandidates = urls.filter((url): url is string => !!url);
+  if (imageCandidates.length === 0) return null;
+
+  const seed = Array.from(photoId).reduce(
+    (acc, char) => acc + char.charCodeAt(0),
+    0,
+  );
+  return imageCandidates[seed % imageCandidates.length];
+}
+
+function resolvePhotoImageCount(
+  photo: PhotoFeature,
+  imageCounts: Record<string, number>,
+): number {
+  return (
+    imageCounts[photo.id] ?? photo.image_count ?? photo.images?.length ?? 0
+  );
+}
+
+function resolvePhotoCover(
+  photo: PhotoFeature,
+  coverMap: Record<string, string | null>,
+): string | null {
+  const cached = coverMap[photo.id];
+  if (cached) return cached;
+  if (photo.cover_image_url) return photo.cover_image_url;
+  return pickDeterministicImage(
+    photo.id,
+    (photo.images ?? []).map((img) => img.image_url),
+  );
+}
 
 function SortablePhotoCard({
   photo,
   imageCount,
+  coverImageUrl,
   rankingMode,
   canManagePhotoMeta,
   onOpenImages,
@@ -91,6 +130,7 @@ function SortablePhotoCard({
 }: {
   photo: PhotoFeature;
   imageCount: number;
+  coverImageUrl: string | null;
   rankingMode: boolean;
   canManagePhotoMeta: boolean;
   onOpenImages: (photo: PhotoFeature) => void;
@@ -112,8 +152,11 @@ function SortablePhotoCard({
   });
 
   const cover =
-    photo.images?.find((img) => !!img.image_url)?.image_url ||
-    "https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=1200&auto=format&fit=crop";
+    coverImageUrl ??
+    pickDeterministicImage(
+      photo.id,
+      (photo.images ?? []).map((img) => img.image_url),
+    );
 
   return (
     <article
@@ -127,18 +170,27 @@ function SortablePhotoCard({
       }`}
     >
       {!rankingMode && (
-        <Link
-          href={`/dashboard/photos/${photo.slug}`}
+        <button
+          type="button"
+          onClick={() => onOpenImages(photo)}
           className="absolute inset-0 z-10"
-          aria-label={`Open ${photo.title}`}
+          aria-label={`Manage images for ${photo.title}`}
         />
       )}
       <div className="relative aspect-[4/3] w-full overflow-hidden bg-slate-100">
-        <img
-          src={cover}
-          alt={photo.title}
-          className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
-        />
+        {cover ? (
+          <img
+            src={cover}
+            alt={photo.title}
+            className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-800 to-slate-600 p-4 text-center">
+            <p className="line-clamp-3 text-sm font-semibold text-white">
+              {photo.title}
+            </p>
+          </div>
+        )}
 
         <div className="absolute left-3 top-3 flex items-center gap-2">
           <Badge
@@ -184,11 +236,6 @@ function SortablePhotoCard({
             <DropdownMenuContent align="end" className="w-48">
               <DropdownMenuItem onClick={() => onOpenImages(photo)}>
                 Manage images
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link href={`/dashboard/photos/${photo.slug}`}>
-                  Open uploader page
-                </Link>
               </DropdownMenuItem>
               {canManagePhotoMeta && (
                 <>
@@ -304,12 +351,13 @@ function SortablePhotoRow({
             </button>
           )}
           <div className="min-w-0">
-            <Link
-              href={`/dashboard/photos/${photo.slug}`}
-              className="block truncate text-sm text-blue-600 hover:underline"
+            <button
+              type="button"
+              onClick={() => onOpenImages(photo)}
+              className="block truncate text-left text-sm text-blue-600 hover:underline"
             >
               {photo.title}
-            </Link>
+            </button>
             <p className="truncate text-xs text-slate-500">/{photo.slug}</p>
           </div>
         </div>
@@ -347,11 +395,6 @@ function SortablePhotoRow({
           <DropdownMenuContent align="end" className="w-44">
             <DropdownMenuItem onClick={() => onOpenImages(photo)}>
               Manage images
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href={`/dashboard/photos/${photo.slug}`}>
-                Open uploader page
-              </Link>
             </DropdownMenuItem>
             {canManagePhotoMeta && (
               <>
@@ -391,7 +434,11 @@ export default function PhotoFeaturesPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
+  const [viewMode, setViewMode] = useState<"cards" | "table">(() => {
+    if (typeof window === "undefined") return "cards";
+    const saved = window.localStorage.getItem(PHOTO_VIEW_MODE_STORAGE_KEY);
+    return saved === "table" ? "table" : "cards";
+  });
   const [rankingMode, setRankingMode] = useState(false);
   const [orderedPhotos, setOrderedPhotos] = useState<PhotoFeature[]>([]);
   const [deleteDialog, setDeleteDialog] = useState<{
@@ -419,13 +466,13 @@ export default function PhotoFeaturesPage() {
   const [newImageCaption, setNewImageCaption] = useState("");
   const [newImageFile, setNewImageFile] = useState<File | null>(null);
   const [imageCounts, setImageCounts] = useState<Record<string, number>>({});
+  const [photoCoverImages, setPhotoCoverImages] = useState<
+    Record<string, string | null>
+  >({});
+  const hydratedPhotoMetaRef = useRef<Set<string>>(new Set());
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [regions, setRegions] = useState<Region[]>([]);
   const imageInputRef = useRef<HTMLInputElement>(null);
-
-  const [deleteImageDialog, setDeleteImageDialog] = useState<{
-    open: boolean;
-    image: PhotoImage | null;
-  }>({ open: false, image: null });
 
   const {
     data: photosResponse,
@@ -452,30 +499,213 @@ export default function PhotoFeaturesPage() {
     useUpdatePhotoDisplayOrderMutation();
   const [addPhotoImage, { isLoading: addingImage }] =
     useAddPhotoImageMutation();
-  const [removePhotoImage, { isLoading: deletingImage }] =
-    useRemovePhotoImageMutation();
+  const [removePhotoImage] = useRemovePhotoImageMutation();
 
-  const { data: images = [], isLoading: imagesLoading } =
-    useListPhotoImagesQuery(imagesModal.photo?.id ?? "", {
-      skip: !imagesModal.open || !imagesModal.photo,
-      refetchOnMountOrArgChange: true,
-      refetchOnFocus: true,
-    });
+  const {
+    data: images = [],
+    isLoading: imagesLoading,
+    refetch: refetchImages,
+  } = useListPhotoImagesQuery(imagesModal.photo?.id ?? "", {
+    skip: !imagesModal.open || !imagesModal.photo,
+    refetchOnMountOrArgChange: true,
+    refetchOnFocus: true,
+  });
 
   useEffect(() => {
-    if (imagesModal.open && imagesModal.photo) {
-      setImageCounts((prev) => ({
-        ...prev,
-        [imagesModal.photo.id]: images.length,
-      }));
-    }
+    if (!imagesModal.open || !imagesModal.photo) return;
+
+    const photoId = imagesModal.photo.id;
+    const cover = pickDeterministicImage(
+      photoId,
+      images.map((image) => image.image_url),
+    );
+
+    setImageCounts((prev) => {
+      if (prev[photoId] === images.length) return prev;
+      return { ...prev, [photoId]: images.length };
+    });
+    setPhotoCoverImages((prev) => {
+      if (prev[photoId] === cover) return prev;
+      return { ...prev, [photoId]: cover };
+    });
   }, [images, imagesModal.open, imagesModal.photo]);
 
   const photos = photosResponse?.data ?? EMPTY_PHOTOS;
   const totalPages = photosResponse?.total_pages ?? 1;
 
+  const refreshPhotoMeta = useCallback(
+    async (photo: PhotoFeature) => {
+      try {
+        const photoImages = await photoFeaturesApi.listImages(photo.id);
+        const cover = pickDeterministicImage(
+          photo.id,
+          photoImages.map((img) => img.image_url),
+        );
+        setImageCounts((prev) => {
+          if (prev[photo.id] === photoImages.length) return prev;
+          return { ...prev, [photo.id]: photoImages.length };
+        });
+        setPhotoCoverImages((prev) => {
+          if (prev[photo.id] === cover) return prev;
+          return { ...prev, [photo.id]: cover };
+        });
+      } catch {
+        const fallbackCover = resolvePhotoCover(photo, photoCoverImages);
+        const fallbackCount = resolvePhotoImageCount(photo, imageCounts);
+        setImageCounts((prev) => ({
+          ...prev,
+          [photo.id]: prev[photo.id] ?? fallbackCount,
+        }));
+        setPhotoCoverImages((prev) => ({
+          ...prev,
+          [photo.id]: prev[photo.id] ?? fallbackCover,
+        }));
+      }
+    },
+    [imageCounts, photoCoverImages],
+  );
+
   useEffect(() => {
     setOrderedPhotos(photos);
+  }, [photos]);
+
+  useEffect(() => {
+    window.localStorage.setItem(PHOTO_VIEW_MODE_STORAGE_KEY, viewMode);
+  }, [viewMode]);
+
+  useEffect(() => {
+    const loadRegions = async () => {
+      try {
+        const response = await regionsApi.list({ limit: 100 });
+        setRegions(response.data);
+      } catch (error) {
+        console.error(error);
+        toast.error("Failed to load regions");
+      }
+    };
+
+    loadRegions();
+  }, []);
+
+  useEffect(() => {
+    if (photos.length === 0) return;
+    let cancelled = false;
+
+    const loadCounts = async () => {
+      const currentPhotoIds = new Set(photos.map((photo) => photo.id));
+      hydratedPhotoMetaRef.current.forEach((id) => {
+        if (!currentPhotoIds.has(id)) {
+          hydratedPhotoMetaRef.current.delete(id);
+        }
+      });
+
+      // Seed from list payload metadata first (when available).
+      setImageCounts((prev) => {
+        const next = { ...prev };
+        let changed = false;
+        for (const photo of photos) {
+          if (photo.image_count == null) continue;
+          if (next[photo.id] !== photo.image_count) {
+            next[photo.id] = photo.image_count;
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+      setPhotoCoverImages((prev) => {
+        const next = { ...prev };
+        let changed = false;
+        for (const photo of photos) {
+          const coverFromPayload =
+            photo.cover_image_url ??
+            pickDeterministicImage(
+              photo.id,
+              (photo.images ?? []).map((img) => img.image_url),
+            );
+          if (next[photo.id] !== coverFromPayload) {
+            next[photo.id] = coverFromPayload;
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+
+      const uncachedPhotos = photos.filter(
+        (photo) =>
+          !hydratedPhotoMetaRef.current.has(photo.id) &&
+          photo.image_count == null &&
+          !Array.isArray(photo.images),
+      );
+
+      if (uncachedPhotos.length === 0) return;
+
+      const pairs = await Promise.all(
+        uncachedPhotos.map(async (photo) => {
+          try {
+            const photoImages = await photoFeaturesApi.listImages(photo.id);
+            return {
+              id: photo.id,
+              count: photoImages.length,
+              cover: pickDeterministicImage(
+                photo.id,
+                photoImages.map((img) => img.image_url),
+              ),
+            } as const;
+          } catch {
+            return {
+              id: photo.id,
+              count: photo.image_count ?? photo.images?.length ?? 0,
+              cover:
+                photo.cover_image_url ??
+                pickDeterministicImage(
+                  photo.id,
+                  (photo.images ?? []).map((img) => img.image_url),
+                ),
+            } as const;
+          }
+        }),
+      );
+
+      if (cancelled) return;
+
+      setImageCounts((prev) => {
+        const next = { ...prev };
+        let changed = false;
+        for (const { id, count } of pairs) {
+          if (next[id] !== count) {
+            next[id] = count;
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+      setPhotoCoverImages((prev) => {
+        const next = { ...prev };
+        let changed = false;
+        for (const { id, cover } of pairs) {
+          if (next[id] !== cover) {
+            next[id] = cover;
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+
+      for (const { id } of pairs) {
+        hydratedPhotoMetaRef.current.add(id);
+      }
+      for (const photo of photos) {
+        if (photo.image_count != null || Array.isArray(photo.images)) {
+          hydratedPhotoMetaRef.current.add(photo.id);
+        }
+      }
+    };
+
+    void loadCounts();
+
+    return () => {
+      cancelled = true;
+    };
   }, [photos]);
 
   const filteredPhotos = useMemo(
@@ -492,7 +722,7 @@ export default function PhotoFeaturesPage() {
   );
 
   const totalImages = filteredPhotos.reduce(
-    (sum, photo) => sum + (imageCounts[photo.id] ?? photo.images?.length ?? 0),
+    (sum, photo) => sum + resolvePhotoImageCount(photo, imageCounts),
     0,
   );
 
@@ -621,7 +851,19 @@ export default function PhotoFeaturesPage() {
   };
 
   const openImagesModal = (photo: PhotoFeature) => {
+    const fallbackCover = resolvePhotoCover(photo, photoCoverImages);
+    const fallbackCount = resolvePhotoImageCount(photo, imageCounts);
+
+    setImageCounts((prev) => {
+      if (prev[photo.id] !== undefined) return prev;
+      return { ...prev, [photo.id]: fallbackCount };
+    });
+    setPhotoCoverImages((prev) => {
+      if (prev[photo.id] !== undefined) return prev;
+      return { ...prev, [photo.id]: fallbackCover };
+    });
     setImagesModal({ open: true, photo });
+    void refreshPhotoMeta(photo);
   };
 
   const handleAddImage = async () => {
@@ -672,12 +914,9 @@ export default function PhotoFeaturesPage() {
       }).unwrap();
 
       await refetchPhotos();
+      await refetchImages();
+      await refreshPhotoMeta(imagesModal.photo);
       toast.success("Image added");
-
-      setImageCounts((prev) => ({
-        ...prev,
-        [imagesModal.photo!.id]: (prev[imagesModal.photo!.id] ?? 0) + 1,
-      }));
 
       setNewImageCaption("");
       setNewImageFile(null);
@@ -691,20 +930,22 @@ export default function PhotoFeaturesPage() {
     }
   };
 
-  const handleDeleteImage = async () => {
+  const handleDeleteImage = async (image: PhotoImage) => {
     if (!canUploadPhotoImages) {
       toast.error("You don't have permission to remove images");
       return;
     }
-    if (!imagesModal.photo || !deleteImageDialog.image) return;
+    if (!imagesModal.photo) return;
+    if (!window.confirm("Are you sure you want to remove this image?")) return;
 
     try {
       await removePhotoImage({
         photoId: imagesModal.photo.id,
-        imageId: deleteImageDialog.image.id,
+        imageId: image.id,
       }).unwrap();
       await refetchPhotos();
-      setDeleteImageDialog({ open: false, image: null });
+      await refetchImages();
+      await refreshPhotoMeta(imagesModal.photo);
       toast.success("Image removed");
     } catch {
       toast.error("Failed to remove image");
@@ -777,6 +1018,25 @@ export default function PhotoFeaturesPage() {
       </div>
       <div>
         <label className="mb-1 block text-sm font-medium text-slate-700">
+          Region
+        </label>
+        <select
+          value={formData.region_id || ""}
+          onChange={(e) =>
+            setFormData((prev) => ({ ...prev, region_id: e.target.value }))
+          }
+          className="h-10 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+        >
+          <option value="">Select region...</option>
+          {regions.map((region) => (
+            <option key={region.id} value={region.id}>
+              {region.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className="mb-1 block text-sm font-medium text-slate-700">
           Description
         </label>
         <Textarea
@@ -803,18 +1063,25 @@ export default function PhotoFeaturesPage() {
     </div>
   );
 
-  const heroImage =
-    filteredPhotos[0]?.images?.find((img) => !!img.image_url)?.image_url ||
-    "https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=1600&auto=format&fit=crop";
+  const heroImage = useMemo(() => {
+    const candidates = filteredPhotos
+      .map((photo) => resolvePhotoCover(photo, photoCoverImages))
+      .filter((url): url is string => !!url);
+    if (candidates.length === 0) return null;
+    const randomIndex = Math.floor(Math.random() * candidates.length);
+    return candidates[randomIndex];
+  }, [filteredPhotos, photoCoverImages]);
 
   return (
     <div className="space-y-6">
       <section className="relative overflow-hidden rounded-2xl border bg-slate-900 text-white">
-        <img
-          src={heroImage}
-          alt="Photo cover"
-          className="absolute inset-0 h-full w-full object-cover opacity-30"
-        />
+        {heroImage ? (
+          <img
+            src={heroImage}
+            alt="Photo cover"
+            className="absolute inset-0 h-full w-full object-cover opacity-30"
+          />
+        ) : null}
         <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-900/80 to-slate-900/30" />
 
         <div className="relative z-10 p-6 sm:p-8">
@@ -949,9 +1216,8 @@ export default function PhotoFeaturesPage() {
                 <SortablePhotoCard
                   key={photo.id}
                   photo={photo}
-                  imageCount={
-                    imageCounts[photo.id] ?? photo.images?.length ?? 0
-                  }
+                  imageCount={resolvePhotoImageCount(photo, imageCounts)}
+                  coverImageUrl={resolvePhotoCover(photo, photoCoverImages)}
                   rankingMode={rankingMode && canRankPhotos}
                   canManagePhotoMeta={canManagePhotoMeta}
                   onOpenImages={openImagesModal}
@@ -995,9 +1261,7 @@ export default function PhotoFeaturesPage() {
                       <SortablePhotoRow
                         key={photo.id}
                         photo={photo}
-                        imageCount={
-                          imageCounts[photo.id] ?? photo.images?.length ?? 0
-                        }
+                        imageCount={resolvePhotoImageCount(photo, imageCounts)}
                         rankEnabled={rankingMode && canRankPhotos}
                         canManagePhotoMeta={canManagePhotoMeta}
                         onOpenImages={openImagesModal}
@@ -1163,9 +1427,7 @@ export default function PhotoFeaturesPage() {
                       type="button"
                       variant="ghost"
                       size="sm"
-                      onClick={() =>
-                        setDeleteImageDialog({ open: true, image })
-                      }
+                      onClick={() => void handleDeleteImage(image)}
                       className="absolute right-2 top-2 h-7 rounded-full bg-black/50 px-2 text-white opacity-0 transition hover:bg-red-600 hover:text-white group-hover:opacity-100"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -1186,17 +1448,6 @@ export default function PhotoFeaturesPage() {
         confirmLabel="Delete"
         variant="danger"
         isLoading={deleting}
-      />
-
-      <ConfirmDialog
-        isOpen={deleteImageDialog.open}
-        onClose={() => setDeleteImageDialog({ open: false, image: null })}
-        onConfirm={handleDeleteImage}
-        title="Remove Image"
-        message="Are you sure you want to remove this image?"
-        confirmLabel="Remove"
-        variant="danger"
-        isLoading={deletingImage}
       />
     </div>
   );

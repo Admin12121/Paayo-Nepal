@@ -101,11 +101,20 @@ export const videosApi = baseApi.injectEndpoints({
      * Invalidates the video list so it refetches with the new item.
      */
     createVideo: builder.mutation<Video, CreateVideoInput>({
-      query: (data) => ({
-        url: "/videos",
-        method: "POST",
-        body: data,
-      }),
+      query: (data) => {
+        const normalized = {
+          ...data,
+          region_id: data.region_id || undefined,
+          description: data.description || undefined,
+          video_id: data.video_id || undefined,
+          thumbnail_url: data.thumbnail_url || undefined,
+        };
+        return {
+          url: "/videos",
+          method: "POST",
+          body: normalized,
+        };
+      },
       invalidatesTags: [
         { type: "Video", id: "LIST" },
         { type: "DashboardStats" },
@@ -122,11 +131,20 @@ export const videosApi = baseApi.injectEndpoints({
       Video,
       { id: string; data: Partial<CreateVideoInput> & { status?: string } }
     >({
-      query: ({ id, data }) => ({
-        url: `/videos/${id}`,
-        method: "PUT",
-        body: data,
-      }),
+      query: ({ id, data }) => {
+        const normalized = {
+          ...data,
+          region_id: data.region_id || undefined,
+          description: data.description || undefined,
+          video_id: data.video_id || undefined,
+          thumbnail_url: data.thumbnail_url || undefined,
+        };
+        return {
+          url: `/videos/${id}`,
+          method: "PUT",
+          body: normalized,
+        };
+      },
       invalidatesTags: (result, _error, { id }) => [
         { type: "Video", id },
         { type: "Video", id: result?.slug || id },

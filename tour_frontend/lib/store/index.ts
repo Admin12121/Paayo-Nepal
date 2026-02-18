@@ -56,10 +56,7 @@ export {
   useListUpcomingEventsQuery,
   useGetEventBySlugQuery,
 } from "./api/eventsApi";
-export type {
-  ListEventsParams,
-  UpcomingEventsParams,
-} from "./api/eventsApi";
+export type { ListEventsParams, UpcomingEventsParams } from "./api/eventsApi";
 
 // ── Attractions API ──────────────────────────────────────────────────────
 export {
@@ -221,11 +218,20 @@ export {
 export type { ListNotificationsParams } from "./api/notificationsApi";
 
 // ── Search API ───────────────────────────────────────────────────────────
-export {
-  useSearchQuery,
-  useLazySearchQuery,
-} from "./api/searchApi";
+export { useSearchQuery, useLazySearchQuery } from "./api/searchApi";
 export type { SearchParams } from "./api/searchApi";
+
+// ── Content Links API ─────────────────────────────────────────────────────
+export {
+  useListContentLinksForSourceQuery,
+  useListContentLinksForTargetQuery,
+  useCountContentLinksForSourceQuery,
+  useCreateContentLinkMutation,
+  useUpdateContentLinkMutation,
+  useDeleteContentLinkMutation,
+  useSetContentLinksForSourceMutation,
+  useClearContentLinksForSourceMutation,
+} from "./api/contentLinksApi";
 
 // ── Admin Stats API ──────────────────────────────────────────────────────
 export {

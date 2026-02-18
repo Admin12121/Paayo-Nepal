@@ -79,6 +79,7 @@ export interface ListPostsParams {
   limit?: number;
   status?: string;
   type?: string;
+  region_id?: string;
   sort_by?: string;
   is_featured?: boolean;
 }
@@ -106,6 +107,7 @@ export const postsApi = baseApi.injectEndpoints({
           limit: p.limit,
           status: p.status,
           post_type: p.type,
+          region_id: p.region_id,
           sort_by: p.sort_by,
           is_featured: p.is_featured,
         })}`;

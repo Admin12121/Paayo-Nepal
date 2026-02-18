@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { notFound, useParams } from "next/navigation";
 import { eventsApi, Event } from "@/lib/api-client";
+import { contentLinksApi, postsApi } from "@/lib/api-client";
 import Image from "next/image";
 import Link from "next/link";
 import { Calendar, Clock, MapPin, Eye } from "lucide-react";
@@ -90,7 +91,6 @@ export default function EventDetailPage() {
   useEffect(() => {
     if (slug) {
       fetchEvent();
-      fetchRelatedEvents();
     }
   }, [slug]);
 
@@ -100,6 +100,7 @@ export default function EventDetailPage() {
       setError(null);
       const data = await eventsApi.getBySlug(slug);
       setEvent(data);
+      await fetchRelatedEvents(data.id, slug);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to load event");
     } finally {
@@ -107,12 +108,37 @@ export default function EventDetailPage() {
     }
   };
 
-  const fetchRelatedEvents = async () => {
+  const fetchRelatedEvents = async (eventId: string, currentSlug: string) => {
     try {
-      const response = await eventsApi.upcoming({ limit: 5 });
-      setRelatedEvents(response.data.filter((e) => e.slug !== slug));
+      const links = await contentLinksApi.listForSource("post", eventId);
+      const linkedPostIds = links
+        .filter((link) => link.target_type === "post")
+        .map((link) => link.target_id);
+
+      if (linkedPostIds.length > 0) {
+        const response = await postsApi.list({
+          limit: 100,
+          status: "published",
+          type: "event",
+        });
+        const order = new Map(linkedPostIds.map((id, idx) => [id, idx]));
+        const linkedEvents = response.data
+          .filter((item) => order.has(item.id) && item.slug !== currentSlug)
+          .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+        setRelatedEvents(linkedEvents.slice(0, 5));
+        return;
+      }
+
+      const fallback = await eventsApi.upcoming({ limit: 5 });
+      setRelatedEvents(fallback.data.filter((e) => e.slug !== currentSlug));
     } catch (err) {
       console.error("Failed to fetch related events:", err);
+      try {
+        const fallback = await eventsApi.upcoming({ limit: 5 });
+        setRelatedEvents(fallback.data.filter((e) => e.slug !== currentSlug));
+      } catch {
+        setRelatedEvents([]);
+      }
     }
   };
 
@@ -283,54 +309,14 @@ export default function EventDetailPage() {
           </div>
 
           {/* Sidebar */}
-          <div className="lg:col-span-1">
-            {/* Quick Info Card */}
-            <div className="bg-white rounded-xl p-6 shadow-sm mb-6 sticky top-24">
-              <h3 className="font-display text-xl font-bold text-[#1A2B49] mb-4">
-                Event Information
-              </h3>
-              <div className="space-y-4">
-                <div>
-                  <p className="text-sm text-gray-600 mb-1">Status</p>
-                  <span className="inline-block px-3 py-1 bg-green-100 text-green-700 text-sm font-semibold rounded-full">
-                    Upcoming
-                  </span>
-                </div>
-                {event.is_featured && (
-                  <div>
-                    <p className="text-sm text-gray-600 mb-1">Featured</p>
-                    <span className="inline-block px-3 py-1 bg-orange-100 text-orange-700 text-sm font-semibold rounded-full">
-                      Featured Event
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              {/* CTA Button */}
-              <button className="w-full mt-6 py-3 bg-[#0078C0] text-white rounded-full hover:bg-[#0068A0] transition-colors font-semibold">
-                Get Directions
-              </button>
-            </div>
-
-            {/* Share Card */}
-            <div className="bg-white rounded-xl p-6 shadow-sm mb-6">
-              <h3 className="font-display text-xl font-bold text-[#1A2B49] mb-4">
-                Share this event
-              </h3>
-              <ShareButtons
-                title={event.title}
-                description={event.short_description || undefined}
-              />
-            </div>
-
-            {/* Related Events */}
+          <aside className="lg:col-span-1 rounded-xl bg-white p-5 shadow-sm h-fit">
             {relatedEvents.length > 0 && (
-              <div className="bg-white rounded-xl p-6 shadow-sm">
-                <h3 className="font-display text-xl font-bold text-[#1A2B49] mb-6">
+              <>
+                <h3 className="font-display text-lg font-bold text-[#1A2B49] mb-5 uppercase tracking-wide">
                   Related Events
                 </h3>
-                <div className="space-y-5">
-                  {relatedEvents.slice(0, 4).map((relatedEvent) => (
+                <div className="space-y-4">
+                  {relatedEvents.slice(0, 10).map((relatedEvent) => (
                     <RelatedEventCard
                       key={relatedEvent.id}
                       event={relatedEvent}
@@ -339,13 +325,13 @@ export default function EventDetailPage() {
                 </div>
                 <Link
                   href="/events"
-                  className="block text-center mt-6 text-[#0078C0] font-semibold hover:text-[#0068A0] transition-colors"
+                  className="mt-6 block text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-[#0078C0] hover:text-[#0068A0]"
                 >
-                  View All Events →
+                  View All
                 </Link>
-              </div>
+              </>
             )}
-          </div>
+          </aside>
         </div>
       </div>
     </div>

@@ -15,46 +15,45 @@ export async function PhotoFeaturesSection() {
 
   if (!photos || photos.length === 0) return <PhotoFeaturesSkeleton />;
 
-  // Split into top row (first 2) and bottom row (next 3)
-  const topRow = photos.slice(0, 2);
-  const bottomRow = photos.slice(2, 5);
+  const lead = photos[0];
+  const sideItems = photos.slice(1, 5);
 
   return (
-    <section className="py-10 px-6 bg-white">
+    <section className="bg-white px-6 py-7 md:py-8">
       <div className="max-w-[1400px] mx-auto">
         <SectionHeading title="PHOTO FEATURES" />
 
-        {/* Top row - 2 large cards */}
-        {topRow.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
-            {topRow.map((photo) => (
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-12">
+          {lead ? (
+            <ImageCard
+              key={lead.id}
+              src={
+                lead.url || (lead.filename ? `/uploads/${lead.filename}` : "")
+              }
+              alt={lead.alt || lead.original_name}
+              title={lead.caption || lead.original_name}
+              href="/photos"
+              className="h-[210px] md:col-span-6 md:h-[320px]"
+            />
+          ) : null}
+          <div className="grid grid-cols-2 gap-3 md:col-span-6">
+            {sideItems.map((photo) => (
               <ImageCard
                 key={photo.id}
-                src={photo.filename}
+                src={
+                  photo.url ||
+                  (photo.filename ? `/uploads/${photo.filename}` : "")
+                }
                 alt={photo.alt || photo.original_name}
                 title={photo.caption || photo.original_name}
-                className="h-[469px]"
+                href="/photos"
+                className="h-[100px] md:h-[153px]"
               />
             ))}
           </div>
-        )}
+        </div>
 
-        {/* Bottom row - 3 smaller cards */}
-        {bottomRow.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            {bottomRow.map((photo) => (
-              <ImageCard
-                key={photo.id}
-                src={photo.filename}
-                alt={photo.alt || photo.original_name}
-                title={photo.caption || photo.original_name}
-                className="h-[253px]"
-              />
-            ))}
-          </div>
-        )}
-
-        <ViewMoreButton />
+        <ViewMoreButton href="/photos" />
       </div>
     </section>
   );

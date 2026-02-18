@@ -20,6 +20,12 @@ pub struct PhotoFeature {
     pub is_featured: bool,
     pub like_count: i32,
     pub view_count: i32,
+    #[serde(default)]
+    #[sqlx(default)]
+    pub image_count: Option<i64>,
+    #[serde(default)]
+    #[sqlx(default)]
+    pub cover_image_url: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub deleted_at: Option<DateTime<Utc>>,
@@ -53,6 +59,8 @@ pub struct PhotoFeatureWithImages {
     pub is_featured: bool,
     pub like_count: i32,
     pub view_count: i32,
+    pub image_count: Option<i64>,
+    pub cover_image_url: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub deleted_at: Option<DateTime<Utc>>,
@@ -74,6 +82,17 @@ impl PhotoFeatureWithImages {
             is_featured: feature.is_featured,
             like_count: feature.like_count,
             view_count: feature.view_count,
+            image_count: Some(images.len() as i64),
+            cover_image_url: images
+                .iter()
+                .min_by(|a, b| {
+                    let a_order = a.display_order.unwrap_or(i32::MAX);
+                    let b_order = b.display_order.unwrap_or(i32::MAX);
+                    a_order
+                        .cmp(&b_order)
+                        .then_with(|| a.created_at.cmp(&b.created_at))
+                })
+                .map(|img| img.image_url.clone()),
             created_at: feature.created_at,
             updated_at: feature.updated_at,
             deleted_at: feature.deleted_at,

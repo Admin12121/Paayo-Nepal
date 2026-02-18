@@ -9,7 +9,13 @@ use governor::{
     state::{InMemoryState, NotKeyed},
     Quota, RateLimiter,
 };
-use std::{collections::HashMap, net::IpAddr, num::NonZeroU32, sync::Arc, time::Duration};
+use std::{
+    collections::HashMap,
+    net::IpAddr,
+    num::NonZeroU32,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 use tokio::sync::RwLock;
 
 use crate::extractors::auth::AuthenticatedUser;
@@ -50,7 +56,7 @@ pub fn check_rate_limit(limiter: &SharedRateLimiter) -> Result<(), RateLimitErro
 /// deployments behind a load balancer, consider a Redis-based approach.
 #[derive(Clone)]
 pub struct PerIpRateLimiter {
-    buckets: Arc<RwLock<HashMap<IpAddr, Arc<RateLimiter<NotKeyed, InMemoryState, DefaultClock>>>>>,
+    buckets: Arc<RwLock<HashMap<IpAddr, LimiterBucket>>>,
     quota: Quota,
     cleanup_after: Duration,
 }
@@ -72,26 +78,13 @@ impl PerIpRateLimiter {
     /// Check whether the given IP address is within its rate limit.
     /// Returns `Ok(())` if the request is allowed, `Err(RateLimitError)` if not.
     pub async fn check(&self, ip: IpAddr) -> Result<(), RateLimitError> {
-        // Fast path: read lock to check an existing bucket.
-        {
-            let buckets = self.buckets.read().await;
-            if let Some(limiter) = buckets.get(&ip) {
-                return match limiter.check() {
-                    Ok(_) => Ok(()),
-                    Err(_) => Err(RateLimitError),
-                };
-            }
-        }
-
-        // Slow path: need to insert a new bucket.
         let mut buckets = self.buckets.write().await;
-
-        // Double-check after acquiring write lock.
-        let limiter = buckets
+        let entry = buckets
             .entry(ip)
-            .or_insert_with(|| Arc::new(RateLimiter::direct(self.quota)));
+            .or_insert_with(|| LimiterBucket::new(self.quota));
+        entry.last_seen = Instant::now();
 
-        match limiter.check() {
+        match entry.limiter.check() {
             Ok(_) => Ok(()),
             Err(_) => Err(RateLimitError),
         }
@@ -102,21 +95,9 @@ impl PerIpRateLimiter {
     pub async fn cleanup(&self) {
         let mut buckets = self.buckets.write().await;
         let before = buckets.len();
-
-        // governor doesn't expose "last used" directly, but we can remove
-        // buckets whose token count has fully replenished (i.e., they are idle).
-        // A fully-replenished bucket means the IP hasn't hit the limiter recently.
-        buckets.retain(|_ip, limiter| {
-            // If check() succeeds, the bucket has capacity — meaning it's been
-            // idle long enough for tokens to refill. We keep it only if it's
-            // still partially consumed (i.e., check would succeed but we undo it).
-            // For simplicity, we just let all buckets that pass check() be removed
-            // after the cleanup_after period. In practice, governor replenishes
-            // tokens over time, so a full bucket is likely idle.
-            //
-            // A pragmatic approach: just remove if check succeeds (bucket is full).
-            limiter.check().is_err()
-        });
+        let now = Instant::now();
+        let ttl = self.cleanup_after;
+        buckets.retain(|_ip, entry| now.duration_since(entry.last_seen) <= ttl);
 
         let removed = before - buckets.len();
         if removed > 0 {
@@ -218,7 +199,7 @@ fn extract_client_ip(request: &Request) -> IpAddr {
 /// is appropriate for public/unauthenticated routes.
 #[derive(Clone)]
 pub struct PerUserRateLimiter {
-    buckets: Arc<RwLock<HashMap<String, Arc<RateLimiter<NotKeyed, InMemoryState, DefaultClock>>>>>,
+    buckets: Arc<RwLock<HashMap<String, LimiterBucket>>>,
     quota: Quota,
     cleanup_after: Duration,
 }
@@ -239,25 +220,13 @@ impl PerUserRateLimiter {
 
     /// Check whether the given key is within its rate limit.
     pub async fn check(&self, key: String) -> Result<(), RateLimitError> {
-        // Fast path: read lock to check an existing bucket.
-        {
-            let buckets = self.buckets.read().await;
-            if let Some(limiter) = buckets.get(&key) {
-                return match limiter.check() {
-                    Ok(_) => Ok(()),
-                    Err(_) => Err(RateLimitError),
-                };
-            }
-        }
-
-        // Slow path: need to insert a new bucket.
         let mut buckets = self.buckets.write().await;
-
-        let limiter = buckets
+        let entry = buckets
             .entry(key)
-            .or_insert_with(|| Arc::new(RateLimiter::direct(self.quota)));
+            .or_insert_with(|| LimiterBucket::new(self.quota));
+        entry.last_seen = Instant::now();
 
-        match limiter.check() {
+        match entry.limiter.check() {
             Ok(_) => Ok(()),
             Err(_) => Err(RateLimitError),
         }
@@ -267,7 +236,9 @@ impl PerUserRateLimiter {
     pub async fn cleanup(&self) {
         let mut buckets = self.buckets.write().await;
         let before = buckets.len();
-        buckets.retain(|_key, limiter| limiter.check().is_err());
+        let now = Instant::now();
+        let ttl = self.cleanup_after;
+        buckets.retain(|_key, entry| now.duration_since(entry.last_seen) <= ttl);
         let removed = before - buckets.len();
         if removed > 0 {
             tracing::debug!(
@@ -288,6 +259,21 @@ impl PerUserRateLimiter {
                 self.cleanup().await;
             }
         })
+    }
+}
+
+#[derive(Clone)]
+struct LimiterBucket {
+    limiter: Arc<RateLimiter<NotKeyed, InMemoryState, DefaultClock>>,
+    last_seen: Instant,
+}
+
+impl LimiterBucket {
+    fn new(quota: Quota) -> Self {
+        Self {
+            limiter: Arc::new(RateLimiter::direct(quota)),
+            last_seen: Instant::now(),
+        }
     }
 }
 

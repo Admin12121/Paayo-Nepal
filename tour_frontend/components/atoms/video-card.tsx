@@ -1,67 +1,69 @@
-import React from 'react';
-import { Eye } from 'lucide-react';
+import React from "react";
+import Link from "next/link";
+import { Eye, Play } from "lucide-react";
 
 interface VideoCardProps {
   thumbnail: string;
   title: string;
   duration: string;
   views: number;
-  channel: string;
-  channelImage: string;
+  channel?: string;
+  channelImage?: string;
   date?: string;
+  href?: string;
 }
 
-export function VideoCard({ 
-  thumbnail, 
-  title, 
-  duration, 
+export function VideoCard({
+  thumbnail,
+  title,
+  duration,
   views,
-  channel,
-  channelImage,
-  date = "july 15 2025"
+  date = "Jul 15, 2025",
+  href = "#",
 }: VideoCardProps) {
-  // Format views count
   const formatViews = (count: number) => {
-    if (count >= 1000) {
-      return `${(count / 1000).toFixed(0)}K`;
-    }
+    if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
+    if (count >= 1_000) return `${(count / 1_000).toFixed(0)}K`;
     return count.toString();
   };
 
   return (
-    <div className="space-y-3">
-      <div className="relative overflow-hidden rounded-[10px] aspect-video bg-gray-200 group cursor-pointer">
-        <img 
-          src={thumbnail} 
-          alt={title}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-        />
-        
-        {/* View count badge - top right */}
-        <div className="absolute top-3 right-3 bg-black/70 px-2.5 py-1 rounded-md flex items-center gap-1.5 text-white text-xs font-medium">
-          <Eye className="w-3.5 h-3.5" />
-          <span>{views}k</span>
+    <Link href={href} className="block">
+      <div className="group space-y-2.5">
+        <div className="relative aspect-video overflow-hidden rounded-xl bg-gray-200">
+          {thumbnail ? (
+            <img
+              src={thumbnail}
+              alt={title}
+              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center bg-gray-800">
+              <Play className="h-8 w-8 text-white/60" />
+            </div>
+          )}
+
+          <div className="absolute right-2 top-2 flex items-center gap-1 rounded bg-black/70 px-2 py-1 text-[11px] font-medium text-white">
+            <Eye className="h-3 w-3" />
+            <span>{formatViews(views)}</span>
+          </div>
+
+          {duration && (
+            <div className="absolute bottom-2 right-2 rounded bg-black/70 px-2 py-0.5 text-[11px] font-medium text-white">
+              {duration}
+            </div>
+          )}
         </div>
-        
-        {/* Duration badge - bottom right */}
-        <div className="absolute bottom-10 right-3 bg-black/70 px-2.5 py-1 rounded-md text-white text-xs font-medium">
-          {duration}
-        </div>
-        
-        {/* Red progress bar at bottom */}
-        <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-gray-800/50">
-          <div className="h-full w-1/4 bg-red-600"></div>
+
+        <div className="space-y-1.5">
+          <h4 className="line-clamp-2 text-sm font-semibold leading-snug text-[#1E1E1E] transition-colors group-hover:text-[#0078C0]">
+            {title}
+          </h4>
+          <p className="text-xs text-[#868383]">
+            {date} • {formatViews(views)} views
+          </p>
         </div>
       </div>
-      
-      <div className="space-y-1.5">
-        <h4 className="text-base font-medium text-[#1E1E1E] line-clamp-2 leading-snug">
-          {title}
-        </h4>
-        <p className="text-sm text-[#868383]">
-          {date} • {formatViews(views * 100)} views
-        </p>
-      </div>
-    </div>
+    </Link>
   );
 }

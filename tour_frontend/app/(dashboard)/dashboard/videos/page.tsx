@@ -11,6 +11,7 @@ import {
   CheckCircle,
   ExternalLink,
   GripVertical,
+  MoreHorizontal,
 } from "lucide-react";
 import {
   closestCenter,
@@ -31,7 +32,12 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { Video as VideoType, CreateVideoInput } from "@/lib/api-client";
+import {
+  type Video as VideoType,
+  type CreateVideoInput,
+  type Region,
+  regionsApi,
+} from "@/lib/api-client";
 import {
   useListVideosQuery,
   useCreateVideoMutation,
@@ -45,6 +51,7 @@ import Input from "@/components/ui/input";
 import Select from "@/components/ui/select";
 import Textarea from "@/components/ui/Textarea";
 import Checkbox from "@/components/ui/checkbox";
+import ImageUpload from "@/components/ui/ImageUpload";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import Pagination from "@/components/ui/Pagination";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
@@ -57,6 +64,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { toast } from "@/lib/utils/toast";
 
 const EMPTY_VIDEOS: VideoType[] = [];
@@ -159,29 +173,43 @@ function DraggableVideoRow({
         {new Date(video.created_at).toLocaleDateString()}
       </TableCell>
       <TableCell className="whitespace-nowrap text-right">
-        <div className="flex items-center justify-end gap-2">
-          {video.status === "draft" && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onPublish(video)}
-              title="Publish"
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-8 w-8">
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44">
+            {video.status === "draft" && (
+              <DropdownMenuItem onClick={() => onPublish(video)}>
+                <CheckCircle className="mr-2 h-4 w-4" />
+                Publish
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem asChild>
+              <a
+                href={video.video_url}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <ExternalLink className="mr-2 h-4 w-4" />
+                Open URL
+              </a>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => onEdit(video)}>
+              <Edit className="mr-2 h-4 w-4" />
+              Edit
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              variant="destructive"
+              onClick={() => onDelete(video)}
             >
-              <CheckCircle className="w-4 h-4" />
-            </Button>
-          )}
-          <a href={video.video_url} target="_blank" rel="noopener noreferrer">
-            <Button variant="ghost" size="sm" title="Open URL">
-              <ExternalLink className="w-4 h-4" />
-            </Button>
-          </a>
-          <Button variant="ghost" size="sm" onClick={() => onEdit(video)}>
-            <Edit className="w-4 h-4" />
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => onDelete(video)}>
-            <Trash2 className="w-4 h-4 text-red-600" />
-          </Button>
-        </div>
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </TableCell>
     </TableRow>
   );
@@ -212,6 +240,7 @@ export default function VideosPage() {
     region_id: "",
     is_featured: false,
   });
+  const [regions, setRegions] = useState<Region[]>([]);
 
   // ── RTK Query hooks ─────────────────────────────────────────────────────
   //
@@ -258,6 +287,20 @@ export default function VideosPage() {
   useEffect(() => {
     setOrderedVideos(videos);
   }, [videos]);
+
+  useEffect(() => {
+    const loadRegions = async () => {
+      try {
+        const response = await regionsApi.list({ limit: 100 });
+        setRegions(response.data);
+      } catch (error) {
+        console.error(error);
+        toast.error("Failed to load regions");
+      }
+    };
+
+    loadRegions();
+  }, []);
 
   // Client-side search filter (instant, no network request)
   const filteredVideos = orderedVideos.filter((video) =>
@@ -444,7 +487,7 @@ export default function VideosPage() {
           placeholder="https://youtube.com/watch?v=..."
         />
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Platform
@@ -461,33 +504,32 @@ export default function VideosPage() {
             ]}
           />
         </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Duration (seconds)
-          </label>
-          <Input
-            type="number"
-            value={formData.duration || ""}
-            onChange={(e) =>
-              setFormData({
-                ...formData,
-                duration: e.target.value ? parseInt(e.target.value) : undefined,
-              })
-            }
-            placeholder="e.g. 300"
-          />
-        </div>
+      </div>
+      <div>
+        <ImageUpload
+          label="Thumbnail Image"
+          value={formData.thumbnail_url || ""}
+          onChange={(url) => setFormData({ ...formData, thumbnail_url: url })}
+          onRemove={() => setFormData({ ...formData, thumbnail_url: "" })}
+          previewHeightClass="h-40"
+        />
       </div>
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
-          Thumbnail URL
+          Region
         </label>
-        <Input
-          value={formData.thumbnail_url || ""}
+        <Select
+          value={formData.region_id || ""}
           onChange={(e) =>
-            setFormData({ ...formData, thumbnail_url: e.target.value })
+            setFormData({ ...formData, region_id: e.target.value })
           }
-          placeholder="https://..."
+          options={[
+            { value: "", label: "Select region..." },
+            ...regions.map((region) => ({
+              value: region.id,
+              label: region.name,
+            })),
+          ]}
         />
       </div>
       <div>

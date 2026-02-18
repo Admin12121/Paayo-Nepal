@@ -400,6 +400,14 @@ impl CommentService {
                 .fetch_one(&self.db)
                 .await?
             }
+            "hotel" => {
+                sqlx::query_scalar::<_, bool>(
+                    "SELECT EXISTS(SELECT 1 FROM hotels WHERE id = $1 AND deleted_at IS NULL AND status = 'published')",
+                )
+                .bind(target_id)
+                .fetch_one(&self.db)
+                .await?
+            }
             _ => {
                 tracing::warn!(
                     "target_exists check for unknown comment target_type: {}",
