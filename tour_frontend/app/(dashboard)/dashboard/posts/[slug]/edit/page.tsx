@@ -221,9 +221,9 @@ export default function EditPostPage() {
 
   const postTypeOptions = [
     { value: "article", label: "Article", icon: "📝" },
-    { value: "guide", label: "Guide", icon: "🗺️" },
-    { value: "news", label: "News", icon: "📰" },
-    { value: "review", label: "Review", icon: "⭐" },
+    { value: "event", label: "Event", icon: "📅" },
+    { value: "activity", label: "Activity", icon: "🎯" },
+    { value: "explore", label: "Explore", icon: "🧭" },
   ];
 
   const getStatusBadge = () => {

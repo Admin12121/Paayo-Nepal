@@ -141,8 +141,8 @@ const chartConfig = {
 const columnMeta: { key: ColumnKey; label: string }[] = [
   { key: "type", label: "Post Type" },
   { key: "status", label: "Status" },
-  { key: "target", label: "Target" },
-  { key: "limit", label: "Limit" },
+  { key: "target", label: "Views" },
+  { key: "limit", label: "Likes" },
   { key: "reviewer", label: "Reviewer" },
   { key: "created", label: "Created" },
 ];
@@ -803,10 +803,10 @@ export default function DashboardPage() {
                     <TableHead className="w-[8%]">Status</TableHead>
                   )}
                   {columnVisibility.target && (
-                    <TableHead className="w-[5%] text-right">Target</TableHead>
+                    <TableHead className="w-[5%] text-right">Views</TableHead>
                   )}
                   {columnVisibility.limit && (
-                    <TableHead className="w-[5%] text-right">Limit</TableHead>
+                    <TableHead className="w-[5%] text-right">Likes</TableHead>
                   )}
                   {columnVisibility.reviewer && (
                     <TableHead className="w-[12%]">Reviewer</TableHead>

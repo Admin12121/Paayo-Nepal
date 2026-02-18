@@ -5,7 +5,6 @@ import {
   Plus,
   Edit,
   Trash2,
-  Eye,
   Camera,
   Star,
   StarOff,
@@ -36,7 +35,14 @@ import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import Pagination from "@/components/ui/Pagination";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Modal from "@/components/ui/Modal";
-import DashboardCard from "@/components/dashboard/DashboardCard";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { toast } from "@/lib/utils/toast";
 
 export default function PhotoFeaturesPage() {
@@ -324,29 +330,29 @@ export default function PhotoFeaturesPage() {
         </Button>
       </div>
 
-      <DashboardCard className="mb-6" contentClassName="p-0">
-        <div className="border-b border-zinc-200 bg-zinc-50/70 p-4 sm:p-5 flex flex-wrap items-end gap-3">
-          <div className="flex-1 min-w-[200px]">
-            <Input
-              placeholder="Search photo features..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full"
+      <div className="mb-6">
+        <div className="p-4 sm:p-5 flex flex-row flex-wrap items-end gap-3 justify-between w-full">
+          <Input
+            placeholder="Search photo features..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="max-w-[300px]"
+          />
+          <div className="flex flex-row gap-3 ">
+            <Select
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              options={[
+                { value: "all", label: "All Status" },
+                { value: "draft", label: "Draft" },
+                { value: "published", label: "Published" },
+              ]}
+              className="min-w-[150px]"
             />
           </div>
-          <Select
-            value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value);
-              setCurrentPage(1);
-            }}
-            options={[
-              { value: "all", label: "All Status" },
-              { value: "draft", label: "Draft" },
-              { value: "published", label: "Published" },
-            ]}
-            className="min-w-[150px]"
-          />
         </div>
 
         {/* Show a subtle loading indicator when refetching in the background */}
@@ -364,134 +370,121 @@ export default function PhotoFeaturesPage() {
             <p>No photo features found</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Title
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Images
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Featured
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Views
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Date
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredPhotos.map((photo) => (
-                  <tr key={photo.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4">
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">
-                          {photo.title}
+          <div className="overflow-hidden rounded-lg border bg-white">
+            <div className="overflow-x-auto">
+              <Table className="table-fixed">
+                <TableHeader className="bg-slate-50">
+                  <TableRow>
+                    <TableHead className="w-[34%]">Title</TableHead>
+                    <TableHead className="w-[15%]">Images</TableHead>
+                    <TableHead className="w-[10%]">Status</TableHead>
+                    <TableHead className="w-[10%]">Featured</TableHead>
+                    <TableHead className="w-[8%] text-right">Views</TableHead>
+                    <TableHead className="w-[11%]">Date</TableHead>
+                    <TableHead className="w-28 text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredPhotos.map((photo) => (
+                    <TableRow key={photo.id}>
+                      <TableCell className="max-w-[340px] lg:max-w-[520px]">
+                        <div>
+                          <div className="truncate text-sm font-medium text-gray-900">
+                            {photo.title}
+                          </div>
+                          <div className="truncate text-xs text-slate-500">
+                            /{photo.slug}
+                          </div>
                         </div>
-                        <div className="text-sm text-gray-500">
-                          /{photo.slug}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openImagesModal(photo)}
-                        className="h-auto px-0 py-0 text-sm text-blue-600 hover:bg-transparent hover:text-blue-800"
-                      >
-                        <Camera className="w-4 h-4" />
-                        {photo.images?.length ?? 0} images
-                      </Button>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusBadge(photo.status)}`}
-                      >
-                        {photo.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleToggleFeatured(photo)}
-                        className="h-auto p-0 text-gray-400 hover:bg-transparent hover:text-yellow-500"
-                        title={
-                          photo.is_featured
-                            ? "Remove from featured"
-                            : "Add to featured"
-                        }
-                      >
-                        {photo.is_featured ? (
-                          <Star className="w-5 h-5 text-yellow-500 fill-yellow-500" />
-                        ) : (
-                          <StarOff className="w-5 h-5" />
-                        )}
-                      </Button>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <div className="flex items-center">
-                        <Eye className="w-4 h-4 mr-1" />
-                        {photo.view_count}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(photo.created_at).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex items-center justify-end gap-2">
-                        {photo.status === "draft" && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handlePublish(photo)}
-                            title="Publish"
-                          >
-                            <CheckCircle className="w-4 h-4" />
-                          </Button>
-                        )}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
                         <Button
+                          type="button"
                           variant="ghost"
                           size="sm"
                           onClick={() => openImagesModal(photo)}
-                          title="Manage images"
+                          className="h-auto px-0 py-0 text-sm text-blue-600 hover:bg-transparent hover:text-blue-800"
                         >
-                          <ImagePlus className="w-4 h-4" />
+                          <Camera className="w-4 h-4" />
+                          {photo.images?.length ?? 0} images
                         </Button>
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        <span
+                          className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusBadge(photo.status)}`}
+                        >
+                          {photo.status}
+                        </span>
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
                         <Button
+                          type="button"
                           variant="ghost"
                           size="sm"
-                          onClick={() => openEditModal(photo)}
+                          onClick={() => handleToggleFeatured(photo)}
+                          className="h-auto p-0 text-gray-400 hover:bg-transparent hover:text-yellow-500"
+                          title={
+                            photo.is_featured
+                              ? "Remove from featured"
+                              : "Add to featured"
+                          }
                         >
-                          <Edit className="w-4 h-4" />
+                          {photo.is_featured ? (
+                            <Star className="w-5 h-5 text-yellow-500 fill-yellow-500" />
+                          ) : (
+                            <StarOff className="w-5 h-5" />
+                          )}
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setDeleteDialog({ open: true, photo })}
-                        >
-                          <Trash2 className="w-4 h-4 text-red-600" />
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-right tabular-nums text-slate-600">
+                        {photo.view_count.toLocaleString()}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-slate-600">
+                        {new Date(photo.created_at).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          {photo.status === "draft" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handlePublish(photo)}
+                              title="Publish"
+                            >
+                              <CheckCircle className="w-4 h-4" />
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openImagesModal(photo)}
+                            title="Manage images"
+                          >
+                            <ImagePlus className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openEditModal(photo)}
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              setDeleteDialog({ open: true, photo })
+                            }
+                          >
+                            <Trash2 className="w-4 h-4 text-red-600" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </div>
         )}
 
@@ -504,7 +497,7 @@ export default function PhotoFeaturesPage() {
             />
           </div>
         )}
-      </DashboardCard>
+      </div>
 
       {/* Create Modal */}
       <Modal

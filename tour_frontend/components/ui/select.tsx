@@ -178,7 +178,8 @@ function SelectScrollDownButton({
 
 type LegacyOption = {
   value: string;
-  label: string;
+  label: React.ReactNode;
+  disabled?: boolean;
 };
 
 interface LegacySelectProps extends Omit<
@@ -186,6 +187,7 @@ interface LegacySelectProps extends Omit<
   "size"
 > {
   options?: LegacyOption[];
+  placeholder?: string;
   label?: string;
   error?: string;
   helperText?: string;
@@ -202,29 +204,122 @@ const LegacySelect = React.forwardRef<HTMLSelectElement, LegacySelectProps>(
       helperText,
       containerClassName,
       children,
+      onChange,
+      onBlur,
+      value,
+      defaultValue,
+      name,
+      id,
+      disabled,
+      placeholder,
       ...props
     },
     ref,
   ) => {
+    const LEGACY_EMPTY_VALUE = "__legacy-empty-value__";
+
+    const childOptions = React.Children.toArray(children)
+      .filter(React.isValidElement)
+      .filter((child) => child.type === "option")
+      .map((child) => {
+        const optionElement = child as React.ReactElement<{
+          value?: string;
+          disabled?: boolean;
+          children?: React.ReactNode;
+        }>;
+        const optionValue = String(optionElement.props.value ?? "");
+        return {
+          value: optionValue,
+          label: optionElement.props.children,
+          disabled: Boolean(optionElement.props.disabled),
+        } satisfies LegacyOption;
+      });
+
+    const resolvedOptions = options ?? childOptions;
+
+    const encodeValue = (
+      next: string | number | readonly string[] | undefined,
+    ) => (next === "" ? LEGACY_EMPTY_VALUE : String(next ?? ""));
+
+    const decodeValue = (next: string) =>
+      next === LEGACY_EMPTY_VALUE ? "" : next;
+
+    const isControlled = value !== undefined;
+    const controlledValue = isControlled
+      ? encodeValue(value as string | number | readonly string[] | undefined)
+      : undefined;
+    const uncontrolledValue = !isControlled
+      ? encodeValue(
+          defaultValue as string | number | readonly string[] | undefined,
+        )
+      : undefined;
+
+    const handleValueChange = (next: string) => {
+      if (!onChange) return;
+
+      const decoded = decodeValue(next);
+      const syntheticEvent = {
+        target: { value: decoded, name },
+        currentTarget: { value: decoded, name },
+      } as React.ChangeEvent<HTMLSelectElement>;
+      onChange(syntheticEvent);
+    };
+
     const selectNode = (
-      <select
-        ref={ref}
-        data-slot="legacy-select"
-        className={cn(
-          "flex h-9 w-full min-w-0 rounded-md border border-gray-300 bg-transparent px-3 py-1 text-sm shadow-sm transition-colors outline-none focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-50",
-          error && "border-red-500 focus-visible:border-red-500",
-          className,
-        )}
-        {...props}
-      >
-        {children
-          ? children
-          : options?.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-      </select>
+      <>
+        <Select
+          value={controlledValue}
+          defaultValue={uncontrolledValue}
+          onValueChange={handleValueChange}
+          disabled={disabled}
+          name={name}
+        >
+          <SelectTrigger
+            id={id}
+            data-slot="legacy-select"
+            className={cn(
+              "w-full min-w-0",
+              error && "border-red-500 focus-visible:border-red-500",
+              className,
+            )}
+            onBlur={(event) =>
+              onBlur?.(event as unknown as React.FocusEvent<HTMLSelectElement>)
+            }
+          >
+            <SelectValue placeholder={placeholder} />
+          </SelectTrigger>
+          <SelectContent position="popper">
+            <SelectGroup>
+              {resolvedOptions.map((option) => (
+                <SelectItem
+                  key={`${option.value}:${String(option.label)}`}
+                  value={encodeValue(option.value)}
+                  disabled={option.disabled}
+                >
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+
+        {/* Hidden native select keeps form/ref compatibility for legacy callers. */}
+        <select
+          ref={ref}
+          name={name}
+          value={decodeValue(controlledValue ?? uncontrolledValue ?? "")}
+          onChange={() => {}}
+          className="sr-only"
+          tabIndex={-1}
+          aria-hidden="true"
+        >
+          {resolvedOptions.map((option) => (
+            <option key={String(option.value)} value={option.value}>
+              {option.label as React.ReactNode}
+            </option>
+          ))}
+        </select>
+      </>
     );
 
     if (!label && !error && !helperText) {

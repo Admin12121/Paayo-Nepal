@@ -16,7 +16,15 @@ import Select from "@/components/ui/select";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import Pagination from "@/components/ui/Pagination";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
-import DashboardCard from "@/components/dashboard/DashboardCard";
+import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { toast } from "@/lib/utils/toast";
 
 export default function AttractionsPage() {
@@ -111,40 +119,40 @@ export default function AttractionsPage() {
         </Link>
       </div>
 
-      <DashboardCard className="mb-6" contentClassName="p-0">
-        <div className="border-b border-zinc-200 bg-zinc-50/70 p-4 sm:p-5 flex flex-wrap items-end gap-3">
-          <div className="flex-1 min-w-[200px]">
-            <Input
-              placeholder="Search attractions..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full"
+      <div className="mb-6">
+        <div className="p-4 sm:p-5 flex flex-row flex-wrap items-end gap-3 justify-between w-full">
+          <Input
+            placeholder="Search attractions..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="max-w-[300px]"
+          />
+          <div className="flex flex-row gap-3 ">
+            <Select
+              value={regionFilter}
+              onChange={(e) => {
+                setRegionFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              options={[
+                { value: "all", label: "All Regions" },
+                ...regions.map((r) => ({ value: r.id, label: r.name })),
+              ]}
+              className="min-w-[150px]"
+            />
+            <Select
+              value={topFilter}
+              onChange={(e) => {
+                setTopFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              options={[
+                { value: "all", label: "All Attractions" },
+                { value: "top", label: "Top Attractions" },
+              ]}
+              className="min-w-[150px]"
             />
           </div>
-          <Select
-            value={regionFilter}
-            onChange={(e) => {
-              setRegionFilter(e.target.value);
-              setCurrentPage(1);
-            }}
-            options={[
-              { value: "all", label: "All Regions" },
-              ...regions.map((r) => ({ value: r.id, label: r.name })),
-            ]}
-            className="min-w-[150px]"
-          />
-          <Select
-            value={topFilter}
-            onChange={(e) => {
-              setTopFilter(e.target.value);
-              setCurrentPage(1);
-            }}
-            options={[
-              { value: "all", label: "All Attractions" },
-              { value: "top", label: "Top Attractions" },
-            ]}
-            className="min-w-[150px]"
-          />
         </div>
 
         {/* Show a subtle loading indicator when refetching in the background */}
@@ -162,61 +170,78 @@ export default function AttractionsPage() {
             <p>No attractions found</p>
           </div>
         ) : (
-          <>
-            <div className="divide-y divide-gray-200">
-              {filteredAttractions.map((attraction) => (
-                <div
-                  key={attraction.id}
-                  className="p-6 hover:bg-gray-50 transition-colors"
-                >
-                  <div className="flex items-start gap-4">
-                    {attraction.cover_image && (
-                      <Image
-                        src={attraction.cover_image}
-                        alt={attraction.title}
-                        width={128}
-                        height={128}
-                        className="w-32 h-32 object-cover rounded-lg shrink-0"
-                        unoptimized={attraction.cover_image.startsWith(
-                          "/uploads",
-                        )}
-                      />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <h3 className="text-lg font-semibold text-gray-900 mb-1">
-                            {attraction.title}
-                          </h3>
-                          {attraction.short_description && (
-                            <p className="text-sm text-gray-600 mb-2 line-clamp-2">
-                              {attraction.short_description}
-                            </p>
+          <div className="overflow-hidden rounded-lg border bg-white">
+            <div className="overflow-x-auto">
+              <Table className="table-fixed">
+                <TableHeader className="bg-slate-50">
+                  <TableRow>
+                    <TableHead className="w-[44%]">Title</TableHead>
+                    <TableHead className="w-[14%]">Region</TableHead>
+                    <TableHead className="w-[10%]">Status</TableHead>
+                    <TableHead className="w-[8%] text-right">Likes</TableHead>
+                    <TableHead className="w-[12%]">Created</TableHead>
+                    <TableHead className="w-24 text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredAttractions.map((attraction) => (
+                    <TableRow key={attraction.id}>
+                      <TableCell className="max-w-[360px] lg:max-w-[520px]">
+                        <div className="flex items-center gap-3">
+                          {attraction.cover_image && (
+                            <Image
+                              src={attraction.cover_image}
+                              alt={attraction.title}
+                              width={48}
+                              height={48}
+                              className="h-12 w-12 rounded object-cover"
+                              unoptimized={attraction.cover_image.startsWith(
+                                "/uploads",
+                              )}
+                            />
                           )}
-                          <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500">
-                            <div className="flex items-center">
-                              <Eye className="w-4 h-4 mr-1" />
-                              {attraction.likes ??
-                                attraction.like_count ??
-                                0}{" "}
-                              likes
-                            </div>
-                            <span
-                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${attraction.status === "published" ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}`}
+                          <div className="min-w-0">
+                            <Link
+                              href={`/dashboard/attractions/${attraction.slug}/edit`}
+                              className="block truncate text-sm text-blue-600 hover:underline"
+                              title={attraction.title}
                             >
-                              {attraction.status}
-                            </span>
-                          </div>
-                          <div className="mt-2">
-                            {attraction.is_featured && (
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                <Star className="w-3 h-3 mr-1" />
-                                Featured
-                              </span>
-                            )}
+                              {attraction.title}
+                            </Link>
+                            <p className="truncate text-xs text-slate-500">
+                              /{attraction.slug}
+                            </p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2 shrink-0">
+                      </TableCell>
+                      <TableCell className="text-slate-600">
+                        {regions.find((r) => r.id === attraction.region_id)
+                          ?.name || "—"}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            attraction.status === "published"
+                              ? "default"
+                              : "outline"
+                          }
+                          className="capitalize"
+                        >
+                          {attraction.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {(
+                          attraction.likes ??
+                          attraction.like_count ??
+                          0
+                        ).toLocaleString()}
+                      </TableCell>
+                      <TableCell className="text-slate-600">
+                        {new Date(attraction.created_at).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
                           <Link
                             href={`/dashboard/attractions/${attraction.slug}/edit`}
                           >
@@ -234,25 +259,25 @@ export default function AttractionsPage() {
                             <Trash2 className="w-4 h-4 text-red-600" />
                           </Button>
                         </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
-
-            {totalPages > 1 && (
-              <div className="p-4 border-t">
-                <Pagination
-                  currentPage={currentPage}
-                  totalPages={totalPages}
-                  onPageChange={setCurrentPage}
-                />
-              </div>
-            )}
-          </>
+          </div>
         )}
-      </DashboardCard>
+
+        {totalPages > 1 && (
+          <div className="p-4 border-t">
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+            />
+          </div>
+        )}
+      </div>
 
       <ConfirmDialog
         isOpen={deleteDialog.open}

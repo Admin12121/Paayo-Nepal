@@ -15,7 +15,15 @@ import Input from "@/components/ui/input";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import Pagination from "@/components/ui/Pagination";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
-import DashboardCard from "@/components/dashboard/DashboardCard";
+import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { toast } from "@/lib/utils/toast";
 
 export default function ActivitiesPage() {
@@ -125,13 +133,13 @@ export default function ActivitiesPage() {
         </Link>
       </div>
 
-      <DashboardCard className="mb-6" contentClassName="p-0">
-        <div className="p-4 border-b">
+      <div className="mb-6">
+        <div className="p-4 sm:p-5 flex flex-row flex-wrap items-end gap-3 justify-between w-full">
           <Input
             placeholder="Search activities..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full max-w-md"
+            className="max-w-[300px]"
           />
         </div>
 
@@ -150,65 +158,81 @@ export default function ActivitiesPage() {
             <p>No activities found</p>
           </div>
         ) : (
-          <>
-            <div className="divide-y divide-gray-200">
-              {sortedActivities.map((activity) => (
-                <div
-                  key={activity.id}
-                  className="p-6 hover:bg-gray-50 transition-colors"
-                >
-                  <div className="flex items-start gap-4">
-                    {activity.cover_image && (
-                      <Image
-                        src={activity.cover_image}
-                        alt={activity.title}
-                        width={128}
-                        height={128}
-                        className="w-32 h-32 object-cover rounded-lg shrink-0"
-                        unoptimized={activity.cover_image.startsWith(
-                          "/uploads",
-                        )}
-                      />
-                    )}
-                    {!activity.cover_image && (
-                      <div className="w-32 h-32 bg-gray-100 rounded-lg flex items-center justify-center shrink-0">
-                        <ImageIcon className="w-12 h-12 text-gray-400" />
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <div className="flex items-center gap-2 mb-1">
-                            <h3 className="text-lg font-semibold text-gray-900">
-                              {activity.title}
-                            </h3>
-                            {activity.is_featured ? (
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                Featured
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                                Not Featured
-                              </span>
-                            )}
-                            <span
-                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${activity.status === "published" ? "bg-blue-100 text-blue-800" : "bg-yellow-100 text-yellow-800"}`}
-                            >
-                              {activity.status}
-                            </span>
-                          </div>
-                          {activity.short_description && (
-                            <p className="text-sm text-gray-600 mb-2 line-clamp-2">
-                              {activity.short_description}
-                            </p>
-                          )}
-                          <div className="flex items-center gap-4 text-sm text-gray-500">
-                            <div>
-                              Display Order: {activity.display_order || 0}
+          <div className="overflow-hidden rounded-lg border bg-white">
+            <div className="overflow-x-auto">
+              <Table className="table-fixed">
+                <TableHeader className="bg-slate-50">
+                  <TableRow>
+                    <TableHead className="w-[44%]">Title</TableHead>
+                    <TableHead className="w-[10%]">Status</TableHead>
+                    <TableHead className="w-[10%]">Featured</TableHead>
+                    <TableHead className="w-[8%] text-right">Order</TableHead>
+                    <TableHead className="w-[12%]">Created</TableHead>
+                    <TableHead className="w-24 text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sortedActivities.map((activity) => (
+                    <TableRow key={activity.id}>
+                      <TableCell className="max-w-[360px] lg:max-w-[520px]">
+                        <div className="flex items-center gap-3">
+                          {activity.cover_image ? (
+                            <Image
+                              src={activity.cover_image}
+                              alt={activity.title}
+                              width={48}
+                              height={48}
+                              className="h-12 w-12 rounded object-cover"
+                              unoptimized={activity.cover_image.startsWith(
+                                "/uploads",
+                              )}
+                            />
+                          ) : (
+                            <div className="flex h-12 w-12 items-center justify-center rounded bg-gray-100">
+                              <ImageIcon className="w-5 h-5 text-gray-400" />
                             </div>
+                          )}
+                          <div className="min-w-0">
+                            <Link
+                              href={`/dashboard/activities/${activity.slug}/edit`}
+                              className="block truncate text-sm text-blue-600 hover:underline"
+                              title={activity.title}
+                            >
+                              {activity.title}
+                            </Link>
+                            <p className="truncate text-xs text-slate-500">
+                              /{activity.slug}
+                            </p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2 shrink-0">
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            activity.status === "published"
+                              ? "default"
+                              : "outline"
+                          }
+                          className="capitalize"
+                        >
+                          {activity.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={activity.is_featured ? "default" : "outline"}
+                        >
+                          {activity.is_featured ? "yes" : "no"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {(activity.display_order || 0).toLocaleString()}
+                      </TableCell>
+                      <TableCell className="text-slate-600">
+                        {new Date(activity.created_at).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
                           <Button
                             variant={
                               activity.is_featured ? "ghost" : "secondary"
@@ -235,25 +259,25 @@ export default function ActivitiesPage() {
                             <Trash2 className="w-4 h-4 text-red-600" />
                           </Button>
                         </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
-
-            {totalPages > 1 && (
-              <div className="p-4 border-t">
-                <Pagination
-                  currentPage={currentPage}
-                  totalPages={totalPages}
-                  onPageChange={setCurrentPage}
-                />
-              </div>
-            )}
-          </>
+          </div>
         )}
-      </DashboardCard>
+
+        {totalPages > 1 && (
+          <div className="p-4 border-t">
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+            />
+          </div>
+        )}
+      </div>
 
       <ConfirmDialog
         isOpen={deleteDialog.open}

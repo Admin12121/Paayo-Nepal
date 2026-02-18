@@ -5,7 +5,6 @@ import {
   Plus,
   Edit,
   Trash2,
-  Eye,
   Hotel,
   Star,
   StarOff,
@@ -30,7 +29,14 @@ import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import Pagination from "@/components/ui/Pagination";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Modal from "@/components/ui/Modal";
-import DashboardCard from "@/components/dashboard/DashboardCard";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { toast } from "@/lib/utils/toast";
 
 export default function HotelsPage() {
@@ -376,43 +382,43 @@ export default function HotelsPage() {
         </Button>
       </div>
 
-      <DashboardCard className="mb-6" contentClassName="p-0">
-        <div className="border-b border-zinc-200 bg-zinc-50/70 p-4 sm:p-5 flex flex-wrap items-end gap-3">
-          <div className="flex-1 min-w-[200px]">
-            <Input
-              placeholder="Search hotels..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full"
+      <div className="mb-6">
+        <div className="p-4 sm:p-5 flex flex-row flex-wrap items-end gap-3 justify-between w-full">
+          <Input
+            placeholder="Search hotels..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="max-w-[300px]"
+          />
+          <div className="flex flex-row gap-3 ">
+            <Select
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              options={[
+                { value: "all", label: "All Status" },
+                { value: "draft", label: "Draft" },
+                { value: "published", label: "Published" },
+              ]}
+              className="min-w-[150px]"
+            />
+            <Select
+              value={priceFilter}
+              onChange={(e) => {
+                setPriceFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              options={[
+                { value: "all", label: "All Prices" },
+                { value: "budget", label: "Budget" },
+                { value: "mid", label: "Mid-range" },
+                { value: "luxury", label: "Luxury" },
+              ]}
+              className="min-w-[150px]"
             />
           </div>
-          <Select
-            value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value);
-              setCurrentPage(1);
-            }}
-            options={[
-              { value: "all", label: "All Status" },
-              { value: "draft", label: "Draft" },
-              { value: "published", label: "Published" },
-            ]}
-            className="min-w-[150px]"
-          />
-          <Select
-            value={priceFilter}
-            onChange={(e) => {
-              setPriceFilter(e.target.value);
-              setCurrentPage(1);
-            }}
-            options={[
-              { value: "all", label: "All Prices" },
-              { value: "budget", label: "Budget" },
-              { value: "mid", label: "Mid-range" },
-              { value: "luxury", label: "Luxury" },
-            ]}
-            className="min-w-[150px]"
-          />
         </div>
 
         {/* Show a subtle loading indicator when refetching in the background */}
@@ -430,143 +436,128 @@ export default function HotelsPage() {
             <p>No hotels found</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Hotel
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Price
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Rating
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Featured
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Views
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Date
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredHotels.map((hotel) => (
-                  <tr key={hotel.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center">
-                        {hotel.cover_image && (
-                          <Image
-                            src={hotel.cover_image}
-                            alt={hotel.name}
-                            width={48}
-                            height={48}
-                            className="w-12 h-12 object-cover rounded mr-3"
-                            unoptimized={hotel.cover_image.startsWith(
-                              "/uploads",
-                            )}
-                          />
-                        )}
-                        <div>
-                          <div className="text-sm font-medium text-gray-900">
-                            {hotel.name}
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            /{hotel.slug}
+          <div className="overflow-hidden rounded-lg border bg-white">
+            <div className="overflow-x-auto">
+              <Table className="table-fixed">
+                <TableHeader className="bg-slate-50">
+                  <TableRow>
+                    <TableHead className="w-[34%]">Hotel</TableHead>
+                    <TableHead className="w-[8%]">Price</TableHead>
+                    <TableHead className="w-[9%]">Rating</TableHead>
+                    <TableHead className="w-[10%]">Status</TableHead>
+                    <TableHead className="w-[9%]">Featured</TableHead>
+                    <TableHead className="w-[9%] text-right">Views</TableHead>
+                    <TableHead className="w-[11%]">Date</TableHead>
+                    <TableHead className="w-24 text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredHotels.map((hotel) => (
+                    <TableRow key={hotel.id}>
+                      <TableCell className="max-w-[340px] lg:max-w-[520px]">
+                        <div className="flex items-center">
+                          {hotel.cover_image && (
+                            <Image
+                              src={hotel.cover_image}
+                              alt={hotel.name}
+                              width={48}
+                              height={48}
+                              className="w-12 h-12 object-cover rounded mr-3"
+                              unoptimized={hotel.cover_image.startsWith(
+                                "/uploads",
+                              )}
+                            />
+                          )}
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-medium text-gray-900">
+                              {hotel.name}
+                            </div>
+                            <div className="truncate text-xs text-slate-500">
+                              /{hotel.slug}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="text-sm font-semibold text-green-700">
-                        {getPriceLabel(hotel.price_range)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="text-sm text-yellow-600">
-                        {hotel.star_rating
-                          ? "★".repeat(hotel.star_rating)
-                          : "—"}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusBadge(hotel.status)}`}
-                      >
-                        {hotel.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleToggleFeatured(hotel)}
-                        className="h-auto p-0 text-gray-400 hover:bg-transparent hover:text-yellow-500"
-                        title={
-                          hotel.is_featured
-                            ? "Remove from featured"
-                            : "Add to featured"
-                        }
-                      >
-                        {hotel.is_featured ? (
-                          <Star className="w-5 h-5 text-yellow-500 fill-yellow-500" />
-                        ) : (
-                          <StarOff className="w-5 h-5" />
-                        )}
-                      </Button>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <div className="flex items-center">
-                        <Eye className="w-4 h-4 mr-1" />
-                        {hotel.view_count}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(hotel.created_at).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex items-center justify-end gap-2">
-                        {hotel.status === "draft" && (
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        <span className="text-sm font-semibold text-green-700">
+                          {getPriceLabel(hotel.price_range)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        <span className="text-sm text-yellow-600">
+                          {hotel.star_rating
+                            ? "★".repeat(hotel.star_rating)
+                            : "—"}
+                        </span>
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        <span
+                          className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusBadge(hotel.status)}`}
+                        >
+                          {hotel.status}
+                        </span>
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleToggleFeatured(hotel)}
+                          className="h-auto p-0 text-gray-400 hover:bg-transparent hover:text-yellow-500"
+                          title={
+                            hotel.is_featured
+                              ? "Remove from featured"
+                              : "Add to featured"
+                          }
+                        >
+                          {hotel.is_featured ? (
+                            <Star className="w-5 h-5 text-yellow-500 fill-yellow-500" />
+                          ) : (
+                            <StarOff className="w-5 h-5" />
+                          )}
+                        </Button>
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-right tabular-nums text-slate-600">
+                        {hotel.view_count.toLocaleString()}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-slate-600">
+                        {new Date(hotel.created_at).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          {hotel.status === "draft" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handlePublish(hotel)}
+                              title="Publish"
+                            >
+                              <CheckCircle className="w-4 h-4" />
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handlePublish(hotel)}
-                            title="Publish"
+                            onClick={() => openEditModal(hotel)}
                           >
-                            <CheckCircle className="w-4 h-4" />
+                            <Edit className="w-4 h-4" />
                           </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => openEditModal(hotel)}
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setDeleteDialog({ open: true, hotel })}
-                        >
-                          <Trash2 className="w-4 h-4 text-red-600" />
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              setDeleteDialog({ open: true, hotel })
+                            }
+                          >
+                            <Trash2 className="w-4 h-4 text-red-600" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </div>
         )}
 
@@ -579,7 +570,7 @@ export default function HotelsPage() {
             />
           </div>
         )}
-      </DashboardCard>
+      </div>
 
       {/* Create Modal */}
       <Modal

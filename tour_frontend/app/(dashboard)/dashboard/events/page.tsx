@@ -16,7 +16,15 @@ import Select from "@/components/ui/select";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import Pagination from "@/components/ui/Pagination";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
-import DashboardCard from "@/components/dashboard/DashboardCard";
+import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { toast } from "@/lib/utils/toast";
 
 export default function EventsPage() {
@@ -125,29 +133,29 @@ export default function EventsPage() {
         </Link>
       </div>
 
-      <DashboardCard className="mb-6" contentClassName="p-0">
-        <div className="border-b border-zinc-200 bg-zinc-50/70 p-4 sm:p-5 flex flex-wrap items-end gap-3">
-          <div className="flex-1 min-w-[200px]">
-            <Input
-              placeholder="Search events..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full"
+      <div className="mb-6">
+        <div className="p-4 sm:p-5 flex flex-row flex-wrap items-end gap-3 justify-between w-full">
+          <Input
+            placeholder="Search events..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="max-w-[300px]"
+          />
+          <div className="flex flex-row gap-3 ">
+            <Select
+              value={timeFilter}
+              onChange={(e) => {
+                setTimeFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              options={[
+                { value: "all", label: "All Events" },
+                { value: "upcoming", label: "Upcoming" },
+                { value: "past", label: "Past" },
+              ]}
+              className="min-w-[150px]"
             />
           </div>
-          <Select
-            value={timeFilter}
-            onChange={(e) => {
-              setTimeFilter(e.target.value);
-              setCurrentPage(1);
-            }}
-            options={[
-              { value: "all", label: "All Events" },
-              { value: "upcoming", label: "Upcoming" },
-              { value: "past", label: "Past" },
-            ]}
-            className="min-w-[150px]"
-          />
         </div>
 
         {/* Show a subtle loading indicator when refetching in the background */}
@@ -165,65 +173,73 @@ export default function EventsPage() {
             <p>No events found</p>
           </div>
         ) : (
-          <>
-            <div className="divide-y divide-gray-200">
-              {filteredEvents.map((event) => (
-                <div
-                  key={event.id}
-                  className="p-6 hover:bg-gray-50 transition-colors"
-                >
-                  <div className="flex items-start gap-4">
-                    {event.cover_image && (
-                      <Image
-                        src={event.cover_image}
-                        alt={event.title}
-                        width={128}
-                        height={128}
-                        className="w-32 h-32 object-cover rounded-lg shrink-0"
-                        unoptimized={event.cover_image.startsWith("/uploads")}
-                      />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <h3 className="text-lg font-semibold text-gray-900 mb-1">
-                            {event.title}
-                          </h3>
-                          {event.short_description && (
-                            <p className="text-sm text-gray-600 mb-2 line-clamp-2">
-                              {event.short_description}
-                            </p>
+          <div className="overflow-hidden rounded-lg border bg-white">
+            <div className="overflow-x-auto">
+              <Table className="table-fixed">
+                <TableHeader className="bg-slate-50">
+                  <TableRow>
+                    <TableHead className="w-[44%]">Title</TableHead>
+                    <TableHead className="w-[18%]">Schedule</TableHead>
+                    <TableHead className="w-[10%]">Status</TableHead>
+                    <TableHead className="w-[8%] text-right">Likes</TableHead>
+                    <TableHead className="w-[12%]">Date</TableHead>
+                    <TableHead className="w-24 text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredEvents.map((event) => (
+                    <TableRow key={event.id}>
+                      <TableCell className="max-w-[360px] lg:max-w-[520px]">
+                        <div className="flex items-center gap-3">
+                          {event.cover_image && (
+                            <Image
+                              src={event.cover_image}
+                              alt={event.title}
+                              width={48}
+                              height={48}
+                              className="h-12 w-12 rounded object-cover"
+                              unoptimized={event.cover_image.startsWith(
+                                "/uploads",
+                              )}
+                            />
                           )}
-                          <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500">
-                            <div className="flex items-center">
-                              <Calendar className="w-4 h-4 mr-1" />
-                              {formatDate(event.start_time || event.event_date)}
-                              {(event.end_time || event.event_end_date) &&
-                                ` - ${formatDate(event.end_time || event.event_end_date)}`}
-                            </div>
-                            <div className="flex items-center">
-                              <Eye className="w-4 h-4 mr-1" />
-                              {event.likes ?? event.like_count ?? 0} likes
-                            </div>
-                          </div>
-                          <div className="mt-2">
-                            {isUpcoming(event) ? (
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                Upcoming
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                                Past
-                              </span>
-                            )}
-                            {event.is_featured && (
-                              <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                Featured
-                              </span>
-                            )}
+                          <div className="min-w-0">
+                            <Link
+                              href={`/dashboard/events/${event.slug}/edit`}
+                              className="block truncate text-sm text-blue-600 hover:underline"
+                              title={event.title}
+                            >
+                              {event.title}
+                            </Link>
+                            <p className="truncate text-xs text-slate-500">
+                              /{event.slug}
+                            </p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2 shrink-0">
+                      </TableCell>
+                      <TableCell className="text-slate-600">
+                        {formatDate(event.start_time || event.event_date)}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={isUpcoming(event) ? "default" : "outline"}
+                          className="capitalize"
+                        >
+                          {isUpcoming(event) ? "upcoming" : "past"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {(
+                          event.likes ??
+                          event.like_count ??
+                          0
+                        ).toLocaleString()}
+                      </TableCell>
+                      <TableCell className="text-slate-600">
+                        {formatDate(event.created_at)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
                           <Link href={`/dashboard/events/${event.slug}/edit`}>
                             <Button variant="ghost" size="sm">
                               <Edit className="w-4 h-4" />
@@ -239,25 +255,25 @@ export default function EventsPage() {
                             <Trash2 className="w-4 h-4 text-red-600" />
                           </Button>
                         </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
-
-            {totalPages > 1 && (
-              <div className="p-4 border-t">
-                <Pagination
-                  currentPage={currentPage}
-                  totalPages={totalPages}
-                  onPageChange={setCurrentPage}
-                />
-              </div>
-            )}
-          </>
+          </div>
         )}
-      </DashboardCard>
+
+        {totalPages > 1 && (
+          <div className="p-4 border-t">
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+            />
+          </div>
+        )}
+      </div>
 
       <ConfirmDialog
         isOpen={deleteDialog.open}

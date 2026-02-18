@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Plus, Edit, Trash2, Eye, CheckCircle } from "lucide-react";
+import { Plus, Edit, Trash2, CheckCircle } from "lucide-react";
 import type { Post } from "@/lib/api-client";
 import {
   useListPostsQuery,
@@ -17,7 +17,15 @@ import Select from "@/components/ui/select";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import Pagination from "@/components/ui/Pagination";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
-import DashboardCard from "@/components/dashboard/DashboardCard";
+import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { toast } from "@/lib/utils/toast";
 
 export default function PostsPage() {
@@ -113,13 +121,15 @@ export default function PostsPage() {
     }
   };
 
-  const getStatusBadge = (status: string) => {
-    const styles: Record<string, string> = {
-      draft: "bg-gray-100 text-gray-800",
-      published: "bg-blue-100 text-blue-800",
-      pending: "bg-amber-100 text-amber-800",
-    };
-    return styles[status] || styles.draft;
+  const statusBadgeVariant = (status: string) => {
+    switch (status) {
+      case "published":
+        return "default" as const;
+      case "pending":
+        return "secondary" as const;
+      default:
+        return "outline" as const;
+    }
   };
 
   // ── Render ──────────────────────────────────────────────────────────────
@@ -195,110 +205,102 @@ export default function PostsPage() {
             <p>No posts found</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Title
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Type
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Views
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Date
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredPosts.map((post) => (
-                  <tr key={post.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center">
-                        {post.cover_image && (
-                          <Image
-                            src={post.cover_image}
-                            alt={post.title}
-                            width={48}
-                            height={48}
-                            className="w-12 h-12 object-cover rounded mr-3"
-                            unoptimized={post.cover_image.startsWith(
-                              "/uploads",
-                            )}
-                          />
-                        )}
-                        <div>
-                          <div className="text-sm font-medium text-gray-900">
-                            {post.title}
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            /{post.slug}
+          <div className="overflow-hidden rounded-lg border bg-white">
+            <div className="overflow-x-auto">
+              <Table className="table-fixed">
+                <TableHeader className="bg-slate-50">
+                  <TableRow>
+                    <TableHead className="w-[44%]">Title</TableHead>
+                    <TableHead className="w-[10%]">Type</TableHead>
+                    <TableHead className="w-[10%]">Status</TableHead>
+                    <TableHead className="w-[8%] text-right">Views</TableHead>
+                    <TableHead className="w-[12%]">Date</TableHead>
+                    <TableHead className="w-24 text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredPosts.map((post) => (
+                    <TableRow key={post.id}>
+                      <TableCell className="max-w-[360px] lg:max-w-[520px]">
+                        <div className="flex items-center gap-3">
+                          {post.cover_image && (
+                            <Image
+                              src={post.cover_image}
+                              alt={post.title}
+                              width={48}
+                              height={48}
+                              className="h-12 w-12 rounded object-cover"
+                              unoptimized={post.cover_image.startsWith(
+                                "/uploads",
+                              )}
+                            />
+                          )}
+                          <div className="min-w-0">
+                            <Link
+                              href={`/dashboard/posts/${post.slug}/edit`}
+                              className="block truncate text-sm text-blue-600 hover:underline"
+                              title={post.title}
+                            >
+                              {post.title}
+                            </Link>
+                            <p className="truncate text-xs text-slate-500">
+                              /{post.slug}
+                            </p>
                           </div>
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="text-sm text-gray-900 capitalize">
-                        {post.post_type}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusBadge(
-                          post.status,
-                        )}`}
-                      >
-                        {post.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <div className="flex items-center">
-                        <Eye className="w-4 h-4 mr-1" />
-                        {post.views}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(post.created_at).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex items-center justify-end gap-2">
-                        {post.status === "pending" && (
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="capitalize">
+                          {post.post_type}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={statusBadgeVariant(post.status)}
+                          className="capitalize"
+                        >
+                          {post.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {post.views.toLocaleString()}
+                      </TableCell>
+                      <TableCell className="text-slate-600">
+                        {new Date(post.created_at).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          {post.status === "pending" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleApprove(post)}
+                              title="Approve"
+                            >
+                              <CheckCircle className="w-4 h-4" />
+                            </Button>
+                          )}
+                          <Link href={`/dashboard/posts/${post.slug}/edit`}>
+                            <Button variant="ghost" size="sm">
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                          </Link>
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleApprove(post)}
-                            title="Approve"
+                            onClick={() =>
+                              setDeleteDialog({ open: true, post })
+                            }
                           >
-                            <CheckCircle className="w-4 h-4" />
+                            <Trash2 className="w-4 h-4 text-red-600" />
                           </Button>
-                        )}
-                        <Link href={`/dashboard/posts/${post.slug}/edit`}>
-                          <Button variant="ghost" size="sm">
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                        </Link>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setDeleteDialog({ open: true, post })}
-                        >
-                          <Trash2 className="w-4 h-4 text-red-600" />
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </div>
         )}
 

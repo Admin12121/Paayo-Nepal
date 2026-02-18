@@ -23,6 +23,14 @@ import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import Pagination from "@/components/ui/Pagination";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Modal from "@/components/ui/Modal";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import DashboardCard from "@/components/dashboard/DashboardCard";
 import { toast } from "@/lib/utils/toast";
 
@@ -286,86 +294,80 @@ export default function TagsPage() {
           </div>
         ) : (
           <>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Tag
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Slug
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Type
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Content Count
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Created
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredTags.map((tag) => (
-                    <tr key={tag.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                          <Hash className="w-4 h-4 text-gray-400" />
-                          <span className="text-sm font-medium text-gray-900">
-                            {tag.name}
+            <div className="overflow-hidden rounded-lg border bg-white">
+              <div className="overflow-x-auto">
+                <Table className="table-fixed">
+                  <TableHeader className="bg-slate-50">
+                    <TableRow>
+                      <TableHead className="w-[32%]">Tag</TableHead>
+                      <TableHead className="w-[24%]">Slug</TableHead>
+                      <TableHead className="w-[14%]">Type</TableHead>
+                      <TableHead className="w-[12%]">Content Count</TableHead>
+                      <TableHead className="w-[12%]">Created</TableHead>
+                      <TableHead className="w-[10%] text-right">
+                        Actions
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredTags.map((tag) => (
+                      <TableRow key={tag.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Hash className="w-4 h-4 text-gray-400" />
+                            <span className="truncate text-sm font-medium text-gray-900">
+                              {tag.name}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap">
+                          <span className="text-xs text-slate-500 font-mono">
+                            {tag.slug}
                           </span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="text-sm text-gray-500 font-mono">
-                          {tag.slug}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span
-                          className={`px-2 py-1 text-xs font-semibold rounded-full capitalize ${getTypeBadge(tag.tag_type)}`}
-                        >
-                          {tag.tag_type}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center gap-1 text-sm text-gray-500">
-                          <FileText className="w-4 h-4" />
-                          {tag.content_count}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {new Date(tag.created_at).toLocaleDateString()}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <div className="flex items-center justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openEditModal(tag)}
-                            title="Edit tag"
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap">
+                          <span
+                            className={`px-2 py-1 text-xs font-semibold rounded-full capitalize ${getTypeBadge(tag.tag_type)}`}
                           >
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setDeleteDialog({ open: true, tag })}
-                            title="Delete tag"
-                          >
-                            <Trash2 className="w-4 h-4 text-red-600" />
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                            {tag.tag_type}
+                          </span>
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap tabular-nums text-slate-600">
+                          <div className="flex items-center gap-1 text-sm text-gray-500">
+                            <FileText className="w-4 h-4" />
+                            {tag.content_count}
+                          </div>
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap text-slate-600">
+                          {new Date(tag.created_at).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openEditModal(tag)}
+                              title="Edit tag"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                setDeleteDialog({ open: true, tag })
+                              }
+                              title="Delete tag"
+                            >
+                              <Trash2 className="w-4 h-4 text-red-600" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             </div>
 
             {totalPages > 1 && (
