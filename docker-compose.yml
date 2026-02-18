@@ -152,7 +152,6 @@ services:
     # -----------------------------------------------------------------------
     postgres-local:
         <<: *postgres-common
-        container_name: paayo_postgres
         profiles: ["local"]
         ports:
             - "${POSTGRES_PORT:-5432}:5432"
@@ -166,7 +165,6 @@ services:
     # -----------------------------------------------------------------------
     postgres:
         <<: *postgres-common
-        container_name: paayo_postgres_prod
         profiles: ["prod", "dev"]
         expose:
             - "5432"
@@ -176,7 +174,6 @@ services:
     # -----------------------------------------------------------------------
     redis-local:
         <<: *redis-common
-        container_name: paayo_redis
         profiles: ["local"]
         ports:
             - "${REDIS_PORT:-6379}:6379"
@@ -186,7 +183,6 @@ services:
     # -----------------------------------------------------------------------
     redis:
         <<: *redis-common
-        container_name: paayo_redis_prod
         profiles: ["prod", "dev"]
         expose:
             - "6379"
@@ -196,7 +192,6 @@ services:
     # -----------------------------------------------------------------------
     nginx:
         image: nginx:1.27-alpine
-        container_name: paayo_nginx
         restart: unless-stopped
         profiles: ["prod", "dev"]
         ports:
@@ -231,7 +226,6 @@ services:
     # -----------------------------------------------------------------------
     backend:
         <<: *backend-common
-        container_name: paayo_backend
         profiles: ["prod", "dev"]
         depends_on:
             postgres:
@@ -246,7 +240,6 @@ services:
         build:
             context: ./tour_frontend
             dockerfile: Dockerfile
-        container_name: paayo_frontend
         restart: unless-stopped
         profiles: ["prod"]
         environment:
@@ -273,7 +266,6 @@ services:
     # -----------------------------------------------------------------------
     frontend-dev:
         image: oven/bun:1.2
-        container_name: paayo_frontend
         restart: unless-stopped
         profiles: ["dev"]
         working_dir: /app

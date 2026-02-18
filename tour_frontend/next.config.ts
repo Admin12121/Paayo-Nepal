@@ -118,7 +118,14 @@ const nextConfig: NextConfig = {
     // Allow explicit opt-out when an external reverse-proxy is guaranteed.
     // Keeping rewrites enabled by default avoids localhost `/api/*` 404s
     // when Next.js is accessed directly (without nginx in front).
-    if (process.env.DISABLE_DEV_API_REWRITES === "true") {
+    //
+    // In Docker dev/prod, nginx is always the source of truth for routing.
+    // Rewriting `/api/*` inside Next in that mode can hijack `/api/auth/*`
+    // flows and cause incorrect upstream behavior.
+    if (
+      process.env.DISABLE_DEV_API_REWRITES === "true" ||
+      process.env.DOCKER_ENV === "true"
+    ) {
       return [];
     }
 
