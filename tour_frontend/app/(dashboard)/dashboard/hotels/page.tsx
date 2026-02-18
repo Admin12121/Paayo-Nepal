@@ -196,7 +196,7 @@ function DraggableHotelRow({
       </TableCell>
       <TableCell className="whitespace-nowrap">
         <span className="text-sm text-yellow-600">
-          {hotel.star_rating ? "★".repeat(hotel.star_rating) : "—"}
+          {hotel.star_rating ? "★".repeat(hotel.star_rating) : "-"}
         </span>
       </TableCell>
       <TableCell className="whitespace-nowrap">
@@ -401,7 +401,7 @@ export default function HotelsPage() {
         star_rating: data.star_rating,
         price_range: data.price_range || undefined,
         cover_image: data.cover_image.trim() || undefined,
-        region_id: data.region_id || undefined,
+        region_id: data.region_id.trim(),
         is_featured: data.is_featured,
         gallery: normalizedGallery.length > 0 ? normalizedGallery : undefined,
       };
@@ -733,7 +733,7 @@ export default function HotelsPage() {
       case "luxury":
         return "रु रु रु";
       default:
-        return "—";
+        return "-";
     }
   };
 
@@ -838,7 +838,7 @@ export default function HotelsPage() {
         </div>
       </div>
 
-      <div className="space-y-2 rounded-lg border border-gray-200 p-3">
+      <div className="space-y-2 rounded-lg border border-gray-200 bg-gray-50/30 p-3">
         <div className="flex items-center justify-between">
           <label className="text-sm font-medium text-gray-700">
             Phone Numbers
@@ -853,7 +853,7 @@ export default function HotelsPage() {
             Add Phone
           </Button>
         </div>
-        <div className="space-y-2">
+        <div className="max-h-44 space-y-2 overflow-y-auto pr-1">
           {formData.phone_numbers.map((phone, index) => (
             <div key={`phone-${index}`} className="flex items-center gap-2">
               <Input
@@ -889,7 +889,7 @@ export default function HotelsPage() {
         />
       </div>
 
-      <div className="space-y-3 rounded-lg border border-gray-200 p-3">
+      <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50/30 p-3">
         <div className="flex items-center justify-between">
           <label className="text-sm font-medium text-gray-700">
             Gallery Images
@@ -909,11 +909,11 @@ export default function HotelsPage() {
             Add optional gallery images for the hotel detail page.
           </p>
         ) : (
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid max-h-[360px] gap-3 overflow-y-auto pr-1 md:grid-cols-2">
             {formData.gallery_images.map((url, index) => (
               <div
                 key={`gallery-${index}`}
-                className="rounded-md border border-gray-200 p-2"
+                className="rounded-md border border-gray-200 bg-white p-2"
               >
                 <ImageUpload
                   label={`Image ${index + 1}`}
@@ -928,7 +928,7 @@ export default function HotelsPage() {
         )}
       </div>
 
-      <div className="space-y-3 rounded-lg border border-gray-200 p-3">
+      <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50/30 p-3">
         <div className="flex items-center justify-between">
           <label className="text-sm font-medium text-gray-700">
             Branches & Locations
@@ -952,11 +952,11 @@ export default function HotelsPage() {
             locations.
           </p>
         ) : (
-          <div className="space-y-3">
+          <div className="max-h-[360px] space-y-3 overflow-y-auto pr-1">
             {branches.map((branch, index) => (
               <div
                 key={branch.id ?? `branch-${index}`}
-                className="rounded-md border border-gray-200 p-3"
+                className="rounded-md border border-gray-200 bg-white p-3"
               >
                 <div className="mb-2 flex items-center justify-between">
                   <p className="text-xs font-semibold uppercase text-gray-500">

@@ -301,7 +301,11 @@ impl HotelService {
                 amenities = COALESCE($9, amenities),
                 cover_image = COALESCE($10, cover_image),
                 gallery = COALESCE($11, gallery),
-                region_id = COALESCE($12, region_id),
+                region_id = CASE
+                    WHEN $12 IS NULL THEN region_id
+                    WHEN $12 = '' THEN NULL
+                    ELSE $12
+                END,
                 is_featured = COALESCE($13, is_featured),
                 status = COALESCE($14::content_status, status)
             WHERE id = $15 AND deleted_at IS NULL

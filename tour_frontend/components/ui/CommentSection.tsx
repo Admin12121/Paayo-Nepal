@@ -309,6 +309,16 @@ export function CommentSection({ targetType, targetId }: CommentSectionProps) {
 
   const fetchComments = useCallback(
     async (pageNum: number, append = false) => {
+      if (!targetId?.trim()) {
+        setComments([]);
+        setTotal(0);
+        setPage(1);
+        setTotalPages(1);
+        setLoading(false);
+        setLoadingMore(false);
+        return;
+      }
+
       try {
         if (append) {
           setLoadingMore(true);
@@ -335,7 +345,11 @@ export function CommentSection({ targetType, targetId }: CommentSectionProps) {
                   typeof (err as { status?: unknown }).status === "number"
                 ? ((err as { status: number }).status ?? undefined)
                 : undefined;
-          if (status === 404) {
+          const isNotFound =
+            status === 404 ||
+            (err instanceof Error &&
+              err.message.toLowerCase().includes("not found"));
+          if (isNotFound) {
             // Compatibility fallback: treat missing comments route/content as empty.
             response = {
               data: [],
@@ -373,8 +387,9 @@ export function CommentSection({ targetType, targetId }: CommentSectionProps) {
   );
 
   useEffect(() => {
+    if (!targetId?.trim()) return;
     fetchComments(1);
-  }, [fetchComments]);
+  }, [fetchComments, targetId]);
 
   const handleSubmit = async (data: CommentFormData) => {
     try {

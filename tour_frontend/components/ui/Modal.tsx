@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import {
   Dialog,
@@ -27,12 +27,25 @@ export default function Modal({
   footer,
   size = "md",
 }: ModalProps) {
+  const closeRequestedRef = useRef(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      closeRequestedRef.current = false;
+    }
+  }, [isOpen]);
+
   const handleOpenChange = useCallback(
     (open: boolean) => {
-      if (open) return;
-      if (isOpen) onClose();
+      if (open) {
+        closeRequestedRef.current = false;
+        return;
+      }
+      if (closeRequestedRef.current) return;
+      closeRequestedRef.current = true;
+      onClose();
     },
-    [isOpen, onClose],
+    [onClose],
   );
 
   const sizes = {
@@ -42,8 +55,10 @@ export default function Modal({
     xl: "sm:max-w-4xl",
   };
 
+  if (!isOpen) return null;
+
   return (
-    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
+    <Dialog open onOpenChange={handleOpenChange}>
       <DialogContent
         className={cn(
           "flex w-[calc(100%-2rem)] max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-lg p-0",

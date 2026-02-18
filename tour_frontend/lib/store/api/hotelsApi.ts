@@ -153,7 +153,11 @@ export const hotelsApi = baseApi.injectEndpoints({
       query: ({ id, data }) => {
         const normalized = {
           ...data,
-          region_id: data.region_id || undefined,
+          region_id:
+            Object.prototype.hasOwnProperty.call(data, "region_id") &&
+            data.region_id !== undefined
+              ? data.region_id.trim()
+              : undefined,
           email: data.email || undefined,
           phone: data.phone || undefined,
           website: data.website || undefined,

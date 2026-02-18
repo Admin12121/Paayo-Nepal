@@ -506,15 +506,14 @@ export default function PhotoFeaturesPage() {
     isLoading: imagesLoading,
     refetch: refetchImages,
   } = useListPhotoImagesQuery(imagesModal.photo?.id ?? "", {
-    skip: !imagesModal.open || !imagesModal.photo,
+    skip: !imagesModal.open || !imagesModal.photo?.id,
     refetchOnMountOrArgChange: true,
     refetchOnFocus: true,
   });
 
   useEffect(() => {
-    if (!imagesModal.open || !imagesModal.photo) return;
-
-    const photoId = imagesModal.photo.id;
+    const photoId = imagesModal.photo?.id;
+    if (!imagesModal.open || !photoId) return;
     const cover = pickDeterministicImage(
       photoId,
       images.map((image) => image.image_url),
@@ -528,7 +527,7 @@ export default function PhotoFeaturesPage() {
       if (prev[photoId] === cover) return prev;
       return { ...prev, [photoId]: cover };
     });
-  }, [images, imagesModal.open, imagesModal.photo]);
+  }, [images, imagesModal.open, imagesModal.photo?.id]);
 
   const photos = photosResponse?.data ?? EMPTY_PHOTOS;
   const totalPages = photosResponse?.total_pages ?? 1;
@@ -550,8 +549,13 @@ export default function PhotoFeaturesPage() {
           return { ...prev, [photo.id]: cover };
         });
       } catch {
-        const fallbackCover = resolvePhotoCover(photo, photoCoverImages);
-        const fallbackCount = resolvePhotoImageCount(photo, imageCounts);
+        const fallbackCover =
+          photo.cover_image_url ??
+          pickDeterministicImage(
+            photo.id,
+            (photo.images ?? []).map((img) => img.image_url),
+          );
+        const fallbackCount = photo.image_count ?? photo.images?.length ?? 0;
         setImageCounts((prev) => ({
           ...prev,
           [photo.id]: prev[photo.id] ?? fallbackCount,
@@ -562,7 +566,7 @@ export default function PhotoFeaturesPage() {
         }));
       }
     },
-    [imageCounts, photoCoverImages],
+    [],
   );
 
   useEffect(() => {
@@ -605,7 +609,7 @@ export default function PhotoFeaturesPage() {
         let changed = false;
         for (const photo of photos) {
           if (photo.image_count == null) continue;
-          if (next[photo.id] !== photo.image_count) {
+          if (next[photo.id] === undefined) {
             next[photo.id] = photo.image_count;
             changed = true;
           }
@@ -622,7 +626,7 @@ export default function PhotoFeaturesPage() {
               photo.id,
               (photo.images ?? []).map((img) => img.image_url),
             );
-          if (next[photo.id] !== coverFromPayload) {
+          if (next[photo.id] === undefined) {
             next[photo.id] = coverFromPayload;
             changed = true;
           }
@@ -633,8 +637,7 @@ export default function PhotoFeaturesPage() {
       const uncachedPhotos = photos.filter(
         (photo) =>
           !hydratedPhotoMetaRef.current.has(photo.id) &&
-          photo.image_count == null &&
-          !Array.isArray(photo.images),
+          (photo.image_count == null || photo.image_count === 0),
       );
 
       if (uncachedPhotos.length === 0) return;
@@ -695,7 +698,7 @@ export default function PhotoFeaturesPage() {
         hydratedPhotoMetaRef.current.add(id);
       }
       for (const photo of photos) {
-        if (photo.image_count != null || Array.isArray(photo.images)) {
+        if (photo.image_count != null && photo.image_count > 0) {
           hydratedPhotoMetaRef.current.add(photo.id);
         }
       }
@@ -828,7 +831,7 @@ export default function PhotoFeaturesPage() {
         id: editModal.photo.id,
         data: {
           ...formData,
-          region_id: formData.region_id || undefined,
+          region_id: formData.region_id,
         },
       }).unwrap();
       await refetchPhotos();
@@ -1348,7 +1351,7 @@ export default function PhotoFeaturesPage() {
             imageInputRef.current.value = "";
           }
         }}
-        title={`Images — ${imagesModal.photo?.title || ""}`}
+        title={`Images - ${imagesModal.photo?.title || ""}`}
         size="lg"
         footer={
           <Button
@@ -1415,9 +1418,6 @@ export default function PhotoFeaturesPage() {
                     <div className="p-2">
                       <p className="truncate text-xs text-slate-700">
                         {image.caption || "No caption"}
-                      </p>
-                      <p className="truncate text-[10px] text-slate-400">
-                        by {image.uploaded_by || "unknown"}
                       </p>
                     </div>
                     <div className="absolute left-2 top-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white">

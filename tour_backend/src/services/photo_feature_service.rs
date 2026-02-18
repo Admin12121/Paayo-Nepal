@@ -266,7 +266,11 @@ impl PhotoFeatureService {
                 slug = COALESCE($1, slug),
                 title = COALESCE($2, title),
                 description = COALESCE($3, description),
-                region_id = COALESCE($4, region_id),
+                region_id = CASE
+                    WHEN $4 IS NULL THEN region_id
+                    WHEN $4 = '' THEN NULL
+                    ELSE $4
+                END,
                 is_featured = COALESCE($5, is_featured),
                 status = COALESCE($6::content_status, status)
             WHERE id = $7 AND deleted_at IS NULL

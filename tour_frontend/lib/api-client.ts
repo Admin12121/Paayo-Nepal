@@ -982,7 +982,11 @@ export const hotelsApi = {
   update: (id: string, data: Partial<CreateHotelInput> & { status?: string }) =>
     api.put<Hotel>(`/hotels/${id}`, {
       ...data,
-      region_id: data.region_id || undefined,
+      region_id:
+        Object.prototype.hasOwnProperty.call(data, "region_id") &&
+        data.region_id !== undefined
+          ? data.region_id.trim()
+          : undefined,
       email: data.email || undefined,
       phone: data.phone || undefined,
       website: data.website || undefined,
@@ -1093,7 +1097,11 @@ export const videosApi = {
   update: (id: string, data: Partial<CreateVideoInput> & { status?: string }) =>
     api.put<Video>(`/videos/${id}`, {
       ...data,
-      region_id: data.region_id || undefined,
+      region_id:
+        Object.prototype.hasOwnProperty.call(data, "region_id") &&
+        data.region_id !== undefined
+          ? data.region_id.trim()
+          : undefined,
       description: data.description || undefined,
       video_id: data.video_id || undefined,
       thumbnail_url: data.thumbnail_url || undefined,
@@ -1188,7 +1196,11 @@ export const photoFeaturesApi = {
   ) =>
     api.put<PhotoFeature>(`/photos/${id}`, {
       ...data,
-      region_id: data.region_id || undefined,
+      region_id:
+        Object.prototype.hasOwnProperty.call(data, "region_id") &&
+        data.region_id !== undefined
+          ? data.region_id.trim()
+          : undefined,
     }),
 
   delete: (id: string) => api.delete(`/photos/${id}`),

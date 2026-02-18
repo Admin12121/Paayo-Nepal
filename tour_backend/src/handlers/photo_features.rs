@@ -260,8 +260,7 @@ pub async fn update(
     let normalized_region_id = input
         .region_id
         .as_deref()
-        .map(str::trim)
-        .filter(|v| !v.is_empty());
+        .map(str::trim);
 
     let photo = service
         .update(

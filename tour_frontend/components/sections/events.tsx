@@ -7,7 +7,7 @@ import { eventsApi } from "@/lib/api-client";
 export async function EventsSection() {
   let events;
   try {
-    const res = await eventsApi.upcoming({ limit: 3 });
+    const res = await eventsApi.upcoming({ limit: 4 });
     events = res.data;
   } catch {
     return <EventsSkeleton />;
@@ -20,7 +20,7 @@ export async function EventsSection() {
       <div className="max-w-[1400px] mx-auto">
         <SectionHeading title="EVENTS AND FESTIVALS" />
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {events.map((event) => (
             <EventCard
               key={event.id}

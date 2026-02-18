@@ -309,8 +309,7 @@ pub async fn update(
     let normalized_region_id = input
         .region_id
         .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty());
+        .map(str::trim);
 
     // Sanitize rich HTML description before storage (defence-in-depth)
     let sanitized_description = input.description.as_deref().map(sanitize_rich_html);

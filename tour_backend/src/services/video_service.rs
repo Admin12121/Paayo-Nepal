@@ -231,7 +231,11 @@ impl VideoService {
                 video_id = COALESCE($5, video_id),
                 thumbnail_url = COALESCE($6, thumbnail_url),
                 duration = COALESCE($7, duration),
-                region_id = COALESCE($8, region_id),
+                region_id = CASE
+                    WHEN $8 IS NULL THEN region_id
+                    WHEN $8 = '' THEN NULL
+                    ELSE $8
+                END,
                 is_featured = COALESCE($9, is_featured),
                 status = COALESCE($10::content_status, status)
             WHERE id = $11 AND deleted_at IS NULL

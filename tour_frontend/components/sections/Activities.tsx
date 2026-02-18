@@ -7,7 +7,7 @@ import { activitiesApi } from "@/lib/api-client";
 export async function ActivitiesSection() {
   let activities;
   try {
-    const res = await activitiesApi.list({ limit: 6 });
+    const res = await activitiesApi.list({ limit: 8 });
     activities = res.data;
   } catch {
     return <ActivitiesSkeleton />;
@@ -20,9 +20,8 @@ export async function ActivitiesSection() {
       <div className="max-w-[1400px] mx-auto">
         <SectionHeading title="ACTIVITIES" />
 
-        {/* 2x3 Grid with tall portrait cards */}
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-5">
-          {activities.slice(0, 6).map((activity) => (
+        <div className="grid grid-cols-2 gap-5 lg:grid-cols-4">
+          {activities.slice(0, 8).map((activity) => (
             <ImageCard
               key={activity.id}
               src={activity.cover_image || ""}

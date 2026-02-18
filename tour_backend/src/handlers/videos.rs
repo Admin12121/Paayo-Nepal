@@ -265,8 +265,7 @@ pub async fn update(
     let normalized_region_id = input
         .region_id
         .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty());
+        .map(str::trim);
 
     let video = service
         .update(

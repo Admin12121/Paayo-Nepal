@@ -134,7 +134,11 @@ export const videosApi = baseApi.injectEndpoints({
       query: ({ id, data }) => {
         const normalized = {
           ...data,
-          region_id: data.region_id || undefined,
+          region_id:
+            Object.prototype.hasOwnProperty.call(data, "region_id") &&
+            data.region_id !== undefined
+              ? data.region_id.trim()
+              : undefined,
           description: data.description || undefined,
           video_id: data.video_id || undefined,
           thumbnail_url: data.thumbnail_url || undefined,

@@ -261,13 +261,13 @@ export default function VideoDetailPage() {
                       year: "numeric",
                     })}
                   </span>
-                  <span>•</span>
+                  <span>|</span>
                   <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold uppercase text-blue-700">
                     {video.platform}
                   </span>
                   {formatDuration(video.duration) && (
                     <>
-                      <span>•</span>
+                      <span>|</span>
                       <span>{formatDuration(video.duration)}</span>
                     </>
                   )}
@@ -330,7 +330,9 @@ export default function VideoDetailPage() {
 
             {/* Comments Section */}
             <div className="mt-6">
-              <CommentSection targetType="video" targetId={video.id} />
+              {video.id ? (
+                <CommentSection targetType="video" targetId={video.id} />
+              ) : null}
             </div>
           </div>
 
