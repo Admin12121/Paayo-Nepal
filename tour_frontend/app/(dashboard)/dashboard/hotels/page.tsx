@@ -32,6 +32,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import Image from "next/image";
+import Link from "next/link";
 import {
   type Hotel as HotelType,
   type HotelBranch,
@@ -182,10 +183,18 @@ function DraggableHotelRow({
             />
           )}
           <div className="min-w-0">
-            <div className="truncate text-sm font-medium text-gray-900">
+            <Link
+              href={`/hotels/${hotel.slug}`}
+              className="block truncate text-sm font-medium text-gray-900 hover:text-blue-700"
+            >
               {hotel.name}
-            </div>
-            <div className="truncate text-xs text-slate-500">/{hotel.slug}</div>
+            </Link>
+            <Link
+              href={`/hotels/${hotel.slug}`}
+              className="block truncate text-xs text-blue-600 hover:underline"
+            >
+              /{hotel.slug}
+            </Link>
           </div>
         </div>
       </TableCell>
@@ -236,6 +245,9 @@ function DraggableHotelRow({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuItem asChild>
+              <Link href={`/hotels/${hotel.slug}`}>View public page</Link>
+            </DropdownMenuItem>
             {hotel.status === "draft" && (
               <DropdownMenuItem onClick={() => onPublish(hotel)}>
                 <CheckCircle className="mr-2 h-4 w-4" />

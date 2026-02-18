@@ -76,6 +76,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/lib/utils/toast";
+import Link from "next/link";
 
 const EMPTY_PHOTOS: PhotoFeature[] = [];
 const PHOTO_VIEW_MODE_STORAGE_KEY = "dashboard:photos:view-mode";
@@ -169,28 +170,22 @@ function SortablePhotoCard({
         isDragging ? "opacity-75" : ""
       }`}
     >
-      {!rankingMode && (
-        <button
-          type="button"
-          onClick={() => onOpenImages(photo)}
-          className="absolute inset-0 z-10"
-          aria-label={`Manage images for ${photo.title}`}
-        />
-      )}
       <div className="relative aspect-[4/3] w-full overflow-hidden bg-slate-100">
-        {cover ? (
-          <img
-            src={cover}
-            alt={photo.title}
-            className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-800 to-slate-600 p-4 text-center">
-            <p className="line-clamp-3 text-sm font-semibold text-white">
-              {photo.title}
-            </p>
-          </div>
-        )}
+        <Link href={`/photos/${photo.slug}`} className="block h-full w-full">
+          {cover ? (
+            <img
+              src={cover}
+              alt={photo.title}
+              className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-800 to-slate-600 p-4 text-center">
+              <p className="line-clamp-3 text-sm font-semibold text-white">
+                {photo.title}
+              </p>
+            </div>
+          )}
+        </Link>
 
         <div className="absolute left-3 top-3 flex items-center gap-2">
           <Badge
@@ -267,10 +262,18 @@ function SortablePhotoCard({
 
       <div className="space-y-3 p-4">
         <div>
-          <h3 className="line-clamp-1 text-base font-semibold text-slate-900">
+          <Link
+            href={`/photos/${photo.slug}`}
+            className="line-clamp-1 text-base font-semibold text-slate-900 hover:text-blue-700"
+          >
             {photo.title}
-          </h3>
-          <p className="line-clamp-1 text-xs text-slate-500">/{photo.slug}</p>
+          </Link>
+          <Link
+            href={`/photos/${photo.slug}`}
+            className="line-clamp-1 text-xs text-blue-600 hover:underline"
+          >
+            /{photo.slug}
+          </Link>
         </div>
 
         <div className="grid grid-cols-3 gap-2 text-xs text-slate-600">
@@ -351,14 +354,18 @@ function SortablePhotoRow({
             </button>
           )}
           <div className="min-w-0">
-            <button
-              type="button"
-              onClick={() => onOpenImages(photo)}
-              className="block truncate text-left text-sm text-blue-600 hover:underline"
+            <Link
+              href={`/photos/${photo.slug}`}
+              className="block truncate text-left text-sm font-medium text-slate-900 hover:text-blue-700"
             >
               {photo.title}
-            </button>
-            <p className="truncate text-xs text-slate-500">/{photo.slug}</p>
+            </Link>
+            <Link
+              href={`/photos/${photo.slug}`}
+              className="truncate text-xs text-blue-600 hover:underline"
+            >
+              /{photo.slug}
+            </Link>
           </div>
         </div>
       </TableCell>
