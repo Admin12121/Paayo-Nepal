@@ -100,14 +100,28 @@ function useMap() {
   return context;
 }
 
-const defaultStyles = {
-  dark: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
-  light: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
-};
-
 type MapStyleOption = string | MapLibreGL.StyleSpecification;
 
 type Theme = "light" | "dark";
+
+const createDefaultStyle = (theme: Theme): MapLibreGL.StyleSpecification => ({
+  version: 8,
+  sources: {},
+  layers: [
+    {
+      id: "background",
+      type: "background",
+      paint: {
+        "background-color": theme === "dark" ? "#111827" : "#f3f4f6",
+      },
+    },
+  ],
+});
+
+const defaultStyles: Record<Theme, MapStyleOption> = {
+  dark: createDefaultStyle("dark"),
+  light: createDefaultStyle("light"),
+};
 
 /** Map viewport state */
 type MapViewport = {

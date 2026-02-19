@@ -49,6 +49,31 @@ const DEFAULT_VIEWPORT: ViewportState = {
   pitch: 0,
 };
 
+const REGION_EDITOR_MAP_STYLE: maplibregl.StyleSpecification = {
+  version: 8,
+  sources: {
+    "osm-tiles": {
+      type: "raster",
+      tiles: [
+        "https://a.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        "https://b.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        "https://c.tile.openstreetmap.org/{z}/{x}/{y}.png",
+      ],
+      tileSize: 256,
+      attribution: "(c) OpenStreetMap contributors",
+    },
+  },
+  layers: [
+    {
+      id: "osm-tiles",
+      type: "raster",
+      source: "osm-tiles",
+      minzoom: 0,
+      maxzoom: 19,
+    },
+  ],
+};
+
 type MapFeatureCollection = {
   type: "FeatureCollection";
   features: Array<{
@@ -64,6 +89,51 @@ type MapFeatureCollection = {
           coordinates: LngLatTuple[][];
         };
   }>;
+};
+
+type DistrictBoundaryFeature = {
+  type: "Feature";
+  properties: {
+    DISTRICT: string;
+    HQ: string;
+    PROVINCE: number;
+  };
+  geometry: {
+    type: "Polygon";
+    coordinates: number[][][];
+  };
+};
+
+type DistrictBoundaryCollection = {
+  type: "FeatureCollection";
+  features: DistrictBoundaryFeature[];
+};
+
+const DISTRICT_NAME_ALIASES: Record<string, string> = {
+  TERHATHUM: "TEHRATHUM",
+  DHANUSHA: "DHANUSA",
+  KAVREPALANCHOK: "KAVREPALANCHOWK",
+  TANAHUN: "TANAHU",
+  "RUKUM EAST": "EASTERN RUKUM",
+  "RUKUM WEST": "WESTERN RUKUM",
+};
+
+const normalizeDistrictName = (value: string) =>
+  value.trim().toUpperCase().replace(/\s+/g, " ");
+
+const canonicalDistrictName = (value: string) => {
+  const normalized = normalizeDistrictName(value);
+  return DISTRICT_NAME_ALIASES[normalized] ?? normalized;
+};
+
+const zoomFromSpan = (span: number) => {
+  if (span <= 0.08) return 11.6;
+  if (span <= 0.2) return 10.8;
+  if (span <= 0.35) return 10.2;
+  if (span <= 0.6) return 9.5;
+  if (span <= 1.2) return 8.7;
+  if (span <= 2.2) return 7.9;
+  return 7.1;
 };
 
 const toFeatureCollection = (polygon: LngLatTuple[]): MapFeatureCollection => {
@@ -100,6 +170,87 @@ const toFeatureCollection = (polygon: LngLatTuple[]): MapFeatureCollection => {
   };
 };
 
+function RegionMapDistrictLayer({
+  boundaries,
+}: {
+  boundaries: DistrictBoundaryFeature[];
+}) {
+  const { map, isLoaded } = useMap();
+  const instanceId = useId().replace(/:/g, "");
+  const idsRef = useRef({
+    sourceId: `region-district-source-${instanceId}`,
+    fillId: `region-district-fill-${instanceId}`,
+    lineId: `region-district-line-${instanceId}`,
+  });
+
+  const boundaryCollection = useMemo<DistrictBoundaryCollection>(
+    () => ({
+      type: "FeatureCollection",
+      features: boundaries,
+    }),
+    [boundaries],
+  );
+
+  useEffect(() => {
+    if (!map || !isLoaded) return;
+
+    const mapInstance = map;
+    const { sourceId, fillId, lineId } = idsRef.current;
+
+    if (!mapInstance.getSource(sourceId)) {
+      mapInstance.addSource(sourceId, {
+        type: "geojson",
+        data: boundaryCollection,
+      });
+    }
+
+    if (!mapInstance.getLayer(fillId)) {
+      mapInstance.addLayer({
+        id: fillId,
+        type: "fill",
+        source: sourceId,
+        paint: {
+          "fill-color": "#2563eb",
+          "fill-opacity": 0.2,
+        },
+      });
+    }
+
+    if (!mapInstance.getLayer(lineId)) {
+      mapInstance.addLayer({
+        id: lineId,
+        type: "line",
+        source: sourceId,
+        paint: {
+          "line-color": "#1d4ed8",
+          "line-width": 1.8,
+        },
+      });
+    }
+
+    return () => {
+      try {
+        if (mapInstance.getLayer(fillId)) mapInstance.removeLayer(fillId);
+        if (mapInstance.getLayer(lineId)) mapInstance.removeLayer(lineId);
+        if (mapInstance.getSource(sourceId)) mapInstance.removeSource(sourceId);
+      } catch {
+        // Map may already be disposed during route transitions/HMR.
+      }
+    };
+  }, [map, isLoaded, boundaryCollection]);
+
+  useEffect(() => {
+    if (!map || !isLoaded) return;
+    const source = map.getSource(idsRef.current.sourceId) as
+      | maplibregl.GeoJSONSource
+      | undefined;
+    if (!source) return;
+    source.setData(boundaryCollection);
+  }, [map, isLoaded, boundaryCollection]);
+
+  return null;
+}
+
 function RegionMapAreaLayer({ polygon }: { polygon: LngLatTuple[] }) {
   const { map, isLoaded } = useMap();
   const instanceId = useId().replace(/:/g, "");
@@ -112,17 +263,18 @@ function RegionMapAreaLayer({ polygon }: { polygon: LngLatTuple[] }) {
   useEffect(() => {
     if (!map || !isLoaded) return;
 
+    const mapInstance = map;
     const { sourceId, fillId, lineId } = idsRef.current;
 
-    if (!map.getSource(sourceId)) {
-      map.addSource(sourceId, {
+    if (!mapInstance.getSource(sourceId)) {
+      mapInstance.addSource(sourceId, {
         type: "geojson",
         data: toFeatureCollection([]),
       });
     }
 
-    if (!map.getLayer(fillId)) {
-      map.addLayer({
+    if (!mapInstance.getLayer(fillId)) {
+      mapInstance.addLayer({
         id: fillId,
         type: "fill",
         source: sourceId,
@@ -134,8 +286,8 @@ function RegionMapAreaLayer({ polygon }: { polygon: LngLatTuple[] }) {
       });
     }
 
-    if (!map.getLayer(lineId)) {
-      map.addLayer({
+    if (!mapInstance.getLayer(lineId)) {
+      mapInstance.addLayer({
         id: lineId,
         type: "line",
         source: sourceId,
@@ -148,9 +300,13 @@ function RegionMapAreaLayer({ polygon }: { polygon: LngLatTuple[] }) {
     }
 
     return () => {
-      if (map.getLayer(fillId)) map.removeLayer(fillId);
-      if (map.getLayer(lineId)) map.removeLayer(lineId);
-      if (map.getSource(sourceId)) map.removeSource(sourceId);
+      try {
+        if (mapInstance.getLayer(fillId)) mapInstance.removeLayer(fillId);
+        if (mapInstance.getLayer(lineId)) mapInstance.removeLayer(lineId);
+        if (mapInstance.getSource(sourceId)) mapInstance.removeSource(sourceId);
+      } catch {
+        // Map may already be disposed during route transitions/HMR.
+      }
     };
   }, [map, isLoaded]);
 
@@ -202,11 +358,57 @@ export default function RegionLocationSettings({
   onPolygonChange,
 }: RegionLocationSettingsProps) {
   const [isDrawing, setIsDrawing] = useState(false);
+  const [districtBoundaries, setDistrictBoundaries] =
+    useState<DistrictBoundaryCollection | null>(null);
+  const [districtBoundaryLoadFailed, setDistrictBoundaryLoadFailed] =
+    useState(false);
   const [viewport, setViewport] = useState<ViewportState>(() => ({
     ...DEFAULT_VIEWPORT,
     center: marker || NEPAL_DEFAULT_CENTER,
     zoom: marker ? 8.8 : DEFAULT_VIEWPORT.zoom,
   }));
+  const autoMappedDistrictKeyRef = useRef("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let active = true;
+
+    const loadDistrictBoundaries = async () => {
+      try {
+        const response = await fetch("/data/nepal-districts.geojson", {
+          cache: "force-cache",
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          throw new Error(`Failed to load district boundaries (${response.status})`);
+        }
+
+        const data = (await response.json()) as DistrictBoundaryCollection;
+        if (
+          !active ||
+          data.type !== "FeatureCollection" ||
+          !Array.isArray(data.features)
+        ) {
+          return;
+        }
+
+        setDistrictBoundaries(data);
+        setDistrictBoundaryLoadFailed(false);
+      } catch (error) {
+        if (!active || (error instanceof DOMException && error.name === "AbortError")) {
+          return;
+        }
+        setDistrictBoundaryLoadFailed(true);
+      }
+    };
+
+    void loadDistrictBoundaries();
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, []);
 
   const provinceKey = useMemo(
     () => NEPAL_PROVINCES.find((item) => item === province),
@@ -218,10 +420,86 @@ export default function RegionLocationSettings({
     [provinceKey],
   );
 
+  const selectedDistrictBoundaries = useMemo(() => {
+    if (!districtBoundaries || selectedDistricts.length === 0) return [];
+
+    const selectedNames = new Set(
+      selectedDistricts.map((district) => canonicalDistrictName(district)),
+    );
+
+    return districtBoundaries.features.filter((feature) =>
+      selectedNames.has(canonicalDistrictName(feature.properties.DISTRICT)),
+    );
+  }, [districtBoundaries, selectedDistricts]);
+
+  const selectedDistrictViewport = useMemo(() => {
+    if (selectedDistrictBoundaries.length === 0) return null;
+
+    let minLng = Number.POSITIVE_INFINITY;
+    let minLat = Number.POSITIVE_INFINITY;
+    let maxLng = Number.NEGATIVE_INFINITY;
+    let maxLat = Number.NEGATIVE_INFINITY;
+    let sumLng = 0;
+    let sumLat = 0;
+    let pointCount = 0;
+
+    for (const feature of selectedDistrictBoundaries) {
+      for (const ring of feature.geometry.coordinates) {
+        for (const [lng, lat] of ring) {
+          minLng = Math.min(minLng, lng);
+          minLat = Math.min(minLat, lat);
+          maxLng = Math.max(maxLng, lng);
+          maxLat = Math.max(maxLat, lat);
+          sumLng += lng;
+          sumLat += lat;
+          pointCount += 1;
+        }
+      }
+    }
+
+    if (!Number.isFinite(minLng) || !Number.isFinite(minLat) || pointCount === 0) {
+      return null;
+    }
+
+    const center: LngLatTuple = [sumLng / pointCount, sumLat / pointCount];
+    const span = Math.max(maxLng - minLng, maxLat - minLat);
+
+    return {
+      center,
+      zoom: zoomFromSpan(span),
+    };
+  }, [selectedDistrictBoundaries]);
+
   const derivedCoordinates = useMemo(
     () => deriveCoordinatesFromRegionLocation(marker, polygon),
     [marker, polygon],
   );
+
+  useEffect(() => {
+    if (mapMode !== "districts") return;
+    if (selectedDistricts.length === 0) {
+      autoMappedDistrictKeyRef.current = "";
+      return;
+    }
+    if (!selectedDistrictViewport) return;
+
+    const autoKey = selectedDistricts
+      .map((district) => canonicalDistrictName(district))
+      .sort()
+      .join("|");
+
+    if (!autoKey || autoMappedDistrictKeyRef.current === autoKey) return;
+    autoMappedDistrictKeyRef.current = autoKey;
+
+    onMarkerChange(selectedDistrictViewport.center);
+    setViewport((current) => ({
+      ...current,
+      center: selectedDistrictViewport.center,
+      zoom: selectedDistrictViewport.zoom,
+      bearing: 0,
+      pitch: 0,
+    }));
+  }, [mapMode, onMarkerChange, selectedDistrictViewport, selectedDistricts]);
 
   const handleProvinceSelect = (nextProvince: string) => {
     onProvinceChange(nextProvince);
@@ -427,7 +705,15 @@ export default function RegionLocationSettings({
         </div>
 
         <div className="relative h-56 w-full">
-          <Map viewport={viewport} onViewportChange={setViewport}>
+          <Map
+            theme="light"
+            styles={{
+              light: REGION_EDITOR_MAP_STYLE,
+              dark: REGION_EDITOR_MAP_STYLE,
+            }}
+            viewport={viewport}
+            onViewportChange={setViewport}
+          >
             <MapControls
               position="bottom-right"
               showZoom
@@ -436,7 +722,10 @@ export default function RegionLocationSettings({
               showFullscreen
             />
             <RegionMapClickCapture onMapClick={handleMapClick} />
-            <RegionMapAreaLayer polygon={polygon} />
+            {mapMode === "districts" && (
+              <RegionMapDistrictLayer boundaries={selectedDistrictBoundaries} />
+            )}
+            <RegionMapAreaLayer polygon={mapMode === "custom" ? polygon : []} />
             {marker && (
               <MapMarker
                 longitude={marker[0]}
@@ -467,6 +756,17 @@ export default function RegionLocationSettings({
               ? `${derivedCoordinates.latitude.toFixed(5)}, ${derivedCoordinates.longitude.toFixed(5)}`
               : "not set"}
           </p>
+          {mapMode === "districts" && selectedDistrictBoundaries.length > 0 && (
+            <p className="text-[11px] text-blue-600">
+              Auto-mapped boundary for {selectedDistrictBoundaries.length} district
+              {selectedDistrictBoundaries.length > 1 ? "s" : ""}.
+            </p>
+          )}
+          {mapMode === "districts" && districtBoundaryLoadFailed && (
+            <p className="text-[11px] text-amber-600">
+              District boundary dataset could not be loaded.
+            </p>
+          )}
         </div>
       </div>
     </div>
