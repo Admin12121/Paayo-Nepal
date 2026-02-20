@@ -902,6 +902,7 @@ export interface Hotel {
 export interface HotelBranch {
   id: string;
   hotel_id: string;
+  region_id: string | null;
   name: string;
   address: string | null;
   phone: string | null;
@@ -928,6 +929,7 @@ export interface CreateHotelInput {
 }
 
 export interface CreateBranchInput {
+  region_id?: string;
   name: string;
   address?: string;
   phone?: string;

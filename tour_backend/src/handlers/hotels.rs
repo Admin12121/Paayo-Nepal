@@ -64,6 +64,7 @@ pub struct UpdateHotelInput {
 
 #[derive(Debug, Deserialize)]
 pub struct CreateBranchInput {
+    pub region_id: Option<String>,
     pub name: String,
     pub address: Option<String>,
     pub phone: Option<String>,
@@ -74,6 +75,7 @@ pub struct CreateBranchInput {
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateBranchInput {
+    pub region_id: Option<String>,
     pub name: Option<String>,
     pub address: Option<String>,
     pub phone: Option<String>,
@@ -496,9 +498,16 @@ pub async fn add_branch(
         return Err(ApiError::Forbidden);
     }
 
+    let normalized_region_id = input
+        .region_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+
     let branch = service
         .add_branch(
             &hotel_id,
+            normalized_region_id,
             input.name.trim(),
             input.address.as_deref(),
             input.phone.as_deref(),
@@ -537,9 +546,12 @@ pub async fn update_branch(
         return Err(ApiError::NotFound("Branch not found".to_string()));
     }
 
+    let normalized_region_id = input.region_id.as_deref().map(str::trim);
+
     let branch = service
         .update_branch(
             &branch_id,
+            normalized_region_id,
             input.name.as_deref(),
             input.address.as_deref(),
             input.phone.as_deref(),

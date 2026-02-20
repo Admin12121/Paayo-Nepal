@@ -126,7 +126,6 @@ function SortablePhotoCard({
   onOpenImages,
   onToggleFeatured,
   onPublish,
-  onEdit,
   onDelete,
 }: {
   photo: PhotoFeature;
@@ -137,7 +136,6 @@ function SortablePhotoCard({
   onOpenImages: (photo: PhotoFeature) => void;
   onToggleFeatured: (photo: PhotoFeature) => void;
   onPublish: (photo: PhotoFeature) => void;
-  onEdit: (photo: PhotoFeature) => void;
   onDelete: (photo: PhotoFeature) => void;
 }) {
   const {
@@ -171,7 +169,7 @@ function SortablePhotoCard({
       }`}
     >
       <div className="relative aspect-[4/3] w-full overflow-hidden bg-slate-100">
-        <Link href={`/photos/${photo.slug}`} className="block h-full w-full">
+        <Link href={`/dashboard/photos/${photo.slug}`} className="block h-full w-full">
           {cover ? (
             <img
               src={cover}
@@ -235,8 +233,10 @@ function SortablePhotoCard({
               {canManagePhotoMeta && (
                 <>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => onEdit(photo)}>
-                    Edit details
+                  <DropdownMenuItem asChild>
+                    <Link href={`/dashboard/photos/${photo.slug}`}>
+                      Edit details
+                    </Link>
                   </DropdownMenuItem>
                   {photo.status === "draft" && (
                     <DropdownMenuItem onClick={() => onPublish(photo)}>
@@ -263,13 +263,13 @@ function SortablePhotoCard({
       <div className="space-y-3 p-4">
         <div>
           <Link
-            href={`/photos/${photo.slug}`}
+            href={`/dashboard/photos/${photo.slug}`}
             className="line-clamp-1 text-base font-semibold text-slate-900 hover:text-blue-700"
           >
             {photo.title}
           </Link>
           <Link
-            href={`/photos/${photo.slug}`}
+            href={`/dashboard/photos/${photo.slug}`}
             className="line-clamp-1 text-xs text-blue-600 hover:underline"
           >
             /{photo.slug}
@@ -309,7 +309,6 @@ function SortablePhotoRow({
   onOpenImages,
   onToggleFeatured,
   onPublish,
-  onEdit,
   onDelete,
 }: {
   photo: PhotoFeature;
@@ -319,7 +318,6 @@ function SortablePhotoRow({
   onOpenImages: (photo: PhotoFeature) => void;
   onToggleFeatured: (photo: PhotoFeature) => void;
   onPublish: (photo: PhotoFeature) => void;
-  onEdit: (photo: PhotoFeature) => void;
   onDelete: (photo: PhotoFeature) => void;
 }) {
   const {
@@ -355,13 +353,13 @@ function SortablePhotoRow({
           )}
           <div className="min-w-0">
             <Link
-              href={`/photos/${photo.slug}`}
+              href={`/dashboard/photos/${photo.slug}`}
               className="block truncate text-left text-sm font-medium text-slate-900 hover:text-blue-700"
             >
               {photo.title}
             </Link>
             <Link
-              href={`/photos/${photo.slug}`}
+              href={`/dashboard/photos/${photo.slug}`}
               className="truncate text-xs text-blue-600 hover:underline"
             >
               /{photo.slug}
@@ -406,8 +404,10 @@ function SortablePhotoRow({
             {canManagePhotoMeta && (
               <>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => onEdit(photo)}>
-                  Edit details
+                <DropdownMenuItem asChild>
+                  <Link href={`/dashboard/photos/${photo.slug}`}>
+                    Edit details
+                  </Link>
                 </DropdownMenuItem>
                 {photo.status === "draft" && (
                   <DropdownMenuItem onClick={() => onPublish(photo)}>
@@ -454,10 +454,6 @@ export default function PhotoFeaturesPage() {
   }>({ open: false, photo: null });
 
   const [createModal, setCreateModal] = useState(false);
-  const [editModal, setEditModal] = useState<{
-    open: boolean;
-    photo: PhotoFeature | null;
-  }>({ open: false, photo: null });
   const [imagesModal, setImagesModal] = useState<{
     open: boolean;
     photo: PhotoFeature | null;
@@ -499,7 +495,7 @@ export default function PhotoFeaturesPage() {
   );
 
   const [createPhoto, { isLoading: creating }] = useCreatePhotoMutation();
-  const [updatePhoto, { isLoading: updatingPhoto }] = useUpdatePhotoMutation();
+  const [updatePhoto] = useUpdatePhotoMutation();
   const [deletePhoto, { isLoading: deleting }] = useDeletePhotoMutation();
   const [publishPhoto] = usePublishPhotoMutation();
   const [updatePhotoDisplayOrder, { isLoading: savingOrder }] =
@@ -826,38 +822,6 @@ export default function PhotoFeaturesPage() {
     } catch {
       toast.error("Failed to create photo feature");
     }
-  };
-
-  const handleUpdate = async () => {
-    if (!canManagePhotoMeta || !editModal.photo) {
-      return;
-    }
-
-    try {
-      await updatePhoto({
-        id: editModal.photo.id,
-        data: {
-          ...formData,
-          region_id: formData.region_id,
-        },
-      }).unwrap();
-      await refetchPhotos();
-      toast.success("Photo feature updated");
-      setEditModal({ open: false, photo: null });
-      resetForm();
-    } catch {
-      toast.error("Failed to update photo feature");
-    }
-  };
-
-  const openEditModal = (photo: PhotoFeature) => {
-    setFormData({
-      title: photo.title,
-      description: photo.description || "",
-      region_id: photo.region_id || "",
-      is_featured: photo.is_featured,
-    });
-    setEditModal({ open: true, photo });
   };
 
   const openImagesModal = (photo: PhotoFeature) => {
@@ -1233,7 +1197,6 @@ export default function PhotoFeaturesPage() {
                   onOpenImages={openImagesModal}
                   onToggleFeatured={handleToggleFeatured}
                   onPublish={handlePublish}
-                  onEdit={openEditModal}
                   onDelete={(item) =>
                     setDeleteDialog({ open: true, photo: item })
                   }
@@ -1277,7 +1240,6 @@ export default function PhotoFeaturesPage() {
                         onOpenImages={openImagesModal}
                         onToggleFeatured={handleToggleFeatured}
                         onPublish={handlePublish}
-                        onEdit={openEditModal}
                         onDelete={(item) =>
                           setDeleteDialog({ open: true, photo: item })
                         }
@@ -1313,34 +1275,9 @@ export default function PhotoFeaturesPage() {
             </Button>
             <Button
               onClick={handleCreate}
-              isLoading={creating || updatingPhoto}
+              isLoading={creating}
             >
               Create
-            </Button>
-          </div>
-        }
-      >
-        {formBody}
-      </Modal>
-
-      <Modal
-        isOpen={editModal.open}
-        onClose={() => setEditModal({ open: false, photo: null })}
-        title="Edit Photo Feature"
-        size="lg"
-        footer={
-          <div className="flex justify-end gap-2">
-            <Button
-              variant="ghost"
-              onClick={() => setEditModal({ open: false, photo: null })}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleUpdate}
-              isLoading={creating || updatingPhoto}
-            >
-              Save Changes
             </Button>
           </div>
         }

@@ -37,6 +37,7 @@ pub struct Hotel {
 pub struct HotelBranch {
     pub id: String,
     pub hotel_id: String,
+    pub region_id: Option<String>,
     pub name: String,
     pub address: Option<String>,
     pub phone: Option<String>,

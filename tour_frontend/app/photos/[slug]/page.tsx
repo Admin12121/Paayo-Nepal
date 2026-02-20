@@ -568,7 +568,7 @@ export default function PhotoDetailPage() {
 
             {/* All images with captions (scrollable gallery view) */}
             {images.length > 1 && (
-              <div className="bg-white rounded-2xl p-6 md:p-8 shadow-sm mb-6">
+              <div className="bg-white rounded-2xl p-6 md:p-8 mb-6">
                 <h3 className="font-display text-lg font-bold text-[#1A2B49] mb-4 flex items-center gap-2">
                   <Camera className="w-5 h-5 text-[#0078C0]" />
                   All Photos ({images.length})

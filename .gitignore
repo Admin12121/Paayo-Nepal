@@ -52,7 +52,7 @@ tour_frontend/coverage/
 *.swo
 *~
 .DS_Store
-
+.st*
 # Lock files (keep bun.lockb and Cargo.lock)
 package-lock.json
 yarn.lock

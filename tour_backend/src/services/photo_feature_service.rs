@@ -8,9 +8,6 @@ use crate::{
     utils::slug::generate_slug,
 };
 
-/// Maximum slug generation attempts before returning a conflict error.
-const MAX_SLUG_RETRIES: usize = 5;
-
 pub struct PhotoFeatureService {
     db: PgPool,
     cache: CacheService,
@@ -220,63 +217,21 @@ impl PhotoFeatureService {
             .await?
             .ok_or_else(|| ApiError::NotFound("Photo feature not found".to_string()))?;
 
-        // Generate a unique slug when title changes, with collision retry loop.
-        let new_slug = if let Some(t) = title {
-            let mut slug_candidate = generate_slug(t);
-            let mut found_unique = false;
-
-            for attempt in 0..MAX_SLUG_RETRIES {
-                let conflict = sqlx::query_as::<_, (i64,)>(
-                    "SELECT COUNT(*) FROM photo_features WHERE slug = $1 AND id != $2 AND deleted_at IS NULL",
-                )
-                .bind(&slug_candidate)
-                .bind(id)
-                .fetch_one(&self.db)
-                .await?;
-
-                if conflict.0 == 0 {
-                    found_unique = true;
-                    break;
-                }
-
-                tracing::warn!(
-                    "Slug collision on photo_feature update attempt {} for title '{}', slug '{}'. Retrying...",
-                    attempt + 1,
-                    t,
-                    slug_candidate,
-                );
-                slug_candidate = generate_slug(t);
-            }
-
-            if !found_unique {
-                return Err(ApiError::Conflict(format!(
-                    "Could not generate a unique slug after {} attempts",
-                    MAX_SLUG_RETRIES
-                )));
-            }
-
-            Some(slug_candidate)
-        } else {
-            None
-        };
-
         sqlx::query(
             r#"
             UPDATE photo_features SET
-                slug = COALESCE($1, slug),
-                title = COALESCE($2, title),
-                description = COALESCE($3, description),
+                title = COALESCE($1, title),
+                description = COALESCE($2, description),
                 region_id = CASE
-                    WHEN $4 IS NULL THEN region_id
-                    WHEN $4 = '' THEN NULL
-                    ELSE $4
+                    WHEN $3 IS NULL THEN region_id
+                    WHEN $3 = '' THEN NULL
+                    ELSE $3
                 END,
-                is_featured = COALESCE($5, is_featured),
-                status = COALESCE($6::content_status, status)
-            WHERE id = $7 AND deleted_at IS NULL
+                is_featured = COALESCE($4, is_featured),
+                status = COALESCE($5::content_status, status)
+            WHERE id = $6 AND deleted_at IS NULL
             "#,
         )
-        .bind(new_slug.as_deref())
         .bind(title)
         .bind(description)
         .bind(region_id)

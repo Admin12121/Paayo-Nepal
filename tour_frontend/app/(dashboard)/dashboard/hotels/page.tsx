@@ -35,7 +35,6 @@ import Image from "next/image";
 import Link from "next/link";
 import {
   type Hotel as HotelType,
-  type HotelBranch,
   type CreateHotelInput,
   type Region,
   hotelsApi as hotelsClientApi,
@@ -79,6 +78,7 @@ const EMPTY_HOTELS: HotelType[] = [];
 
 interface BranchFormData {
   id?: string;
+  region_id: string;
   name: string;
   address: string;
   phone: string;
@@ -101,6 +101,7 @@ interface HotelFormData {
 }
 
 const EMPTY_BRANCH: BranchFormData = {
+  region_id: "",
   name: "",
   address: "",
   phone: "",
@@ -129,7 +130,6 @@ function DraggableHotelRow({
   getStatusBadge,
   onToggleFeatured,
   onPublish,
-  onEdit,
   onDelete,
 }: {
   hotel: HotelType;
@@ -138,7 +138,6 @@ function DraggableHotelRow({
   getStatusBadge: (status: string) => string;
   onToggleFeatured: (hotel: HotelType) => void;
   onPublish: (hotel: HotelType) => void;
-  onEdit: (hotel: HotelType) => void;
   onDelete: (hotel: HotelType) => void;
 }) {
   const {
@@ -184,13 +183,13 @@ function DraggableHotelRow({
           )}
           <div className="min-w-0">
             <Link
-              href={`/hotels/${hotel.slug}`}
+              href={`/dashboard/hotels/${hotel.slug}`}
               className="block truncate text-sm font-medium text-gray-900 hover:text-blue-700"
             >
               {hotel.name}
             </Link>
             <Link
-              href={`/hotels/${hotel.slug}`}
+              href={`/dashboard/hotels/${hotel.slug}`}
               className="block truncate text-xs text-blue-600 hover:underline"
             >
               /{hotel.slug}
@@ -254,9 +253,11 @@ function DraggableHotelRow({
                 Publish
               </DropdownMenuItem>
             )}
-            <DropdownMenuItem onClick={() => onEdit(hotel)}>
-              <Edit className="mr-2 h-4 w-4" />
-              Edit
+            <DropdownMenuItem asChild>
+              <Link href={`/dashboard/hotels/${hotel.slug}`}>
+                <Edit className="mr-2 h-4 w-4" />
+                Edit
+              </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
@@ -286,10 +287,6 @@ export default function HotelsPage() {
     hotel: HotelType | null;
   }>({ open: false, hotel: null });
   const [createModal, setCreateModal] = useState(false);
-  const [editModal, setEditModal] = useState<{
-    open: boolean;
-    hotel: HotelType | null;
-  }>({ open: false, hotel: null });
   const [formData, setFormData] = useState<HotelFormData>(EMPTY_HOTEL_FORM);
   const [branches, setBranches] = useState<BranchFormData[]>([]);
   const [removedBranchIds, setRemovedBranchIds] = useState<string[]>([]);
@@ -327,13 +324,13 @@ export default function HotelsPage() {
   // relevant cache tags, causing `useListHotelsQuery` to refetch.
   // No more manual `loadHotels()` calls after every mutation!
   const [createHotel, { isLoading: creating }] = useCreateHotelMutation();
-  const [updateHotel, { isLoading: updatingHotel }] = useUpdateHotelMutation();
+  const [updateHotel] = useUpdateHotelMutation();
   const [deleteHotel, { isLoading: deleting }] = useDeleteHotelMutation();
   const [publishHotel] = usePublishHotelMutation();
   const [updateHotelDisplayOrder, { isLoading: savingOrder }] =
     useUpdateHotelDisplayOrderMutation();
 
-  const saving = creating || updatingHotel;
+  const saving = creating;
 
   // ── Derived data ────────────────────────────────────────────────────────
   const hotels = hotelsResponse?.data ?? EMPTY_HOTELS;
@@ -376,25 +373,6 @@ export default function HotelsPage() {
 
   // ── Handlers ────────────────────────────────────────────────────────────
 
-  const parsePhoneNumbers = useCallback(
-    (rawPhone: string | null | undefined) => {
-      const numbers = (rawPhone ?? "")
-        .split(/[,;\n]+/)
-        .map((value) => value.trim())
-        .filter(Boolean);
-      return numbers.length > 0 ? numbers : [""];
-    },
-    [],
-  );
-
-  const parseGalleryImages = useCallback((rawGallery: unknown) => {
-    if (!Array.isArray(rawGallery)) return [];
-    return rawGallery
-      .filter((value): value is string => typeof value === "string")
-      .map((value) => value.trim())
-      .filter(Boolean);
-  }, []);
-
   const buildHotelPayload = useCallback(
     (data: HotelFormData): CreateHotelInput => {
       const normalizedPhones = data.phone_numbers
@@ -425,6 +403,7 @@ export default function HotelsPage() {
     const cleaned = rows
       .map((row) => ({
         ...row,
+        region_id: row.region_id.trim(),
         name: row.name.trim(),
         address: row.address.trim(),
         phone: row.phone.trim(),
@@ -454,6 +433,7 @@ export default function HotelsPage() {
       const validBranches = normalizeBranches(branches);
       for (const branch of validBranches) {
         const payload = {
+          region_id: branch.region_id || undefined,
           name: branch.name,
           address: branch.address || undefined,
           phone: branch.phone || undefined,
@@ -615,64 +595,6 @@ export default function HotelsPage() {
     } catch {
       toast.error("Failed to create hotel");
     }
-  };
-
-  const handleUpdate = async () => {
-    if (!editModal.hotel) return;
-
-    try {
-      const payload = buildHotelPayload(formData);
-      await updateHotel({
-        id: editModal.hotel.id,
-        data: payload,
-      }).unwrap();
-      await syncHotelBranches(editModal.hotel.id);
-      toast.success("Hotel updated successfully");
-      setEditModal({ open: false, hotel: null });
-      resetForm();
-    } catch {
-      toast.error("Failed to update hotel");
-    }
-  };
-
-  const openEditModal = (hotel: HotelType) => {
-    setFormData({
-      name: hotel.name,
-      description: hotel.description || "",
-      email: hotel.email || "",
-      website: hotel.website || "",
-      star_rating: hotel.star_rating ?? undefined,
-      price_range: hotel.price_range || "mid",
-      cover_image: hotel.cover_image || "",
-      region_id: hotel.region_id || "",
-      is_featured: hotel.is_featured,
-      phone_numbers: parsePhoneNumbers(hotel.phone),
-      gallery_images: parseGalleryImages(hotel.gallery),
-    });
-    setRemovedBranchIds([]);
-    setEditModal({ open: true, hotel });
-    setBranchesLoading(true);
-
-    void (async () => {
-      try {
-        const branchRows = await hotelsClientApi.getBranches(hotel.id);
-        setBranches(
-          branchRows.map((branch: HotelBranch) => ({
-            id: branch.id,
-            name: branch.name,
-            address: branch.address || "",
-            phone: branch.phone || "",
-            email: branch.email || "",
-            is_main: branch.is_main,
-          })),
-        );
-      } catch {
-        setBranches([]);
-        toast.error("Failed to load hotel branches");
-      } finally {
-        setBranchesLoading(false);
-      }
-    })();
   };
 
   const resetForm = () => {
@@ -998,6 +920,20 @@ export default function HotelsPage() {
                     }
                     placeholder="Address"
                   />
+                  <select
+                    value={branch.region_id}
+                    onChange={(e) =>
+                      updateBranchField(index, "region_id", e.target.value)
+                    }
+                    className="h-10 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+                  >
+                    <option value="">Branch region (optional)</option>
+                    {regions.map((region) => (
+                      <option key={region.id} value={region.id}>
+                        {region.name}
+                      </option>
+                    ))}
+                  </select>
                   <Input
                     value={branch.phone}
                     onChange={(e) =>
@@ -1182,7 +1118,6 @@ export default function HotelsPage() {
                           getStatusBadge={getStatusBadge}
                           onToggleFeatured={handleToggleFeatured}
                           onPublish={handlePublish}
-                          onEdit={openEditModal}
                           onDelete={(item) =>
                             setDeleteDialog({ open: true, hotel: item })
                           }
@@ -1220,29 +1155,6 @@ export default function HotelsPage() {
             </Button>
             <Button onClick={handleCreate} disabled={saving}>
               {saving ? "Creating..." : "Create Hotel"}
-            </Button>
-          </div>
-        }
-      >
-        {hotelForm}
-      </Modal>
-
-      {/* Edit Modal */}
-      <Modal
-        isOpen={editModal.open}
-        onClose={() => setEditModal({ open: false, hotel: null })}
-        title="Edit Hotel"
-        size="xl"
-        footer={
-          <div className="flex justify-end gap-2">
-            <Button
-              variant="ghost"
-              onClick={() => setEditModal({ open: false, hotel: null })}
-            >
-              Cancel
-            </Button>
-            <Button onClick={handleUpdate} disabled={saving}>
-              {saving ? "Saving..." : "Save Changes"}
             </Button>
           </div>
         }

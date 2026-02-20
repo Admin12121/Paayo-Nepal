@@ -66,9 +66,14 @@ export default function NewAttractionPage() {
       });
 
       if (!response.ok) throw new Error("Failed to create attraction");
+      const created = (await response.json()) as { slug?: string };
 
       toast.success("Attraction created successfully");
-      router.replace(`/dashboard/attractions?refresh=${Date.now()}`);
+      if (created.slug) {
+        router.replace(`/dashboard/attractions/${created.slug}`);
+      } else {
+        router.replace("/dashboard/attractions");
+      }
       router.refresh();
     } catch (error: unknown) {
       const message =

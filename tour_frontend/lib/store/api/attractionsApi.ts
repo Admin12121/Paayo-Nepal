@@ -192,6 +192,7 @@ export const attractionsApi = baseApi.injectEndpoints({
           cover_image?: string | null;
           region_id?: string | null;
           is_featured?: boolean;
+          status?: string;
         };
       }
     >({
@@ -201,8 +202,9 @@ export const attractionsApi = baseApi.injectEndpoints({
         body: data,
       }),
       transformResponse: (response: PostRaw) => enrichPost(response),
-      invalidatesTags: (_result, _error, { slug }) => [
+      invalidatesTags: (result, _error, { slug }) => [
         { type: "Attraction", id: slug },
+        { type: "Attraction", id: result?.slug || slug },
         { type: "Attraction", id: "LIST" },
         { type: "Attraction", id: "TOP" },
         { type: "DashboardStats" },

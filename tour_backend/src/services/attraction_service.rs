@@ -6,9 +6,6 @@ use crate::{
     services::CacheService, utils::slug::generate_slug,
 };
 
-/// Maximum slug generation attempts before returning a conflict error.
-const MAX_SLUG_RETRIES: usize = 5;
-
 pub struct AttractionService {
     db: PgPool,
     cache: CacheService,
@@ -189,61 +186,19 @@ impl AttractionService {
             .await?
             .ok_or_else(|| ApiError::NotFound("Attraction not found".to_string()))?;
 
-        // Generate a unique slug when title changes, with collision retry loop.
-        let new_slug = if let Some(ref title) = input.title {
-            let mut slug_candidate = generate_slug(title);
-            let mut found_unique = false;
-
-            for attempt in 0..MAX_SLUG_RETRIES {
-                let conflict = sqlx::query_as::<_, (i64,)>(
-                    "SELECT COUNT(*) FROM posts WHERE slug = $1 AND id != $2 AND deleted_at IS NULL",
-                )
-                .bind(&slug_candidate)
-                .bind(id)
-                .fetch_one(&self.db)
-                .await?;
-
-                if conflict.0 == 0 {
-                    found_unique = true;
-                    break;
-                }
-
-                tracing::warn!(
-                    "Slug collision on attraction update attempt {} for title '{}', slug '{}'. Retrying...",
-                    attempt + 1,
-                    title,
-                    slug_candidate,
-                );
-                slug_candidate = generate_slug(title);
-            }
-
-            if !found_unique {
-                return Err(ApiError::Conflict(format!(
-                    "Could not generate a unique slug after {} attempts",
-                    MAX_SLUG_RETRIES
-                )));
-            }
-
-            Some(slug_candidate)
-        } else {
-            None
-        };
-
         sqlx::query(
             r#"
             UPDATE posts SET
-                slug = COALESCE($1, slug),
-                title = COALESCE($2, title),
-                short_description = COALESCE($3, short_description),
-                content = COALESCE($4::jsonb, content),
-                cover_image = COALESCE($5, cover_image),
-                region_id = COALESCE($6, region_id),
-                is_featured = COALESCE($7, is_featured),
-                status = COALESCE($8::content_status, status)
-            WHERE id = $9 AND type = 'explore' AND deleted_at IS NULL
+                title = COALESCE($1, title),
+                short_description = COALESCE($2, short_description),
+                content = COALESCE($3::jsonb, content),
+                cover_image = COALESCE($4, cover_image),
+                region_id = COALESCE($5, region_id),
+                is_featured = COALESCE($6, is_featured),
+                status = COALESCE($7::content_status, status)
+            WHERE id = $8 AND type = 'explore' AND deleted_at IS NULL
             "#,
         )
-        .bind(new_slug.as_deref())
         .bind(&input.title)
         .bind(&input.short_description)
         .bind(&input.content)

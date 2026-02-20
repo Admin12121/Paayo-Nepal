@@ -8,9 +8,6 @@ use crate::{
     utils::slug::generate_slug,
 };
 
-/// Maximum slug generation attempts before returning a conflict error.
-const MAX_SLUG_RETRIES: usize = 5;
-
 pub struct HotelService {
     db: PgPool,
     cache: CacheService,
@@ -247,71 +244,29 @@ impl HotelService {
             .await?
             .ok_or_else(|| ApiError::NotFound("Hotel not found".to_string()))?;
 
-        // Generate a unique slug when name changes, with collision retry loop.
-        let new_slug = if let Some(n) = name {
-            let mut slug_candidate = generate_slug(n);
-            let mut found_unique = false;
-
-            for attempt in 0..MAX_SLUG_RETRIES {
-                let conflict = sqlx::query_as::<_, (i64,)>(
-                    "SELECT COUNT(*) FROM hotels WHERE slug = $1 AND id != $2 AND deleted_at IS NULL",
-                )
-                .bind(&slug_candidate)
-                .bind(id)
-                .fetch_one(&self.db)
-                .await?;
-
-                if conflict.0 == 0 {
-                    found_unique = true;
-                    break;
-                }
-
-                tracing::warn!(
-                    "Slug collision on hotel update attempt {} for name '{}', slug '{}'. Retrying...",
-                    attempt + 1,
-                    n,
-                    slug_candidate,
-                );
-                slug_candidate = generate_slug(n);
-            }
-
-            if !found_unique {
-                return Err(ApiError::Conflict(format!(
-                    "Could not generate a unique slug after {} attempts",
-                    MAX_SLUG_RETRIES
-                )));
-            }
-
-            Some(slug_candidate)
-        } else {
-            None
-        };
-
         sqlx::query(
             r#"
             UPDATE hotels SET
-                slug = COALESCE($1, slug),
-                name = COALESCE($2, name),
-                description = COALESCE($3, description),
-                email = COALESCE($4, email),
-                phone = COALESCE($5, phone),
-                website = COALESCE($6, website),
-                star_rating = COALESCE($7, star_rating),
-                price_range = COALESCE($8::hotel_price_range, price_range),
-                amenities = COALESCE($9, amenities),
-                cover_image = COALESCE($10, cover_image),
-                gallery = COALESCE($11, gallery),
+                name = COALESCE($1, name),
+                description = COALESCE($2, description),
+                email = COALESCE($3, email),
+                phone = COALESCE($4, phone),
+                website = COALESCE($5, website),
+                star_rating = COALESCE($6, star_rating),
+                price_range = COALESCE($7::hotel_price_range, price_range),
+                amenities = COALESCE($8, amenities),
+                cover_image = COALESCE($9, cover_image),
+                gallery = COALESCE($10, gallery),
                 region_id = CASE
-                    WHEN $12 IS NULL THEN region_id
-                    WHEN $12 = '' THEN NULL
-                    ELSE $12
+                    WHEN $11 IS NULL THEN region_id
+                    WHEN $11 = '' THEN NULL
+                    ELSE $11
                 END,
-                is_featured = COALESCE($13, is_featured),
-                status = COALESCE($14::content_status, status)
-            WHERE id = $15 AND deleted_at IS NULL
+                is_featured = COALESCE($12, is_featured),
+                status = COALESCE($13::content_status, status)
+            WHERE id = $14 AND deleted_at IS NULL
             "#,
         )
-        .bind(new_slug.as_deref())
         .bind(name)
         .bind(description)
         .bind(email)
@@ -501,6 +456,7 @@ impl HotelService {
     pub async fn add_branch(
         &self,
         hotel_id: &str,
+        region_id: Option<&str>,
         name: &str,
         address: Option<&str>,
         phone: Option<&str>,
@@ -526,14 +482,15 @@ impl HotelService {
         sqlx::query(
             r#"
             INSERT INTO hotel_branches (
-                id, hotel_id, name, address, phone, email,
+                id, hotel_id, region_id, name, address, phone, email,
                 coordinates, is_main, created_at, updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+            VALUES ($1, $2, NULLIF($3, ''), $4, $5, $6, $7, $8, $9, NOW(), NOW())
             "#,
         )
         .bind(&id)
         .bind(hotel_id)
+        .bind(region_id)
         .bind(name)
         .bind(address)
         .bind(phone)
@@ -557,6 +514,7 @@ impl HotelService {
     pub async fn update_branch(
         &self,
         branch_id: &str,
+        region_id: Option<&str>,
         name: Option<&str>,
         address: Option<&str>,
         phone: Option<&str>,
@@ -582,15 +540,21 @@ impl HotelService {
         sqlx::query(
             r#"
             UPDATE hotel_branches SET
-                name = COALESCE($1, name),
-                address = COALESCE($2, address),
-                phone = COALESCE($3, phone),
-                email = COALESCE($4, email),
-                coordinates = COALESCE($5, coordinates),
-                is_main = COALESCE($6, is_main)
-            WHERE id = $7
+                region_id = CASE
+                    WHEN $1 IS NULL THEN region_id
+                    WHEN $1 = '' THEN NULL
+                    ELSE $1
+                END,
+                name = COALESCE($2, name),
+                address = COALESCE($3, address),
+                phone = COALESCE($4, phone),
+                email = COALESCE($5, email),
+                coordinates = COALESCE($6, coordinates),
+                is_main = COALESCE($7, is_main)
+            WHERE id = $8
             "#,
         )
+        .bind(region_id)
         .bind(name)
         .bind(address)
         .bind(phone)

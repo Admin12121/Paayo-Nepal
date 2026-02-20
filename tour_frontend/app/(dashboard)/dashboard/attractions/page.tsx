@@ -109,7 +109,7 @@ function DraggableAttractionRow({
           )}
           <div className="min-w-0">
             <Link
-              href={`/dashboard/attractions/${attraction.slug}/edit`}
+              href={`/dashboard/attractions/${attraction.slug}`}
               className="block truncate text-sm text-blue-600 hover:underline"
               title={attraction.title}
             >
@@ -138,7 +138,7 @@ function DraggableAttractionRow({
       </TableCell>
       <TableCell className="text-right">
         <div className="flex items-center justify-end gap-2">
-          <Link href={`/dashboard/attractions/${attraction.slug}/edit`}>
+          <Link href={`/dashboard/attractions/${attraction.slug}`}>
             <Button variant="ghost" size="sm">
               <Edit className="w-4 h-4" />
             </Button>
