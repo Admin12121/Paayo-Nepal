@@ -76,7 +76,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/lib/utils/toast";
-import Link from "next/link";
+import Link from "@/components/ui/animated-link";
+import { NumberTicker } from "@/components/ui/number-ticker";
 
 const EMPTY_PHOTOS: PhotoFeature[] = [];
 const PHOTO_VIEW_MODE_STORAGE_KEY = "dashboard:photos:view-mode";
@@ -287,7 +288,12 @@ function SortablePhotoCard({
             <div className="mb-1 flex items-center gap-1 font-medium text-slate-800">
               <Eye className="h-3.5 w-3.5" /> Views
             </div>
-            <p>{photo.view_count.toLocaleString()}</p>
+            <p>
+              <NumberTicker
+                value={photo.view_count ?? 0}
+                className="tracking-normal text-current dark:text-current"
+              />
+            </p>
           </div>
           <div className="rounded-md bg-slate-50 p-2">
             <div className="mb-1 flex items-center gap-1 font-medium text-slate-800">
@@ -385,7 +391,10 @@ function SortablePhotoRow({
         </Badge>
       </TableCell>
       <TableCell className="text-right tabular-nums">
-        {photo.view_count.toLocaleString()}
+        <NumberTicker
+          value={photo.view_count ?? 0}
+          className="tracking-normal text-current dark:text-current"
+        />
       </TableCell>
       <TableCell className="text-slate-600">
         {new Date(photo.created_at).toLocaleDateString()}

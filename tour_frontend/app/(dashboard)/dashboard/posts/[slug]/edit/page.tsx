@@ -12,7 +12,7 @@ import {
   Sparkles,
   Tag,
 } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/ui/animated-link";
 import { apiFetch } from "@/lib/csrf";
 import Image from "next/image";
 import {

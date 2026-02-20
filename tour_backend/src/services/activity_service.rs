@@ -114,6 +114,7 @@ impl ActivityService {
     ) -> Result<Post, ApiError> {
         let id = Uuid::new_v4().to_string();
         let slug = generate_slug(title);
+        let content_json = content.map(|html| serde_json::Value::String(html.to_string()));
 
         sqlx::query(
             r#"
@@ -124,7 +125,7 @@ impl ActivityService {
             )
             VALUES (
                 $1, 'activity', $2, $3, $4, $5,
-                $6::jsonb, $7, $8, 'draft',
+                $6, $7, $8, 'draft',
                 0, 0, NOW(), NOW()
             )
             "#,
@@ -134,7 +135,7 @@ impl ActivityService {
         .bind(title)
         .bind(&slug)
         .bind(short_description)
-        .bind(content)
+        .bind(&content_json)
         .bind(cover_image)
         .bind(is_featured)
         .execute(&self.db)
@@ -152,6 +153,10 @@ impl ActivityService {
             .get_by_id(id)
             .await?
             .ok_or_else(|| ApiError::NotFound("Activity not found".to_string()))?;
+        let content_json = input
+            .content
+            .as_ref()
+            .map(|html| serde_json::Value::String(html.clone()));
 
         // Generate a unique slug when title changes, with collision retry loop.
         let new_slug = if let Some(ref title) = input.title {
@@ -199,7 +204,7 @@ impl ActivityService {
                 slug = COALESCE($1, slug),
                 title = COALESCE($2, title),
                 short_description = COALESCE($3, short_description),
-                content = COALESCE($4::jsonb, content),
+                content = COALESCE($4, content),
                 cover_image = COALESCE($5, cover_image),
                 is_featured = COALESCE($6, is_featured),
                 status = COALESCE($7::content_status, status)
@@ -209,7 +214,7 @@ impl ActivityService {
         .bind(new_slug.as_deref())
         .bind(&input.title)
         .bind(&input.short_description)
-        .bind(&input.content)
+        .bind(&content_json)
         .bind(&input.cover_image)
         .bind(input.is_featured)
         .bind(&input.status)

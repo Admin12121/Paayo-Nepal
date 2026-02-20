@@ -40,11 +40,20 @@ export async function PhotoFeaturesSection() {
       })),
     );
     photos = withCover.filter((photo) => Boolean(photo.coverImage));
-  } catch {
-    return null;
-  }
 
-  if (!photos || photos.length === 0) return null;
+    if (photos.length === 0) {
+      const fallback = await photoFeaturesApi.list({ limit: 5 });
+      const fallbackWithCover = await Promise.all(
+        fallback.data.map(async (photo) => ({
+          ...photo,
+          coverImage: await resolveCoverImage(photo),
+        })),
+      );
+      photos = fallbackWithCover.filter((photo) => Boolean(photo.coverImage));
+    }
+  } catch {
+    photos = [];
+  }
 
   const lead = photos[0];
   const sideItems = photos.slice(1, 5);
@@ -54,30 +63,36 @@ export async function PhotoFeaturesSection() {
       <div className="max-w-[1400px] mx-auto">
         <SectionHeading title="PHOTO FEATURES" />
 
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-12">
-          {lead ? (
-            <ImageCard
-              key={lead.id}
-              src={lead.coverImage || ""}
-              alt={lead.title}
-              title={lead.title}
-              href={`/photos/${lead.slug}`}
-              className="h-[512px] md:col-span-6 md:h-[512px]"
-            />
-          ) : null}
-          <div className="grid grid-cols-2 gap-3 md:col-span-6">
-            {sideItems.map((photo) => (
+        {photos.length === 0 ? (
+          <h1 className="text-sm font-medium text-[#6B7280]">
+            NO content available
+          </h1>
+        ) : (
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-12">
+            {lead ? (
               <ImageCard
-                key={photo.id}
-                src={photo.coverImage || ""}
-                alt={photo.title}
-                title={photo.title}
-                href={`/photos/${photo.slug}`}
-                className="h-[250px] md:h-[250px]"
+                key={lead.id}
+                src={lead.coverImage || ""}
+                alt={lead.title}
+                title={lead.title}
+                href={`/photos?search=${encodeURIComponent(lead.title)}`}
+                className="h-[512px] md:col-span-6 md:h-[512px]"
               />
-            ))}
+            ) : null}
+            <div className="grid grid-cols-2 gap-3 md:col-span-6">
+              {sideItems.map((photo) => (
+                <ImageCard
+                  key={photo.id}
+                  src={photo.coverImage || ""}
+                  alt={photo.title}
+                  title={photo.title}
+                  href={`/photos?search=${encodeURIComponent(photo.title)}`}
+                  className="h-[250px] md:h-[250px]"
+                />
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         <ViewMoreButton href="/photos" />
       </div>

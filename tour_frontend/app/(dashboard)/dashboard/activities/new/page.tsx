@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import Link from "next/link";
+import Link from "@/components/ui/animated-link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
@@ -431,6 +431,18 @@ export default function NewActivityPage() {
                 </button>
                 <p className="mt-1.5 text-[11px] text-gray-400">
                   Featured activities appear prominently on the homepage.
+                </p>
+              </div>
+
+              <Separator className="my-4 bg-gray-200/80" />
+
+              <div className="mb-5 rounded-lg border border-blue-100 bg-blue-50/40 p-3">
+                <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-blue-500">
+                  Connected Content
+                </p>
+                <p className="text-[12px] leading-relaxed text-blue-700/90">
+                  Save this activity first, then open edit page to connect
+                  posts, photos and videos for public section control.
                 </p>
               </div>
 

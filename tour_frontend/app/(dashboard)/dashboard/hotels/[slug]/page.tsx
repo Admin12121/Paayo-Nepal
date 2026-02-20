@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import Link from "@/components/ui/animated-link";
 import { useParams, useRouter } from "next/navigation";
 import {
   ArrowDown,
@@ -45,6 +45,11 @@ interface BranchFormData {
   address: string;
   phone: string;
   email: string;
+  map_latitude: string;
+  map_longitude: string;
+  map_url: string;
+  image_url: string;
+  gallery_urls_text: string;
   is_main: boolean;
 }
 
@@ -60,6 +65,171 @@ interface HotelFormData {
   is_featured: boolean;
   phone_numbers: string[];
   gallery_images: string[];
+  map_latitude: string;
+  map_longitude: string;
+  map_url: string;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function toStringValue(value: unknown): string {
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  if (typeof value === "string") return value.trim();
+  return "";
+}
+
+function normalizeStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function extractHotelMapFields(amenities: unknown): {
+  map_latitude: string;
+  map_longitude: string;
+  map_url: string;
+} {
+  if (!isRecord(amenities)) {
+    return { map_latitude: "", map_longitude: "", map_url: "" };
+  }
+
+  const source = isRecord(amenities.location) ? amenities.location : amenities;
+  return {
+    map_latitude: toStringValue(source.latitude ?? source.lat),
+    map_longitude: toStringValue(source.longitude ?? source.lng),
+    map_url: toStringValue(source.map_url ?? source.mapUrl),
+  };
+}
+
+function buildHotelAmenitiesPayload(
+  existingAmenities: unknown,
+  mapLatitude: string,
+  mapLongitude: string,
+  mapUrl: string,
+): unknown | undefined {
+  const latValue = mapLatitude.trim();
+  const lngValue = mapLongitude.trim();
+  const mapUrlValue = mapUrl.trim();
+  const hasMapValues = Boolean(latValue || lngValue || mapUrlValue);
+
+  const parsedLat = Number.parseFloat(latValue);
+  const parsedLng = Number.parseFloat(lngValue);
+
+  const locationPayload: Record<string, unknown> = {};
+  if (latValue) {
+    locationPayload.latitude = Number.isFinite(parsedLat) ? parsedLat : latValue;
+  }
+  if (lngValue) {
+    locationPayload.longitude = Number.isFinite(parsedLng) ? parsedLng : lngValue;
+  }
+  if (mapUrlValue) {
+    locationPayload.map_url = mapUrlValue;
+  }
+
+  if (!hasMapValues) {
+    if (!isRecord(existingAmenities)) return undefined;
+
+    const nextAmenities = { ...existingAmenities };
+    delete nextAmenities.location;
+    delete nextAmenities.latitude;
+    delete nextAmenities.longitude;
+    delete nextAmenities.lat;
+    delete nextAmenities.lng;
+    delete nextAmenities.map_url;
+    delete nextAmenities.mapUrl;
+    return nextAmenities;
+  }
+
+  if (isRecord(existingAmenities)) {
+    return {
+      ...existingAmenities,
+      location: locationPayload,
+    };
+  }
+
+  const existingItems = normalizeStringList(existingAmenities);
+  if (existingItems.length > 0) {
+    return {
+      items: existingItems,
+      location: locationPayload,
+    };
+  }
+
+  return { location: locationPayload };
+}
+
+function extractBranchCoordinatesFields(coordinates: unknown): {
+  map_latitude: string;
+  map_longitude: string;
+  map_url: string;
+  image_url: string;
+  gallery_urls_text: string;
+} {
+  if (!isRecord(coordinates)) {
+    return {
+      map_latitude: "",
+      map_longitude: "",
+      map_url: "",
+      image_url: "",
+      gallery_urls_text: "",
+    };
+  }
+
+  const galleryValues = normalizeStringList(
+    coordinates.gallery_images ?? coordinates.gallery,
+  );
+
+  return {
+    map_latitude: toStringValue(coordinates.latitude ?? coordinates.lat),
+    map_longitude: toStringValue(coordinates.longitude ?? coordinates.lng),
+    map_url: toStringValue(coordinates.map_url ?? coordinates.mapUrl),
+    image_url: toStringValue(coordinates.image_url ?? coordinates.image),
+    gallery_urls_text: galleryValues.join("\n"),
+  };
+}
+
+function buildBranchCoordinatesPayload(
+  branch: BranchFormData,
+): Record<string, unknown> | undefined {
+  const latValue = branch.map_latitude.trim();
+  const lngValue = branch.map_longitude.trim();
+  const mapUrlValue = branch.map_url.trim();
+  const imageUrlValue = branch.image_url.trim();
+  const galleryImages = branch.gallery_urls_text
+    .split(/\r?\n|,/)
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  const hasAnyValue =
+    Boolean(latValue || lngValue || mapUrlValue || imageUrlValue) ||
+    galleryImages.length > 0;
+  if (!hasAnyValue) return undefined;
+
+  const parsedLat = Number.parseFloat(latValue);
+  const parsedLng = Number.parseFloat(lngValue);
+  const payload: Record<string, unknown> = {};
+
+  if (latValue) {
+    payload.latitude = Number.isFinite(parsedLat) ? parsedLat : latValue;
+  }
+  if (lngValue) {
+    payload.longitude = Number.isFinite(parsedLng) ? parsedLng : lngValue;
+  }
+  if (mapUrlValue) {
+    payload.map_url = mapUrlValue;
+  }
+  if (imageUrlValue) {
+    payload.image_url = imageUrlValue;
+  }
+  if (galleryImages.length > 0) {
+    payload.gallery_images = galleryImages;
+  }
+
+  return payload;
 }
 
 const EMPTY_BRANCH: BranchFormData = {
@@ -68,6 +238,11 @@ const EMPTY_BRANCH: BranchFormData = {
   address: "",
   phone: "",
   email: "",
+  map_latitude: "",
+  map_longitude: "",
+  map_url: "",
+  image_url: "",
+  gallery_urls_text: "",
   is_main: false,
 };
 
@@ -83,6 +258,9 @@ const EMPTY_HOTEL_FORM: HotelFormData = {
   is_featured: false,
   phone_numbers: [""],
   gallery_images: [],
+  map_latitude: "",
+  map_longitude: "",
+  map_url: "",
 };
 
 function parsePhoneNumbers(rawPhone: string | null | undefined): string[] {
@@ -101,13 +279,22 @@ function parseGalleryImages(rawGallery: unknown): string[] {
     .filter(Boolean);
 }
 
-function buildHotelPayload(data: HotelFormData): CreateHotelInput {
+function buildHotelPayload(
+  data: HotelFormData,
+  existingAmenities: unknown,
+): CreateHotelInput {
   const normalizedPhones = data.phone_numbers
     .map((value) => value.trim())
     .filter(Boolean);
   const normalizedGallery = data.gallery_images
     .map((value) => value.trim())
     .filter(Boolean);
+  const amenitiesPayload = buildHotelAmenitiesPayload(
+    existingAmenities,
+    data.map_latitude,
+    data.map_longitude,
+    data.map_url,
+  );
 
   return {
     name: data.name.trim(),
@@ -120,6 +307,7 @@ function buildHotelPayload(data: HotelFormData): CreateHotelInput {
     cover_image: data.cover_image.trim() || undefined,
     region_id: data.region_id.trim(),
     is_featured: data.is_featured,
+    amenities: amenitiesPayload,
     gallery: normalizedGallery.length > 0 ? normalizedGallery : undefined,
   };
 }
@@ -150,6 +338,7 @@ function normalizeBranches(rows: BranchFormData[]): BranchFormData[] {
 }
 
 function toBranchFormData(branch: HotelBranch): BranchFormData {
+  const coordinateFields = extractBranchCoordinatesFields(branch.coordinates);
   return {
     id: branch.id,
     region_id: branch.region_id || "",
@@ -157,6 +346,11 @@ function toBranchFormData(branch: HotelBranch): BranchFormData {
     address: branch.address || "",
     phone: branch.phone || "",
     email: branch.email || "",
+    map_latitude: coordinateFields.map_latitude,
+    map_longitude: coordinateFields.map_longitude,
+    map_url: coordinateFields.map_url,
+    image_url: coordinateFields.image_url,
+    gallery_urls_text: coordinateFields.gallery_urls_text,
     is_main: branch.is_main,
   };
 }
@@ -172,6 +366,7 @@ export default function DashboardHotelDetailPage() {
   const [branches, setBranches] = useState<BranchFormData[]>([]);
   const [removedBranchIds, setRemovedBranchIds] = useState<string[]>([]);
   const [regions, setRegions] = useState<Region[]>([]);
+  const [existingAmenities, setExistingAmenities] = useState<unknown>(null);
   const [syncingBranches, setSyncingBranches] = useState(false);
   const [galleryBulkInput, setGalleryBulkInput] = useState("");
 
@@ -239,6 +434,8 @@ export default function DashboardHotelDetailPage() {
     if (!hotel) return;
     if (initializedMetaHotelId === hotel.id) return;
 
+    const mapFields = extractHotelMapFields(hotel.amenities);
+
     setFormData({
       name: hotel.name,
       description: hotel.description || "",
@@ -251,7 +448,11 @@ export default function DashboardHotelDetailPage() {
       is_featured: hotel.is_featured,
       phone_numbers: parsePhoneNumbers(hotel.phone),
       gallery_images: parseGalleryImages(hotel.gallery),
+      map_latitude: mapFields.map_latitude,
+      map_longitude: mapFields.map_longitude,
+      map_url: mapFields.map_url,
     });
+    setExistingAmenities(hotel.amenities ?? null);
     setRemovedBranchIds([]);
     setInitializedMetaHotelId(hotel.id);
   }, [hotel, initializedMetaHotelId]);
@@ -422,12 +623,14 @@ export default function DashboardHotelDetailPage() {
 
     const validBranches = normalizeBranches(branches);
     for (const branch of validBranches) {
+      const coordinates = buildBranchCoordinatesPayload(branch);
       const payload = {
         region_id: branch.region_id || undefined,
         name: branch.name,
         address: branch.address || undefined,
         phone: branch.phone || undefined,
         email: branch.email || undefined,
+        coordinates,
         is_main: branch.is_main,
       };
 
@@ -453,7 +656,7 @@ export default function DashboardHotelDetailPage() {
     }
 
     try {
-      const payload = buildHotelPayload(formData);
+      const payload = buildHotelPayload(formData, existingAmenities);
       const updatedHotel = await updateHotel({ id: hotel.id, data: payload }).unwrap();
       setSyncingBranches(true);
       await syncHotelBranches(hotel.id);
@@ -808,6 +1011,79 @@ export default function DashboardHotelDetailPage() {
                           placeholder="Email"
                         />
                       </div>
+                      <div className="mt-2 grid gap-2 md:grid-cols-2">
+                        <Input
+                          value={branch.map_latitude}
+                          onChange={(e) =>
+                            updateBranchField(
+                              index,
+                              "map_latitude",
+                              e.target.value,
+                            )
+                          }
+                          placeholder="Latitude (optional)"
+                        />
+                        <Input
+                          value={branch.map_longitude}
+                          onChange={(e) =>
+                            updateBranchField(
+                              index,
+                              "map_longitude",
+                              e.target.value,
+                            )
+                          }
+                          placeholder="Longitude (optional)"
+                        />
+                      </div>
+                      <Input
+                        className="mt-2"
+                        value={branch.map_url}
+                        onChange={(e) =>
+                          updateBranchField(index, "map_url", e.target.value)
+                        }
+                        placeholder="Map URL (optional)"
+                      />
+                      <div className="mt-2">
+                        <label className="mb-1 block text-xs font-medium text-gray-600">
+                          Branch Image
+                        </label>
+                        <ImageUpload
+                          label=""
+                          value={branch.image_url}
+                          onChange={(url) =>
+                            updateBranchField(index, "image_url", url)
+                          }
+                          onRemove={() => updateBranchField(index, "image_url", "")}
+                          previewHeightClass="h-28"
+                        />
+                      </div>
+                      <div className="mt-2">
+                        <label className="mb-1 block text-xs font-medium text-gray-600">
+                          Branch Gallery URLs
+                        </label>
+                        <Textarea
+                          rows={2}
+                          value={branch.gallery_urls_text}
+                          onChange={(e) =>
+                            updateBranchField(
+                              index,
+                              "gallery_urls_text",
+                              e.target.value,
+                            )
+                          }
+                          placeholder="One image URL per line (optional)"
+                        />
+                      </div>
+                      {branch.map_latitude.trim() && branch.map_longitude.trim() && (
+                        <a
+                          href={`https://www.google.com/maps?q=${encodeURIComponent(`${branch.map_latitude.trim()},${branch.map_longitude.trim()}`)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-2 inline-flex text-xs text-blue-600 hover:underline"
+                        >
+                          Preview branch map
+                        </a>
+                      )}
                       <label className="mt-2 inline-flex items-center gap-2 text-xs text-gray-600">
                         <input
                           type="checkbox"
@@ -835,6 +1111,50 @@ export default function DashboardHotelDetailPage() {
                 onRemove={() => setFormData({ ...formData, cover_image: "" })}
                 previewHeightClass="h-44"
               />
+            </div>
+
+            <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50/30 p-3">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium text-gray-700">
+                  Hotel Map Location
+                </label>
+                {formData.map_latitude.trim() && formData.map_longitude.trim() && (
+                  <a
+                    href={`https://www.google.com/maps?q=${encodeURIComponent(`${formData.map_latitude.trim()},${formData.map_longitude.trim()}`)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-blue-600 hover:underline"
+                  >
+                    Preview map
+                  </a>
+                )}
+              </div>
+              <div className="grid gap-2 md:grid-cols-2">
+                <Input
+                  value={formData.map_latitude}
+                  onChange={(e) =>
+                    setFormData({ ...formData, map_latitude: e.target.value })
+                  }
+                  placeholder="Latitude (optional)"
+                />
+                <Input
+                  value={formData.map_longitude}
+                  onChange={(e) =>
+                    setFormData({ ...formData, map_longitude: e.target.value })
+                  }
+                  placeholder="Longitude (optional)"
+                />
+              </div>
+              <Input
+                value={formData.map_url}
+                onChange={(e) =>
+                  setFormData({ ...formData, map_url: e.target.value })
+                }
+                placeholder="Map URL (optional)"
+              />
+              <p className="text-xs text-gray-500">
+                Set exact hotel location to use in frontend map sections.
+              </p>
             </div>
 
             <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50/30 p-3">

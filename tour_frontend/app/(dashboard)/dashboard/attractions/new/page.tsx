@@ -11,7 +11,7 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/ui/animated-link";
 import Image from "next/image";
 import { apiFetch } from "@/lib/csrf";
 import {
@@ -343,7 +343,7 @@ export default function NewAttractionPage() {
               onChange={autoResizeTitle}
               onKeyDown={handleTitleKeyDown}
               placeholder="Untitled"
-              className="mb-2 min-h-0 w-full resize-none overflow-hidden border-0 bg-transparent px-0 py-0 text-[2.5rem] font-bold leading-tight text-gray-900 placeholder-gray-200 shadow-none focus-visible:ring-0"
+              className="mb-2 text-5xl! min-h-0 w-full resize-none overflow-hidden border-0 bg-transparent px-0 py-0 text-[2.5rem] font-bold leading-tight text-gray-900 placeholder-gray-200 shadow-none focus-visible:ring-0"
               rows={1}
               style={{ minHeight: "3.5rem" }}
             />
@@ -445,6 +445,18 @@ export default function NewAttractionPage() {
                 </label>
                 <p className="mt-2 text-[11px] text-gray-400">
                   Feature this attraction prominently on public pages.
+                </p>
+              </div>
+
+              <Separator className="my-4 bg-gray-200/80" />
+
+              <div className="mb-5 rounded-lg border border-blue-100 bg-blue-50/40 p-3">
+                <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-blue-500">
+                  Connected Content
+                </p>
+                <p className="text-[12px] leading-relaxed text-blue-700/90">
+                  Save this attraction first, then open edit page to connect
+                  posts, photos and videos for public section control.
                 </p>
               </div>
 

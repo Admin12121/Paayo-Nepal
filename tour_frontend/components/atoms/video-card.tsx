@@ -1,7 +1,8 @@
 import React from "react";
-import Link from "next/link";
+import Link from "@/components/ui/animated-link";
 import { Eye, Play } from "lucide-react";
 import { normalizeMediaUrl } from "@/lib/media-url";
+import { NumberTicker } from "@/components/ui/number-ticker";
 
 interface VideoCardProps {
   thumbnail: string;
@@ -24,12 +25,6 @@ export function VideoCard({
 }: VideoCardProps) {
   const normalizedThumbnail = normalizeMediaUrl(thumbnail);
 
-  const formatViews = (count: number) => {
-    if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
-    if (count >= 1_000) return `${(count / 1_000).toFixed(0)}K`;
-    return count.toString();
-  };
-
   return (
     <Link href={href} className="block">
       <div className="group space-y-2.5">
@@ -48,7 +43,10 @@ export function VideoCard({
 
           <div className="absolute right-2 top-2 flex items-center gap-1 rounded bg-black/70 px-2 py-1 text-[11px] font-medium text-white">
             <Eye className="h-3 w-3" />
-            <span>{formatViews(views)}</span>
+            <NumberTicker
+              value={views}
+              className="tracking-normal text-current dark:text-current"
+            />
           </div>
 
           {duration && (
@@ -63,7 +61,12 @@ export function VideoCard({
             {title}
           </h4>
           <p className="text-xs text-[#868383]">
-            {date} • {formatViews(views)} views
+            {date} |{" "}
+            <NumberTicker
+              value={views}
+              className="tracking-normal text-current dark:text-current"
+            />{" "}
+            views
           </p>
         </div>
       </div>

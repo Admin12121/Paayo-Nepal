@@ -28,7 +28,7 @@ impl ContentLinkService {
 
         let links = sqlx::query_as::<_, ContentLink>(
             r#"
-            SELECT id, source_type::text, source_id, target_type::text, target_id, display_order, created_at
+            SELECT id, source_type, source_id, target_type, target_id, display_order, created_at
             FROM content_links
             WHERE source_type = $1::content_link_source
               AND source_id = $2
@@ -53,7 +53,7 @@ impl ContentLinkService {
 
         let links = sqlx::query_as::<_, ContentLink>(
             r#"
-            SELECT id, source_type::text, source_id, target_type::text, target_id, display_order, created_at
+            SELECT id, source_type, source_id, target_type, target_id, display_order, created_at
             FROM content_links
             WHERE target_type = $1::content_link_target
               AND target_id = $2
@@ -72,7 +72,7 @@ impl ContentLinkService {
     pub async fn get_by_id(&self, id: &str) -> Result<Option<ContentLink>, ApiError> {
         let link = sqlx::query_as::<_, ContentLink>(
             r#"
-            SELECT id, source_type::text, source_id, target_type::text, target_id, display_order, created_at
+            SELECT id, source_type, source_id, target_type, target_id, display_order, created_at
             FROM content_links
             WHERE id = $1
             "#,
@@ -103,13 +103,30 @@ impl ContentLinkService {
             .await?;
 
         let id = Uuid::new_v4().to_string();
-        let order = display_order.unwrap_or(0);
+        let order = match display_order {
+            Some(value) => value,
+            None => {
+                let next_order: (i32,) = sqlx::query_as(
+                    r#"
+                    SELECT COALESCE(MAX(display_order), -1) + 1
+                    FROM content_links
+                    WHERE source_type = $1::content_link_source
+                      AND source_id = $2
+                    "#,
+                )
+                .bind(source_type)
+                .bind(source_id)
+                .fetch_one(&self.db)
+                .await?;
+                next_order.0
+            }
+        };
 
         let link = sqlx::query_as::<_, ContentLink>(
             r#"
             INSERT INTO content_links (id, source_type, source_id, target_type, target_id, display_order)
             VALUES ($1, $2::content_link_source, $3, $4::content_link_target, $5, $6)
-            RETURNING id, source_type::text, source_id, target_type::text, target_id, display_order, created_at
+            RETURNING id, source_type, source_id, target_type, target_id, display_order, created_at
             "#,
         )
         .bind(&id)
@@ -135,7 +152,7 @@ impl ContentLinkService {
             UPDATE content_links
             SET display_order = $2
             WHERE id = $1
-            RETURNING id, source_type::text, source_id, target_type::text, target_id, display_order, created_at
+            RETURNING id, source_type, source_id, target_type, target_id, display_order, created_at
             "#,
         )
         .bind(id)
@@ -240,7 +257,7 @@ impl ContentLinkService {
                 r#"
                 INSERT INTO content_links (id, source_type, source_id, target_type, target_id, display_order)
                 VALUES ($1, $2::content_link_source, $3, $4::content_link_target, $5, $6)
-                RETURNING id, source_type::text, source_id, target_type::text, target_id, display_order, created_at
+                RETURNING id, source_type, source_id, target_type, target_id, display_order, created_at
                 "#,
             )
             .bind(&id)

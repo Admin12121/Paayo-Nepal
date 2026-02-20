@@ -56,6 +56,7 @@ import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import Pagination from "@/components/ui/Pagination";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Modal from "@/components/ui/Modal";
+import { NumberTicker } from "@/components/ui/number-ticker";
 import {
   Table,
   TableBody,
@@ -167,7 +168,10 @@ function DraggableVideoRow({
         </Button>
       </TableCell>
       <TableCell className="whitespace-nowrap text-right tabular-nums text-slate-600">
-        {video.view_count.toLocaleString()}
+        <NumberTicker
+          value={video.view_count ?? 0}
+          className="tracking-normal text-current dark:text-current"
+        />
       </TableCell>
       <TableCell className="whitespace-nowrap text-slate-600">
         {new Date(video.created_at).toLocaleDateString()}

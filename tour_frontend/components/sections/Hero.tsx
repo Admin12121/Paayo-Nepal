@@ -2,9 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/ui/animated-link";
 import { HeroSkeleton } from "@/components/ui/Skeleton";
 import { normalizeMediaUrl } from "@/lib/media-url";
+import { NumberTicker } from "@/components/ui/number-ticker";
+import FlipText from "@/components/ui/flip-text";
 
 export interface HeroSlideItem {
   id: string;
@@ -112,14 +114,22 @@ export function HeroSection({ slides, loading }: HeroSectionProps) {
           <div className="flex items-center gap-6 mb-5 text-xs sm:text-sm font-light tracking-[0.15em] uppercase">
             {publishedDate && <span>{publishedDate}</span>}
             {!slide._isHeroSlide && (
-              <span className="text-white/80">{slide.like_count} Likes</span>
+              <span className="text-white/80">
+                <NumberTicker
+                  value={slide.like_count ?? 0}
+                  className="tracking-normal text-current dark:text-current"
+                />{" "}
+                Likes
+              </span>
             )}
           </div>
           <Link
             href={linkHref}
             className="relative inline-flex items-center justify-center gap-3 px-7 py-4 rounded-xl backdrop-blur-[18.97px] shadow-[inset_9.49px_9.49px_1.58px_-11.07px_rgba(255,255,255,0.5),inset_6.32px_6.32px_3.16px_-6.32px_#B3B3B3,inset_-6.32px_-6.32px_3.16px_-6.32px_#B3B3B3,inset_0px_0px_0px_1.35px_#999999,inset_0px_0px_69.57px_rgba(242,242,242,0.5)] hover:shadow-[inset_9.49px_9.49px_1.58px_-11.07px_rgba(255,255,255,0.7),inset_6.32px_6.32px_3.16px_-6.32px_#B3B3B3,inset_-6.32px_-6.32px_3.16px_-6.32px_#B3B3B3,inset_0px_0px_0px_1.35px_#999999,inset_0px_0px_69.57px_rgba(242,242,242,0.7)] transition-all"
           >
-            <span className="text-white text-xl">View More</span>
+            <FlipText as="span" className="text-white text-xl">
+              View More
+            </FlipText>
             <svg
               width="33"
               height="33"

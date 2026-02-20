@@ -1,5 +1,5 @@
 import React from "react";
-import Link from "next/link";
+import Link from "@/components/ui/animated-link";
 import { cn } from "@/lib/utils";
 import { normalizeMediaUrl } from "@/lib/media-url";
 
@@ -63,7 +63,7 @@ export function ImageCard({
           <img
             src={normalizedSrc}
             alt={alt}
-            className={cn("h-full w-full object-cover", imageClassName)}
+            className={cn("h-full w-full object-cover rounded-xl", imageClassName)}
           />
         ) : (
           <div className="h-full w-full bg-gradient-to-br from-[#E9EEF7] to-[#CBD8EE]" />

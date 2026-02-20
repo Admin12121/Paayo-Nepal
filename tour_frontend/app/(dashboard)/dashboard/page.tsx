@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import Link from "@/components/ui/animated-link";
 import { Area, AreaChart, CartesianGrid, XAxis } from "recharts";
 import {
   ArrowUpRight,
@@ -56,6 +56,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NumberTicker } from "@/components/ui/number-ticker";
 import {
   Select,
   SelectContent,
@@ -481,7 +482,10 @@ export default function DashboardPage() {
           <CardHeader>
             <CardDescription>Total Views</CardDescription>
             <CardTitle className="text-3xl tabular-nums">
-              {stats.totalViews.toLocaleString()}
+              <NumberTicker
+                value={stats.totalViews}
+                className="tracking-normal text-current dark:text-current"
+              />
             </CardTitle>
             <CardAction>
               <Badge variant="outline" className="border-sky-200 bg-sky-100/60">
@@ -499,7 +503,10 @@ export default function DashboardPage() {
           <CardHeader>
             <CardDescription>Published Posts</CardDescription>
             <CardTitle className="text-3xl tabular-nums">
-              {stats.posts.published.toLocaleString()}
+              <NumberTicker
+                value={stats.posts.published}
+                className="tracking-normal text-current dark:text-current"
+              />
             </CardTitle>
             <CardAction>
               <Badge
@@ -511,7 +518,11 @@ export default function DashboardPage() {
             </CardAction>
           </CardHeader>
           <CardFooter className="text-sm text-slate-600">
-            {stats.posts.total.toLocaleString()} total posts
+            <NumberTicker
+              value={stats.posts.total}
+              className="tracking-normal text-current dark:text-current"
+            />{" "}
+            total posts
           </CardFooter>
         </Card>
 
@@ -519,7 +530,10 @@ export default function DashboardPage() {
           <CardHeader>
             <CardDescription>Active Users</CardDescription>
             <CardTitle className="text-3xl tabular-nums">
-              {stats.users.active.toLocaleString()}
+              <NumberTicker
+                value={stats.users.active}
+                className="tracking-normal text-current dark:text-current"
+              />
             </CardTitle>
             <CardAction>
               <Badge
@@ -531,7 +545,11 @@ export default function DashboardPage() {
             </CardAction>
           </CardHeader>
           <CardFooter className="text-sm text-slate-600">
-            {stats.users.total.toLocaleString()} total users
+            <NumberTicker
+              value={stats.users.total}
+              className="tracking-normal text-current dark:text-current"
+            />{" "}
+            total users
           </CardFooter>
         </Card>
 
@@ -539,14 +557,21 @@ export default function DashboardPage() {
           <CardHeader>
             <CardDescription>Open Queue</CardDescription>
             <CardTitle className="text-3xl tabular-nums">
-              {(stats.comments.pending + stats.posts.pending).toLocaleString()}
+              <NumberTicker
+                value={stats.comments.pending + stats.posts.pending}
+                className="tracking-normal text-current dark:text-current"
+              />
             </CardTitle>
             <CardAction>
               <Badge
                 variant="outline"
                 className="border-amber-200 bg-amber-100/60"
               >
-                {stats.comments.pending.toLocaleString()} comments
+                <NumberTicker
+                  value={stats.comments.pending}
+                  className="tracking-normal text-current dark:text-current"
+                />{" "}
+                comments
               </Badge>
             </CardAction>
           </CardHeader>
@@ -900,13 +925,19 @@ export default function DashboardPage() {
 
                       {columnVisibility.target && (
                         <TableCell className="text-right font-medium tabular-nums">
-                          {row.target.toLocaleString()}
+                          <NumberTicker
+                            value={row.target}
+                            className="tracking-normal text-current dark:text-current"
+                          />
                         </TableCell>
                       )}
 
                       {columnVisibility.limit && (
                         <TableCell className="text-right tabular-nums">
-                          {row.limit.toLocaleString()}
+                          <NumberTicker
+                            value={row.limit}
+                            className="tracking-normal text-current dark:text-current"
+                          />
                         </TableCell>
                       )}
 
@@ -1059,7 +1090,11 @@ export default function DashboardPage() {
           </div>
           <p className="text-sm font-semibold text-slate-900">Posts</p>
           <p className="mt-1 text-sm text-slate-600">
-            {stats.posts.total.toLocaleString()} entries
+            <NumberTicker
+              value={stats.posts.total}
+              className="tracking-normal text-current dark:text-current"
+            />{" "}
+            entries
           </p>
         </Link>
 
@@ -1072,7 +1107,11 @@ export default function DashboardPage() {
           </div>
           <p className="text-sm font-semibold text-slate-900">Comments</p>
           <p className="mt-1 text-sm text-slate-600">
-            {stats.comments.pending.toLocaleString()} pending review
+            <NumberTicker
+              value={stats.comments.pending}
+              className="tracking-normal text-current dark:text-current"
+            />{" "}
+            pending review
           </p>
         </Link>
 
@@ -1085,7 +1124,11 @@ export default function DashboardPage() {
           </div>
           <p className="text-sm font-semibold text-slate-900">Users</p>
           <p className="mt-1 text-sm text-slate-600">
-            {stats.users.total.toLocaleString()} total accounts
+            <NumberTicker
+              value={stats.users.total}
+              className="tracking-normal text-current dark:text-current"
+            />{" "}
+            total accounts
           </p>
         </Link>
 

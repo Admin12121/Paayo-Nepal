@@ -1,7 +1,9 @@
 import React from "react";
-import Link from "next/link";
+import Link from "@/components/ui/animated-link";
 import { CalendarDays, Eye } from "lucide-react";
 import { normalizeMediaUrl } from "@/lib/media-url";
+import { NumberTicker } from "@/components/ui/number-ticker";
+import FlipText from "@/components/ui/flip-text";
 
 interface ArticleCardProps {
   image: string;
@@ -21,13 +23,6 @@ export function ArticleCard({
   href = "#",
 }: ArticleCardProps) {
   const normalizedImage = normalizeMediaUrl(image);
-
-  const formattedViews =
-    views >= 1_000_000
-      ? `${(views / 1_000_000).toFixed(1)}M`
-      : views >= 1_000
-        ? `${(views / 1_000).toFixed(1)}K`
-        : views.toString();
 
   return (
     <Link href={href} className="block group">
@@ -56,7 +51,10 @@ export function ArticleCard({
               </span>
               <span className="inline-flex items-center gap-1">
                 <Eye className="h-3.5 w-3.5" />
-                <span>{formattedViews}</span>
+                <NumberTicker
+                  value={views}
+                  className="tracking-normal text-current dark:text-current"
+                />
               </span>
             </div>
               <p className="line-clamp-2 text-base leading-relaxed text-[#66758F] md:text-sm">
@@ -64,7 +62,7 @@ export function ArticleCard({
               </p>
             </div>
             <span className="mt-2 inline-flex items-center gap-1 self-end text-[11px] font-semibold uppercase tracking-[0.08em] text-[#008CFF]">
-              Read More
+              <FlipText as="span">Read More</FlipText>
               <svg
                 className="h-3.5 w-3.5"
                 fill="none"

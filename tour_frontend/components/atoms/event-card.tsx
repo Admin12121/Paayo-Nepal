@@ -1,5 +1,5 @@
 import React from "react";
-import Link from "next/link";
+import Link from "@/components/ui/animated-link";
 import { cn } from "@/lib/utils";
 import { normalizeMediaUrl } from "@/lib/media-url";
 

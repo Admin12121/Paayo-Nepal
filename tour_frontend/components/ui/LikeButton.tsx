@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Heart } from "lucide-react";
 import { likesApi } from "@/lib/api-client";
+import { NumberTicker } from "@/components/ui/number-ticker";
 
 interface LikeButtonProps {
   /** The content type — must match the backend `like_target_type` enum: 'post', 'video', or 'photo'. */
@@ -145,7 +146,11 @@ export function LikeButton({
       </span>
       {showLabel && (
         <span className={`${config.text} font-medium tabular-nums`}>
-          {initialized ? count.toLocaleString() : initialCount.toLocaleString()}
+          <NumberTicker
+            value={initialized ? count : initialCount}
+            startValue={initialCount}
+            className="tracking-normal text-current dark:text-current"
+          />
         </span>
       )}
     </button>
@@ -239,7 +244,11 @@ export function LikeIcon({
         `}
       />
       <span className={`${textSize} font-medium tabular-nums`}>
-        {count.toLocaleString()}
+        <NumberTicker
+          value={count}
+          startValue={initialCount}
+          className="tracking-normal text-current dark:text-current"
+        />
       </span>
     </button>
   );

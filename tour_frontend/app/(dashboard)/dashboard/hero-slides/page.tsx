@@ -1,42 +1,74 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
-  Plus,
+  ArrowDown,
+  ArrowUp,
   Edit,
-  Trash2,
   Eye,
   EyeOff,
-  SlidersHorizontal,
   Image as ImageIcon,
   Link as LinkIcon,
-  ArrowUp,
-  ArrowDown,
+  Plus,
+  SlidersHorizontal,
+  Trash2,
 } from "lucide-react";
-import type { HeroSlide, CreateHeroSlideInput } from "@/lib/api-client";
 import {
-  useListAllHeroSlidesQuery,
-  useGetHeroSlideCountsQuery,
+  photoFeaturesApi,
+  postsApi,
+  type CreateHeroSlideInput,
+  type HeroSlide,
+  videosApi,
+} from "@/lib/api-client";
+import {
   useCreateHeroSlideMutation,
-  useUpdateHeroSlideMutation,
   useDeleteHeroSlideMutation,
-  useToggleHeroSlideActiveMutation,
+  useGetHeroSlideCountsQuery,
+  useListAllHeroSlidesQuery,
   useReorderHeroSlidesMutation,
+  useToggleHeroSlideActiveMutation,
+  useUpdateHeroSlideMutation,
 } from "@/lib/store";
 import Button from "@/components/ui/button";
-import Input from "@/components/ui/input";
+import Checkbox from "@/components/ui/checkbox";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import DashboardCard from "@/components/dashboard/DashboardCard";
+import LoadingSpinner from "@/components/ui/LoadingSpinner";
+import Modal from "@/components/ui/Modal";
 import Select from "@/components/ui/select";
 import Textarea from "@/components/ui/Textarea";
-import Checkbox from "@/components/ui/checkbox";
-import LoadingSpinner from "@/components/ui/LoadingSpinner";
-import ConfirmDialog from "@/components/ui/ConfirmDialog";
-import Modal from "@/components/ui/Modal";
+import Input from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
-import DashboardCard from "@/components/dashboard/DashboardCard";
 import { toast } from "@/lib/utils/toast";
 
+type LinkedContentType = "post" | "photo" | "video";
+
+interface ContentOption {
+  id: string;
+  title: string;
+}
+
+function isLinkedType(value: string): value is LinkedContentType {
+  return value === "post" || value === "photo" || value === "video";
+}
+
+function getSlideSortOrder(slide: HeroSlide): number {
+  const withCompat = slide as HeroSlide & {
+    sort_order?: number | null;
+    display_order?: number | null;
+  };
+  return withCompat.sort_order ?? withCompat.display_order ?? 0;
+}
+
+function getSlideDescription(slide: HeroSlide): string | null {
+  const withCompat = slide as HeroSlide & {
+    custom_description?: string | null;
+    custom_subtitle?: string | null;
+  };
+  return withCompat.custom_description ?? withCompat.custom_subtitle ?? null;
+}
+
 export default function HeroSlidesPage() {
-  // ── Local UI state ──────────────────────────────────────────────────────
   const [deleteDialog, setDeleteDialog] = useState<{
     open: boolean;
     slide: HeroSlide | null;
@@ -56,28 +88,22 @@ export default function HeroSlidesPage() {
     sort_order: 0,
     is_active: true,
   });
+  const [optionsLoading, setOptionsLoading] = useState(false);
+  const [contentOptions, setContentOptions] = useState<
+    Record<LinkedContentType, ContentOption[]>
+  >({
+    post: [],
+    photo: [],
+    video: [],
+  });
 
-  // ── RTK Query hooks ─────────────────────────────────────────────────────
-  //
-  // `useListAllHeroSlidesQuery` automatically:
-  //   - Fetches data on mount
-  //   - Caches results (deduplicates identical requests)
-  //   - Refetches when the browser tab regains focus
-  //   - Refetches when cache tags are invalidated by mutations
-  //
-  // No more manual `useEffect` + `useState` + `loadSlides()` pattern!
   const {
     data: rawSlides,
     isLoading,
     isFetching,
   } = useListAllHeroSlidesQuery();
-
   const { data: counts } = useGetHeroSlideCountsQuery();
 
-  // Mutations — each returns a trigger function and a result object.
-  // When a mutation succeeds, RTK Query automatically invalidates the
-  // relevant cache tags, causing queries to refetch.
-  // No more manual `loadSlides()` calls after every mutation!
   const [createHeroSlide, { isLoading: creating }] =
     useCreateHeroSlideMutation();
   const [updateHeroSlide, { isLoading: updatingSlide }] =
@@ -89,137 +115,60 @@ export default function HeroSlidesPage() {
     useReorderHeroSlidesMutation();
 
   const saving = creating || updatingSlide;
-
-  // ── Derived data ────────────────────────────────────────────────────────
-  const slides = rawSlides
-    ? [...rawSlides].sort((a, b) => a.display_order - b.display_order)
-    : [];
-
+  const slides = useMemo(
+    () =>
+      rawSlides
+        ? [...rawSlides].sort(
+            (a, b) => getSlideSortOrder(a) - getSlideSortOrder(b),
+          )
+        : [],
+    [rawSlides],
+  );
   const slideCounts = counts ?? { total: 0, active: 0, inactive: 0 };
 
-  // ── Handlers ────────────────────────────────────────────────────────────
+  const currentContentOptions = useMemo(() => {
+    if (!isLinkedType(formData.content_type)) return [];
+    return contentOptions[formData.content_type];
+  }, [contentOptions, formData.content_type]);
 
-  const handleDelete = async () => {
-    if (!deleteDialog.slide) return;
+  useEffect(() => {
+    const loadContentOptions = async () => {
+      try {
+        setOptionsLoading(true);
+        const [postsRes, photosRes, videosRes] = await Promise.all([
+          postsApi.list({ limit: 200, status: "published" }),
+          photoFeaturesApi.list({
+            limit: 200,
+            status: "published",
+            is_featured: true,
+          }),
+          videosApi.list({ limit: 200, status: "published" }),
+        ]);
 
-    try {
-      await deleteHeroSlide(deleteDialog.slide.id).unwrap();
-      toast.success("Hero slide deleted");
-      setDeleteDialog({ open: false, slide: null });
-    } catch {
-      toast.error("Failed to delete hero slide");
-    }
-  };
+        setContentOptions({
+          post: postsRes.data.map((item) => ({
+            id: item.id,
+            title: item.title,
+          })),
+          photo: photosRes.data.map((item) => ({
+            id: item.id,
+            title: item.title,
+          })),
+          video: videosRes.data.map((item) => ({
+            id: item.id,
+            title: item.title,
+          })),
+        });
+      } catch (error) {
+        console.error(error);
+        toast.error("Failed to load content options");
+      } finally {
+        setOptionsLoading(false);
+      }
+    };
 
-  const handleToggleActive = async (slide: HeroSlide) => {
-    try {
-      await toggleHeroSlideActive(slide.id).unwrap();
-      toast.success(slide.is_active ? "Slide deactivated" : "Slide activated");
-    } catch {
-      toast.error("Failed to toggle slide status");
-    }
-  };
-
-  const handleCreate = async () => {
-    if (formData.content_type === "custom" && !formData.custom_title?.trim()) {
-      toast.error("Title is required for custom slides");
-      return;
-    }
-    if (formData.content_type !== "custom" && !formData.content_id?.trim()) {
-      toast.error("Content ID is required for linked slides");
-      return;
-    }
-
-    try {
-      await createHeroSlide({
-        ...formData,
-        sort_order: formData.sort_order ?? slides.length,
-      }).unwrap();
-      toast.success("Hero slide created");
-      setCreateModal(false);
-      resetForm();
-    } catch {
-      toast.error("Failed to create hero slide");
-    }
-  };
-
-  const handleUpdate = async () => {
-    if (!editModal.slide) return;
-
-    try {
-      await updateHeroSlide({
-        id: editModal.slide.id,
-        data: formData,
-      }).unwrap();
-      toast.success("Hero slide updated");
-      setEditModal({ open: false, slide: null });
-      resetForm();
-    } catch {
-      toast.error("Failed to update hero slide");
-    }
-  };
-
-  const handleMoveUp = async (index: number) => {
-    if (index === 0) return;
-    const newSlides = [...slides];
-    [newSlides[index - 1], newSlides[index]] = [
-      newSlides[index],
-      newSlides[index - 1],
-    ];
-    await saveOrder(newSlides);
-  };
-
-  const handleMoveDown = async (index: number) => {
-    if (index === slides.length - 1) return;
-    const newSlides = [...slides];
-    [newSlides[index], newSlides[index + 1]] = [
-      newSlides[index + 1],
-      newSlides[index],
-    ];
-    await saveOrder(newSlides);
-  };
-
-  const saveOrder = async (orderedSlides: HeroSlide[]) => {
-    try {
-      const orders = orderedSlides.map((slide, index) => ({
-        id: slide.id,
-        sort_order: index,
-      }));
-      await reorderHeroSlides(orders).unwrap();
-      toast.success("Slide order updated");
-    } catch {
-      toast.error("Failed to reorder slides");
-    }
-  };
-
-  const openEditModal = (slide: HeroSlide) => {
-    setFormData({
-      content_type: slide.content_type,
-      content_id: slide.content_id || "",
-      custom_title: slide.custom_title || "",
-      custom_description: slide.custom_subtitle || "",
-      custom_image: slide.custom_image || "",
-      custom_link: slide.custom_link || "",
-      sort_order: slide.display_order,
-      is_active: slide.is_active,
-    });
-    setEditModal({ open: true, slide });
-  };
-
-  const resetForm = () => {
-    setFormData({
-      content_type: "custom",
-      content_id: "",
-      custom_title: "",
-      custom_description: "",
-      custom_image: "",
-      custom_link: "",
-      sort_order: slides.length,
-      is_active: true,
-    });
-  };
-
-  // ── Helpers ─────────────────────────────────────────────────────────────
+    void loadContentOptions();
+  }, []);
 
   const getContentTypeLabel = (type: string) => {
     switch (type) {
@@ -251,47 +200,201 @@ export default function HeroSlidesPage() {
     }
   };
 
+  const getLinkedContentTitle = (
+    contentType: string,
+    contentId: string | null | undefined,
+  ) => {
+    if (!contentId || !isLinkedType(contentType)) return null;
+    return (
+      contentOptions[contentType].find((item) => item.id === contentId)?.title ??
+      null
+    );
+  };
+
+  const resetForm = () => {
+    setFormData({
+      content_type: "custom",
+      content_id: "",
+      custom_title: "",
+      custom_description: "",
+      custom_image: "",
+      custom_link: "",
+      sort_order: slides.length,
+      is_active: true,
+    });
+  };
+
+  const openEditModal = (slide: HeroSlide) => {
+    setFormData({
+      content_type: slide.content_type,
+      content_id: slide.content_id || "",
+      custom_title: slide.custom_title || "",
+      custom_description: getSlideDescription(slide) || "",
+      custom_image: slide.custom_image || "",
+      custom_link: slide.custom_link || "",
+      sort_order: getSlideSortOrder(slide),
+      is_active: slide.is_active,
+    });
+    setEditModal({ open: true, slide });
+  };
+
+  const handleDelete = async () => {
+    if (!deleteDialog.slide) return;
+
+    try {
+      await deleteHeroSlide(deleteDialog.slide.id).unwrap();
+      toast.success("Hero slide deleted");
+      setDeleteDialog({ open: false, slide: null });
+    } catch {
+      toast.error("Failed to delete hero slide");
+    }
+  };
+
+  const handleToggleActive = async (slide: HeroSlide) => {
+    try {
+      await toggleHeroSlideActive(slide.id).unwrap();
+      toast.success(slide.is_active ? "Slide deactivated" : "Slide activated");
+    } catch {
+      toast.error("Failed to toggle slide status");
+    }
+  };
+
+  const handleCreate = async () => {
+    if (formData.content_type === "custom" && !formData.custom_title?.trim()) {
+      toast.error("Title is required for custom slides");
+      return;
+    }
+
+    if (formData.content_type !== "custom" && !formData.content_id?.trim()) {
+      toast.error("Select linked content for this slide");
+      return;
+    }
+
+    try {
+      await createHeroSlide({
+        ...formData,
+        sort_order: formData.sort_order ?? slides.length,
+      }).unwrap();
+      toast.success("Hero slide created");
+      setCreateModal(false);
+      resetForm();
+    } catch {
+      toast.error("Failed to create hero slide");
+    }
+  };
+
+  const handleUpdate = async () => {
+    if (!editModal.slide) return;
+
+    if (formData.content_type !== "custom" && !formData.content_id?.trim()) {
+      toast.error("Select linked content for this slide");
+      return;
+    }
+
+    try {
+      await updateHeroSlide({
+        id: editModal.slide.id,
+        data: formData,
+      }).unwrap();
+      toast.success("Hero slide updated");
+      setEditModal({ open: false, slide: null });
+      resetForm();
+    } catch {
+      toast.error("Failed to update hero slide");
+    }
+  };
+
+  const saveOrder = async (orderedSlides: HeroSlide[]) => {
+    try {
+      const orders = orderedSlides.map((slide, index) => ({
+        id: slide.id,
+        sort_order: index,
+      }));
+      await reorderHeroSlides(orders).unwrap();
+      toast.success("Slide order updated");
+    } catch {
+      toast.error("Failed to reorder slides");
+    }
+  };
+
+  const handleMoveUp = async (index: number) => {
+    if (index === 0) return;
+    const reordered = [...slides];
+    [reordered[index - 1], reordered[index]] = [
+      reordered[index],
+      reordered[index - 1],
+    ];
+    await saveOrder(reordered);
+  };
+
+  const handleMoveDown = async (index: number) => {
+    if (index === slides.length - 1) return;
+    const reordered = [...slides];
+    [reordered[index], reordered[index + 1]] = [
+      reordered[index + 1],
+      reordered[index],
+    ];
+    await saveOrder(reordered);
+  };
+
   const slideForm = (
     <div className="space-y-4">
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
+        <label className="mb-1 block text-sm font-medium text-gray-700">
           Content Type *
         </label>
         <Select
           value={formData.content_type}
           onChange={(e) =>
-            setFormData({ ...formData, content_type: e.target.value })
+            setFormData({
+              ...formData,
+              content_type: e.target.value,
+              content_id: "",
+            })
           }
           options={[
             { value: "custom", label: "Custom (manual title/image)" },
             { value: "post", label: "Link to Post" },
             { value: "video", label: "Link to Video" },
-            { value: "photo", label: "Link to Photo Feature" },
+            { value: "photo", label: "Link to Featured Photo" },
           ]}
         />
       </div>
 
       {formData.content_type !== "custom" && (
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Content ID *
+          <label className="mb-1 block text-sm font-medium text-gray-700">
+            Linked Content *
           </label>
-          <Input
+          <Select
             value={formData.content_id || ""}
             onChange={(e) =>
-              setFormData({ ...formData, content_id: e.target.value })
+              setFormData({
+                ...formData,
+                content_id: e.target.value,
+              })
             }
-            placeholder="UUID of the linked content item"
+            options={[
+              {
+                value: "",
+                label: optionsLoading
+                  ? "Loading content..."
+                  : `Select ${getContentTypeLabel(formData.content_type).toLowerCase()}...`,
+              },
+              ...currentContentOptions.map((item) => ({
+                value: item.id,
+                label: item.title,
+              })),
+            ]}
           />
-          <p className="text-xs text-gray-500 mt-1">
-            The slide will automatically use the content&apos;s title, image,
-            and link. Custom fields below will override them.
+          <p className="mt-1 text-xs text-gray-500">
+            For photos, only featured photo collections are shown.
           </p>
         </div>
       )}
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
+        <label className="mb-1 block text-sm font-medium text-gray-700">
           {formData.content_type === "custom"
             ? "Title *"
             : "Custom Title (override)"}
@@ -306,7 +409,7 @@ export default function HeroSlidesPage() {
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
+        <label className="mb-1 block text-sm font-medium text-gray-700">
           {formData.content_type === "custom"
             ? "Description"
             : "Custom Description (override)"}
@@ -326,7 +429,7 @@ export default function HeroSlidesPage() {
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
+        <label className="mb-1 block text-sm font-medium text-gray-700">
           {formData.content_type === "custom"
             ? "Image URL"
             : "Custom Image URL (override)"}
@@ -339,11 +442,11 @@ export default function HeroSlidesPage() {
           placeholder="https://..."
         />
         {formData.custom_image && (
-          <div className="mt-2 relative w-full h-32 rounded-lg overflow-hidden bg-gray-100">
+          <div className="relative mt-2 h-32 w-full overflow-hidden rounded-lg bg-gray-100">
             <img
               src={formData.custom_image}
               alt="Preview"
-              className="w-full h-full object-cover"
+              className="h-full w-full object-cover"
               onError={(e) => {
                 (e.target as HTMLImageElement).style.display = "none";
               }}
@@ -353,7 +456,7 @@ export default function HeroSlidesPage() {
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
+        <label className="mb-1 block text-sm font-medium text-gray-700">
           {formData.content_type === "custom"
             ? "Link URL"
             : "Custom Link URL (override)"}
@@ -369,7 +472,7 @@ export default function HeroSlidesPage() {
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="mb-1 block text-sm font-medium text-gray-700">
             Sort Order
           </label>
           <Input
@@ -378,7 +481,7 @@ export default function HeroSlidesPage() {
             onChange={(e) =>
               setFormData({
                 ...formData,
-                sort_order: parseInt(e.target.value) || 0,
+                sort_order: parseInt(e.target.value, 10) || 0,
               })
             }
             placeholder="0"
@@ -402,16 +505,12 @@ export default function HeroSlidesPage() {
     </div>
   );
 
-  // ── Render ──────────────────────────────────────────────────────────────
-
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Hero Slides</h1>
-          <p className="text-gray-600 mt-1">
-            Manage the homepage hero carousel
-          </p>
+          <p className="mt-1 text-gray-600">Manage the homepage hero carousel</p>
         </div>
         <Button
           onClick={() => {
@@ -419,17 +518,16 @@ export default function HeroSlidesPage() {
             setCreateModal(true);
           }}
         >
-          <Plus className="w-4 h-4 mr-2" />
+          <Plus className="mr-2 h-4 w-4" />
           New Slide
         </Button>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="mb-6 grid grid-cols-3 gap-4">
         <Card className="rounded-lg border border-gray-200 bg-white py-0 shadow-sm">
           <CardContent className="p-4">
             <p className="text-sm text-gray-500">Total Slides</p>
-            <p className="text-2xl font-bold text-gray-900 mt-1">
+            <p className="mt-1 text-2xl font-bold text-gray-900">
               {slideCounts.total}
             </p>
           </CardContent>
@@ -437,7 +535,7 @@ export default function HeroSlidesPage() {
         <Card className="rounded-lg border border-green-200 bg-white py-0 shadow-sm">
           <CardContent className="p-4">
             <p className="text-sm text-green-600">Active</p>
-            <p className="text-2xl font-bold text-green-700 mt-1">
+            <p className="mt-1 text-2xl font-bold text-green-700">
               {slideCounts.active}
             </p>
           </CardContent>
@@ -445,7 +543,7 @@ export default function HeroSlidesPage() {
         <Card className="rounded-lg border border-gray-200 bg-white py-0 shadow-sm">
           <CardContent className="p-4">
             <p className="text-sm text-gray-500">Inactive</p>
-            <p className="text-2xl font-bold text-gray-500 mt-1">
+            <p className="mt-1 text-2xl font-bold text-gray-500">
               {slideCounts.inactive}
             </p>
           </CardContent>
@@ -453,20 +551,19 @@ export default function HeroSlidesPage() {
       </div>
 
       <DashboardCard contentClassName="p-0">
-        {/* Show a subtle loading indicator when refetching in the background */}
         {isFetching && !isLoading && (
-          <div className="h-0.5 bg-blue-100 overflow-hidden">
-            <div className="h-full bg-blue-500 animate-pulse w-full" />
+          <div className="h-0.5 overflow-hidden bg-blue-100">
+            <div className="h-full w-full animate-pulse bg-blue-500" />
           </div>
         )}
 
         {isLoading ? (
           <LoadingSpinner />
         ) : slides.length === 0 ? (
-          <div className="text-center py-16 text-gray-500">
-            <SlidersHorizontal className="w-16 h-16 mx-auto mb-4 text-gray-400" />
-            <p className="text-lg font-medium mb-1">No hero slides yet</p>
-            <p className="text-sm mb-4">
+          <div className="py-16 text-center text-gray-500">
+            <SlidersHorizontal className="mx-auto mb-4 h-16 w-16 text-gray-400" />
+            <p className="mb-1 text-lg font-medium">No hero slides yet</p>
+            <p className="mb-4 text-sm">
               Create your first slide to display on the homepage carousel.
             </p>
             <Button
@@ -475,193 +572,189 @@ export default function HeroSlidesPage() {
                 setCreateModal(true);
               }}
             >
-              <Plus className="w-4 h-4 mr-2" />
+              <Plus className="mr-2 h-4 w-4" />
               Create First Slide
             </Button>
           </div>
         ) : (
           <div className="divide-y divide-gray-100">
-            {/* Header */}
-            <div className="px-6 py-3 bg-gray-50 grid grid-cols-12 gap-4 items-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+            <div className="grid grid-cols-12 items-center gap-4 bg-gray-50 px-6 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
               <div className="col-span-1">Order</div>
               <div className="col-span-2">Preview</div>
               <div className="col-span-3">Title</div>
               <div className="col-span-1">Type</div>
-              <div className="col-span-1">Status</div>
+              <div className="col-span-1">Linked</div>
               <div className="col-span-1">Active</div>
               <div className="col-span-3 text-right">Actions</div>
             </div>
 
-            {slides.map((slide, index) => (
-              <div
-                key={slide.id}
-                className={`px-6 py-4 grid grid-cols-12 gap-4 items-center transition-colors ${
-                  !slide.is_active ? "opacity-60 bg-gray-50/50" : ""
-                } hover:bg-gray-50`}
-              >
-                {/* Order */}
-                <div className="col-span-1">
-                  <div className="flex flex-col items-center gap-0.5">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleMoveUp(index)}
-                      disabled={index === 0 || reordering}
-                      className="h-auto p-0.5 text-gray-400 hover:bg-transparent hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed"
-                      title="Move up"
+            {slides.map((slide, index) => {
+              const linkedTitle = getLinkedContentTitle(
+                slide.content_type,
+                slide.content_id,
+              );
+              const subtitle = getSlideDescription(slide);
+
+              return (
+                <div
+                  key={slide.id}
+                  className={`grid grid-cols-12 items-center gap-4 px-6 py-4 transition-colors ${
+                    !slide.is_active ? "bg-gray-50/50 opacity-60" : ""
+                  } hover:bg-gray-50`}
+                >
+                  <div className="col-span-1">
+                    <div className="flex flex-col items-center gap-0.5">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleMoveUp(index)}
+                        disabled={index === 0 || reordering}
+                        className="h-auto p-0.5 text-gray-400 hover:bg-transparent hover:text-gray-600 disabled:cursor-not-allowed disabled:opacity-30"
+                        title="Move up"
+                      >
+                        <ArrowUp className="h-3.5 w-3.5" />
+                      </Button>
+                      <span className="text-sm font-bold tabular-nums text-gray-500">
+                        {index + 1}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleMoveDown(index)}
+                        disabled={index === slides.length - 1 || reordering}
+                        className="h-auto p-0.5 text-gray-400 hover:bg-transparent hover:text-gray-600 disabled:cursor-not-allowed disabled:opacity-30"
+                        title="Move down"
+                      >
+                        <ArrowDown className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="col-span-2">
+                    {slide.custom_image ? (
+                      <div className="h-16 w-full overflow-hidden rounded-lg bg-gray-100">
+                        <img
+                          src={slide.custom_image}
+                          alt={slide.custom_title || linkedTitle || "Slide"}
+                          className="h-full w-full object-cover"
+                        />
+                      </div>
+                    ) : (
+                      <div className="flex h-16 w-full items-center justify-center rounded-lg bg-gray-100">
+                        <ImageIcon className="h-6 w-6 text-gray-400" />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="col-span-3">
+                    <p className="truncate text-sm font-medium text-gray-900">
+                      {slide.custom_title || linkedTitle || "(Linked content title)"}
+                    </p>
+                    {subtitle && (
+                      <p className="mt-0.5 truncate text-xs text-gray-500">
+                        {subtitle}
+                      </p>
+                    )}
+                    {slide.custom_link && (
+                      <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-blue-500">
+                        <LinkIcon className="h-3 w-3" />
+                        {slide.custom_link}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="col-span-1">
+                    <span
+                      className={`rounded-full px-2 py-1 text-xs font-semibold ${getContentTypeBadgeColor(slide.content_type)}`}
                     >
-                      <ArrowUp className="w-3.5 h-3.5" />
-                    </Button>
-                    <span className="text-sm font-bold text-gray-500 tabular-nums">
-                      {index + 1}
+                      {getContentTypeLabel(slide.content_type)}
                     </span>
+                  </div>
+
+                  <div className="col-span-1">
+                    {slide.content_id ? (
+                      <span className="block truncate text-xs text-gray-500">
+                        {linkedTitle || `${slide.content_id.slice(0, 8)}...`}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-gray-400">-</span>
+                    )}
+                  </div>
+
+                  <div className="col-span-1">
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
-                      onClick={() => handleMoveDown(index)}
-                      disabled={index === slides.length - 1 || reordering}
-                      className="h-auto p-0.5 text-gray-400 hover:bg-transparent hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed"
-                      title="Move down"
+                      onClick={() => handleToggleActive(slide)}
+                      className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium transition-colors ${
+                        slide.is_active
+                          ? "bg-green-100 text-green-700 hover:bg-green-200"
+                          : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                      }`}
+                      title={
+                        slide.is_active
+                          ? "Click to deactivate"
+                          : "Click to activate"
+                      }
                     >
-                      <ArrowDown className="w-3.5 h-3.5" />
+                      {slide.is_active ? (
+                        <>
+                          <Eye className="h-3 w-3" />
+                          On
+                        </>
+                      ) : (
+                        <>
+                          <EyeOff className="h-3 w-3" />
+                          Off
+                        </>
+                      )}
+                    </Button>
+                  </div>
+
+                  <div className="col-span-3 flex items-center justify-end gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => openEditModal(slide)}
+                      title="Edit slide"
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setDeleteDialog({ open: true, slide })}
+                      title="Delete slide"
+                    >
+                      <Trash2 className="h-4 w-4 text-red-600" />
                     </Button>
                   </div>
                 </div>
-
-                {/* Preview thumbnail */}
-                <div className="col-span-2">
-                  {slide.custom_image ? (
-                    <div className="w-full h-16 rounded-lg overflow-hidden bg-gray-100">
-                      <img
-                        src={slide.custom_image}
-                        alt={slide.custom_title || "Slide"}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                  ) : (
-                    <div className="w-full h-16 rounded-lg bg-gray-100 flex items-center justify-center">
-                      <ImageIcon className="w-6 h-6 text-gray-400" />
-                    </div>
-                  )}
-                </div>
-
-                {/* Title */}
-                <div className="col-span-3">
-                  <p className="text-sm font-medium text-gray-900 truncate">
-                    {slide.custom_title || "(Linked content title)"}
-                  </p>
-                  {slide.custom_subtitle && (
-                    <p className="text-xs text-gray-500 truncate mt-0.5">
-                      {slide.custom_subtitle}
-                    </p>
-                  )}
-                  {slide.custom_link && (
-                    <p className="text-xs text-blue-500 truncate mt-0.5 flex items-center gap-1">
-                      <LinkIcon className="w-3 h-3" />
-                      {slide.custom_link}
-                    </p>
-                  )}
-                </div>
-
-                {/* Type badge */}
-                <div className="col-span-1">
-                  <span
-                    className={`px-2 py-1 text-xs font-semibold rounded-full ${getContentTypeBadgeColor(slide.content_type)}`}
-                  >
-                    {getContentTypeLabel(slide.content_type)}
-                  </span>
-                </div>
-
-                {/* Linked content ID */}
-                <div className="col-span-1">
-                  {slide.content_id ? (
-                    <span className="text-xs text-gray-400 font-mono">
-                      {slide.content_id.slice(0, 8)}…
-                    </span>
-                  ) : (
-                    <span className="text-xs text-gray-400">—</span>
-                  )}
-                </div>
-
-                {/* Active toggle */}
-                <div className="col-span-1">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleToggleActive(slide)}
-                    className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium transition-colors ${
-                      slide.is_active
-                        ? "bg-green-100 text-green-700 hover:bg-green-200"
-                        : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                    }`}
-                    title={
-                      slide.is_active
-                        ? "Click to deactivate"
-                        : "Click to activate"
-                    }
-                  >
-                    {slide.is_active ? (
-                      <>
-                        <Eye className="w-3 h-3" />
-                        On
-                      </>
-                    ) : (
-                      <>
-                        <EyeOff className="w-3 h-3" />
-                        Off
-                      </>
-                    )}
-                  </Button>
-                </div>
-
-                {/* Actions */}
-                <div className="col-span-3 flex items-center justify-end gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => openEditModal(slide)}
-                    title="Edit slide"
-                  >
-                    <Edit className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setDeleteDialog({ open: true, slide })}
-                    title="Delete slide"
-                  >
-                    <Trash2 className="w-4 h-4 text-red-600" />
-                  </Button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
         {reordering && (
-          <div className="px-6 py-2 bg-blue-50 border-t border-blue-100 text-center">
-            <span className="text-xs text-blue-600 font-medium">
-              Saving new order…
+          <div className="border-t border-blue-100 bg-blue-50 px-6 py-2 text-center">
+            <span className="text-xs font-medium text-blue-600">
+              Saving new order...
             </span>
           </div>
         )}
       </DashboardCard>
 
-      {/* Hint */}
-      <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+      <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
         <p className="text-sm text-amber-800">
-          <strong>Tip:</strong> Only active slides appear on the homepage. Use
-          the up/down arrows to reorder slides. For linked content slides (Post,
-          Video, Photo), the title, image, and link are automatically pulled
-          from the content item — but you can override any of them with the
-          custom fields.
+          <strong>Tip:</strong> You can mix content types in the hero slider,
+          like article posts and featured photo collections. Linked slides pull
+          title/image/link automatically, and custom fields override any value.
         </p>
       </div>
 
-      {/* Create Modal */}
       <Modal
         isOpen={createModal}
         onClose={() => setCreateModal(false)}
@@ -681,7 +774,6 @@ export default function HeroSlidesPage() {
         {slideForm}
       </Modal>
 
-      {/* Edit Modal */}
       <Modal
         isOpen={editModal.open}
         onClose={() => setEditModal({ open: false, slide: null })}
@@ -704,7 +796,6 @@ export default function HeroSlidesPage() {
         {slideForm}
       </Modal>
 
-      {/* Delete Confirm */}
       <ConfirmDialog
         isOpen={deleteDialog.open}
         onClose={() => setDeleteDialog({ open: false, slide: null })}

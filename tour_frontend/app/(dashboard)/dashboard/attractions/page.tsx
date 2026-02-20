@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import Link from "@/components/ui/animated-link";
 import Image from "next/image";
 import { Plus, Edit, Trash2, MapPin, GripVertical } from "lucide-react";
 import {
@@ -36,6 +36,7 @@ import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import Pagination from "@/components/ui/Pagination";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { Badge } from "@/components/ui/badge";
+import { NumberTicker } from "@/components/ui/number-ticker";
 import {
   Select,
   SelectContent,
@@ -131,7 +132,10 @@ function DraggableAttractionRow({
         </Badge>
       </TableCell>
       <TableCell className="text-right tabular-nums">
-        {(attraction.likes ?? attraction.like_count ?? 0).toLocaleString()}
+        <NumberTicker
+          value={attraction.likes ?? attraction.like_count ?? 0}
+          className="tracking-normal text-current dark:text-current"
+        />
       </TableCell>
       <TableCell className="text-slate-600">
         {new Date(attraction.created_at).toLocaleDateString()}

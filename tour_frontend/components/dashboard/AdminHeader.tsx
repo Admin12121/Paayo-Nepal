@@ -1,7 +1,7 @@
 "use client";
 
 import { LogOut, User as UserIcon } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/ui/animated-link";
 import { useRouter } from "next/navigation";
 import { signOutAndClear } from "@/lib/auth-client";
 import Button from "@/components/ui/button";

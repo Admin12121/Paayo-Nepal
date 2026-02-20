@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import Link from "@/components/ui/animated-link";
 import Image from "next/image";
 import { Plus, Edit, Trash2, CheckCircle, GripVertical } from "lucide-react";
 import {
@@ -37,6 +37,7 @@ import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import Pagination from "@/components/ui/Pagination";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { Badge } from "@/components/ui/badge";
+import { NumberTicker } from "@/components/ui/number-ticker";
 import {
   Table,
   TableBody,
@@ -132,7 +133,10 @@ function DraggablePostRow({
         </Badge>
       </TableCell>
       <TableCell className="text-right tabular-nums">
-        {post.views.toLocaleString()}
+        <NumberTicker
+          value={post.views ?? 0}
+          className="tracking-normal text-current dark:text-current"
+        />
       </TableCell>
       <TableCell className="text-slate-600">
         {new Date(post.created_at).toLocaleDateString()}

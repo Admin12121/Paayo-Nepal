@@ -13,10 +13,11 @@ import {
   Settings,
 } from "lucide-react";
 import Image from "next/image";
-import Link from "next/link";
+import Link from "@/components/ui/animated-link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { useSession, signOut } from "@/lib/auth-client";
+import FlipText from "@/components/ui/flip-text";
 
 export function Header() {
   const pathname = usePathname();
@@ -66,9 +67,12 @@ export function Header() {
                     : "text-[#2F4B75] hover:text-[#0078C0]"
                 }`}
               >
-                <span className={isActive ? "font-semibold" : ""}>
+                <FlipText
+                  as="span"
+                  className={isActive ? "font-semibold" : undefined}
+                >
                   {link.label}
-                </span>
+                </FlipText>
                 {link.chevron ? <ChevronDown className="h-4 w-4" /> : null}
               </Link>
             );
@@ -136,7 +140,7 @@ export function Header() {
                       : "text-[#4B5563] hover:bg-gray-50"
                   }`}
                 >
-                  {link.label}
+                  <FlipText as="span">{link.label}</FlipText>
                 </Link>
               );
             })}
@@ -171,7 +175,7 @@ export function Header() {
                     className="flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium text-[#4B5563] hover:bg-gray-50"
                   >
                     <LayoutDashboard className="h-4 w-4" />
-                    Dashboard
+                    <FlipText as="span">Dashboard</FlipText>
                   </Link>
                   <Link
                     href="/dashboard/settings"
@@ -179,7 +183,7 @@ export function Header() {
                     className="flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium text-[#4B5563] hover:bg-gray-50"
                   >
                     <Settings className="h-4 w-4" />
-                    Settings
+                    <FlipText as="span">Settings</FlipText>
                   </Link>
                   <button
                     onClick={async () => {
@@ -190,7 +194,7 @@ export function Header() {
                     className="flex w-full items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium text-red-600 hover:bg-red-50"
                   >
                     <LogOut className="h-4 w-4" />
-                    Sign Out
+                    <FlipText as="span">Sign Out</FlipText>
                   </button>
                 </>
               ) : (
@@ -201,7 +205,7 @@ export function Header() {
                     className="flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium text-[#0078C0] hover:bg-blue-50"
                   >
                     <LogIn className="h-4 w-4" />
-                    Sign In
+                    <FlipText as="span">Sign In</FlipText>
                   </Link>
                   <Link
                     href="/register"
@@ -209,7 +213,7 @@ export function Header() {
                     className="flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium text-[#0078C0] hover:bg-blue-50"
                   >
                     <UserPlus className="h-4 w-4" />
-                    Register
+                    <FlipText as="span">Register</FlipText>
                   </Link>
                 </>
               )}

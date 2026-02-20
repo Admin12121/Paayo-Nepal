@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, FormEvent } from "react";
-import Link from "next/link";
+import Link from "@/components/ui/animated-link";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Mail, Lock, KeyRound, Fingerprint } from "lucide-react";
 import Button from "@/components/ui/button";

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import Link from "@/components/ui/animated-link";
 import { Plus, Edit, Trash2, MapPin, GripVertical } from "lucide-react";
 import {
   closestCenter,
@@ -34,6 +34,7 @@ import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import Pagination from "@/components/ui/Pagination";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { Badge } from "@/components/ui/badge";
+import { NumberTicker } from "@/components/ui/number-ticker";
 import {
   Select,
   SelectContent,
@@ -132,7 +133,10 @@ function DraggableRegionRow({
         </Badge>
       </TableCell>
       <TableCell className="text-right tabular-nums">
-        {(region.attraction_rank || 0).toLocaleString()}
+        <NumberTicker
+          value={region.attraction_rank || 0}
+          className="tracking-normal text-current dark:text-current"
+        />
       </TableCell>
       <TableCell className="text-slate-600">
         {new Date(region.created_at).toLocaleDateString()}

@@ -32,7 +32,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import Image from "next/image";
-import Link from "next/link";
+import Link from "@/components/ui/animated-link";
 import {
   type Hotel as HotelType,
   type CreateHotelInput,
@@ -57,6 +57,7 @@ import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import Pagination from "@/components/ui/Pagination";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Modal from "@/components/ui/Modal";
+import { NumberTicker } from "@/components/ui/number-ticker";
 import {
   Table,
   TableBody,
@@ -231,7 +232,10 @@ function DraggableHotelRow({
         </Button>
       </TableCell>
       <TableCell className="whitespace-nowrap text-right tabular-nums text-slate-600">
-        {hotel.view_count.toLocaleString()}
+        <NumberTicker
+          value={hotel.view_count ?? 0}
+          className="tracking-normal text-current dark:text-current"
+        />
       </TableCell>
       <TableCell className="whitespace-nowrap text-slate-600">
         {new Date(hotel.created_at).toLocaleDateString()}

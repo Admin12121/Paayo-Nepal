@@ -1315,10 +1315,12 @@ export interface HeroSlide {
   content_type: string;
   content_id: string | null;
   custom_title: string | null;
-  custom_subtitle: string | null;
+  custom_description: string | null;
+  custom_subtitle?: string | null;
   custom_image: string | null;
   custom_link: string | null;
-  display_order: number;
+  sort_order: number;
+  display_order?: number;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -1326,7 +1328,8 @@ export interface HeroSlide {
 
 export interface ResolvedHeroSlide extends HeroSlide {
   title: string;
-  subtitle: string | null;
+  description: string | null;
+  subtitle?: string | null;
   image: string | null;
   link: string | null;
 }

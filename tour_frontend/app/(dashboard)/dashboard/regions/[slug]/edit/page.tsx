@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
+import Link from "@/components/ui/animated-link";
 import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
 import {

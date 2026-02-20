@@ -146,6 +146,7 @@ impl AttractionService {
     ) -> Result<Post, ApiError> {
         let id = Uuid::new_v4().to_string();
         let slug = generate_slug(title);
+        let content_json = content.map(|html| serde_json::Value::String(html.to_string()));
 
         sqlx::query(
             r#"
@@ -156,7 +157,7 @@ impl AttractionService {
             )
             VALUES (
                 $1, 'explore', $2, $3, $4, $5,
-                $6::jsonb, $7, $8, $9, 'draft',
+                $6, $7, $8, $9, 'draft',
                 0, 0, NOW(), NOW()
             )
             "#,
@@ -166,7 +167,7 @@ impl AttractionService {
         .bind(title)
         .bind(&slug)
         .bind(short_description)
-        .bind(content)
+        .bind(&content_json)
         .bind(cover_image)
         .bind(region_id)
         .bind(is_featured)
@@ -185,13 +186,17 @@ impl AttractionService {
             .get_by_id(id)
             .await?
             .ok_or_else(|| ApiError::NotFound("Attraction not found".to_string()))?;
+        let content_json = input
+            .content
+            .as_ref()
+            .map(|html| serde_json::Value::String(html.clone()));
 
         sqlx::query(
             r#"
             UPDATE posts SET
                 title = COALESCE($1, title),
                 short_description = COALESCE($2, short_description),
-                content = COALESCE($3::jsonb, content),
+                content = COALESCE($3, content),
                 cover_image = COALESCE($4, cover_image),
                 region_id = COALESCE($5, region_id),
                 is_featured = COALESCE($6, is_featured),
@@ -201,7 +206,7 @@ impl AttractionService {
         )
         .bind(&input.title)
         .bind(&input.short_description)
-        .bind(&input.content)
+        .bind(&content_json)
         .bind(&input.cover_image)
         .bind(&input.region_id)
         .bind(input.is_featured)

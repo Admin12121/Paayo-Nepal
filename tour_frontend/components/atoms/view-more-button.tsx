@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils";
-import Link from "next/link";
+import Link from "@/components/ui/animated-link";
+import FlipText from "@/components/ui/flip-text";
 
 interface ViewMoreButtonProps {
   className?: string;
@@ -15,9 +16,12 @@ export function ViewMoreButton({
   return (
     <div className={cn("mt-5 flex justify-end", className)}>
       <Link href={href} className="group inline-flex items-center gap-2">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#008CFF]">
+        <FlipText
+          as="span"
+          className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#008CFF]"
+        >
           {label}
-        </span>
+        </FlipText>
         <div className="flex h-5 w-5 items-center justify-center rounded-full border border-[#008CFF] text-[#008CFF] transition-colors group-hover:bg-[#008CFF] group-hover:text-white">
           <svg
             width="12"

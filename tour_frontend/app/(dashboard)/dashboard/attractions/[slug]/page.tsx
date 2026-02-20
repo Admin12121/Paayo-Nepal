@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
+import Link from "@/components/ui/animated-link";
 import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -21,6 +21,14 @@ import {
   useListRegionsQuery,
   useUpdateAttractionMutation,
 } from "@/lib/store";
+import {
+  contentLinksApi,
+  photoFeaturesApi,
+  postsApi,
+  type ContentLink,
+  type ContentLinkTargetType,
+  videosApi,
+} from "@/lib/api-client";
 import Button from "@/components/ui/button";
 import Checkbox from "@/components/ui/checkbox";
 import Input from "@/components/ui/input";
@@ -28,6 +36,7 @@ import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import NotionEditorField from "@/components/editor/NotionEditorField";
 import { Separator } from "@/components/ui/separator";
 import Textarea from "@/components/ui/Textarea";
+import { NumberTicker } from "@/components/ui/number-ticker";
 import { toast } from "@/lib/utils/toast";
 
 interface AttractionFormData {
@@ -77,6 +86,20 @@ export default function DashboardAttractionDetailPage() {
   const [activeAction, setActiveAction] = useState<"save" | "publish" | null>(
     null,
   );
+  const [contentLinks, setContentLinks] = useState<ContentLink[]>([]);
+  const [linkTargetType, setLinkTargetType] =
+    useState<ContentLinkTargetType>("post");
+  const [linkTargetId, setLinkTargetId] = useState("");
+  const [savingLink, setSavingLink] = useState(false);
+  const [postsOptions, setPostsOptions] = useState<
+    { id: string; title: string }[]
+  >([]);
+  const [photosOptions, setPhotosOptions] = useState<
+    { id: string; title: string }[]
+  >([]);
+  const [videosOptions, setVideosOptions] = useState<
+    { id: string; title: string }[]
+  >([]);
 
   const coverInputRef = useRef<HTMLInputElement>(null);
   const titleRef = useRef<HTMLTextAreaElement>(null);
@@ -121,6 +144,47 @@ export default function DashboardAttractionDetailPage() {
     });
     setInitializedAttractionId(attraction.id);
   }, [attraction, initializedAttractionId]);
+
+  const loadContentLinks = useCallback(async (sourceId: string) => {
+    try {
+      const links = await contentLinksApi.listForSource("post", sourceId);
+      setContentLinks(links);
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to load connected content");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!attraction?.id) return;
+    void loadContentLinks(attraction.id);
+  }, [attraction?.id, loadContentLinks]);
+
+  useEffect(() => {
+    const loadOptions = async () => {
+      try {
+        const [postsRes, photosRes, videosRes] = await Promise.all([
+          postsApi.list({ limit: 100, status: "published" }),
+          photoFeaturesApi.list({ limit: 100, status: "published" }),
+          videosApi.list({ limit: 100, status: "published" }),
+        ]);
+
+        setPostsOptions(
+          postsRes.data.map((item) => ({ id: item.id, title: item.title })),
+        );
+        setPhotosOptions(
+          photosRes.data.map((item) => ({ id: item.id, title: item.title })),
+        );
+        setVideosOptions(
+          videosRes.data.map((item) => ({ id: item.id, title: item.title })),
+        );
+      } catch (error) {
+        console.error(error);
+      }
+    };
+
+    void loadOptions();
+  }, []);
 
   const stats = useMemo(() => {
     if (!attraction) {
@@ -277,6 +341,110 @@ export default function DashboardAttractionDetailPage() {
       router.refresh();
     } catch {
       toast.error("Failed to delete attraction");
+    }
+  };
+
+  const getTargetOptions = () => {
+    if (linkTargetType === "photo") return photosOptions;
+    if (linkTargetType === "video") return videosOptions;
+    return postsOptions.filter((item) => item.id !== attraction?.id);
+  };
+
+  const getLinkLabel = (link: ContentLink) => {
+    const pool =
+      link.target_type === "photo"
+        ? photosOptions
+        : link.target_type === "video"
+          ? videosOptions
+          : postsOptions;
+
+    return (
+      pool.find((item) => item.id === link.target_id)?.title || link.target_id
+    );
+  };
+
+  const handleAddContentLink = async () => {
+    if (!attraction?.id) return;
+    if (!linkTargetId) {
+      toast.error("Select an item to link");
+      return;
+    }
+    if (
+      contentLinks.some(
+        (link) =>
+          link.target_type === linkTargetType && link.target_id === linkTargetId,
+      )
+    ) {
+      toast.error("This content is already linked");
+      return;
+    }
+
+    try {
+      setSavingLink(true);
+      await contentLinksApi.create({
+        source_type: "post",
+        source_id: attraction.id,
+        target_type: linkTargetType,
+        target_id: linkTargetId,
+        display_order: contentLinks.length,
+      });
+      await loadContentLinks(attraction.id);
+      setLinkTargetId("");
+      toast.success("Connected content added");
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to add connected content");
+    } finally {
+      setSavingLink(false);
+    }
+  };
+
+  const handleMoveContentLink = async (
+    index: number,
+    direction: -1 | 1,
+  ) => {
+    if (!attraction?.id) return;
+    const nextIndex = index + direction;
+    if (nextIndex < 0 || nextIndex >= contentLinks.length) return;
+
+    const reordered = [...contentLinks];
+    const [moved] = reordered.splice(index, 1);
+    reordered.splice(nextIndex, 0, moved);
+
+    try {
+      setSavingLink(true);
+      await contentLinksApi.setLinks(
+        "post",
+        attraction.id,
+        reordered.map((link, orderIndex) => ({
+          target_type: link.target_type,
+          target_id: link.target_id,
+          display_order: orderIndex,
+        })),
+      );
+      await loadContentLinks(attraction.id);
+      toast.success("Connected content order updated");
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to reorder connected content");
+    } finally {
+      setSavingLink(false);
+    }
+  };
+
+  const handleRemoveContentLink = async (linkId: string) => {
+    if (!attraction?.id) return;
+
+    try {
+      setSavingLink(true);
+      await contentLinksApi.remove(linkId);
+      await loadContentLinks(attraction.id);
+      toast.success("Connected content removed");
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to remove connected content");
+    } finally {
+      setSavingLink(false);
     }
   };
 
@@ -487,7 +655,7 @@ export default function DashboardAttractionDetailPage() {
               onChange={autoResizeTitle}
               onKeyDown={handleTitleKeyDown}
               placeholder="Untitled"
-              className="mb-2 min-h-0 w-full resize-none overflow-hidden border-0 bg-transparent px-0 py-0 text-[2.5rem] font-bold leading-tight text-gray-900 placeholder-gray-200 shadow-none focus-visible:ring-0"
+              className="mb-2 text-5xl! min-h-0 w-full resize-none overflow-hidden border-0 bg-transparent px-0 py-0 text-[2.5rem] font-bold leading-tight text-gray-900 placeholder-gray-200 shadow-none focus-visible:ring-0"
               rows={1}
               style={{ minHeight: "3.5rem" }}
             />
@@ -606,17 +774,123 @@ export default function DashboardAttractionDetailPage() {
 
               <Separator className="my-4 bg-gray-200/80" />
 
+              <div className="mb-5">
+                <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+                  Connected Content
+                </label>
+                <div className="space-y-2 rounded-lg border border-gray-200 bg-white p-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <select
+                      value={linkTargetType}
+                      onChange={(e) => {
+                        setLinkTargetType(
+                          e.target.value as ContentLinkTargetType,
+                        );
+                        setLinkTargetId("");
+                      }}
+                      className="h-9 w-full rounded-lg border border-gray-200 bg-white px-2 text-[12px] text-gray-700"
+                    >
+                      <option value="post">Post</option>
+                      <option value="photo">Photo</option>
+                      <option value="video">Video</option>
+                    </select>
+                    <select
+                      value={linkTargetId}
+                      onChange={(e) => setLinkTargetId(e.target.value)}
+                      className="h-9 w-full rounded-lg border border-gray-200 bg-white px-2 text-[12px] text-gray-700"
+                    >
+                      <option value="">Select item...</option>
+                      {getTargetOptions().map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.title}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={handleAddContentLink}
+                    disabled={savingLink}
+                    className="h-8 w-full text-xs"
+                  >
+                    Add Link
+                  </Button>
+
+                  <div className="space-y-1">
+                    {contentLinks.length === 0 ? (
+                      <p className="text-[11px] text-gray-400">
+                        No linked content yet.
+                      </p>
+                    ) : (
+                      contentLinks.map((link, index) => (
+                        <div
+                          key={link.id}
+                          className="flex items-center justify-between rounded border border-gray-100 px-2 py-1.5"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-[11px] font-medium text-gray-700">
+                              {getLinkLabel(link)}
+                            </p>
+                            <p className="text-[10px] uppercase tracking-wide text-gray-400">
+                              {link.target_type}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              disabled={savingLink || index === 0}
+                              onClick={() => handleMoveContentLink(index, -1)}
+                              className="text-[11px] text-gray-500 hover:text-gray-700 disabled:opacity-30"
+                            >
+                              Up
+                            </button>
+                            <button
+                              type="button"
+                              disabled={
+                                savingLink || index === contentLinks.length - 1
+                              }
+                              onClick={() => handleMoveContentLink(index, 1)}
+                              className="text-[11px] text-gray-500 hover:text-gray-700 disabled:opacity-30"
+                            >
+                              Down
+                            </button>
+                            <button
+                              type="button"
+                              disabled={savingLink}
+                              onClick={() => handleRemoveContentLink(link.id)}
+                              className="text-[11px] text-red-500 hover:text-red-600 disabled:opacity-30"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <Separator className="my-4 bg-gray-200/80" />
+
               <div className="mb-5 grid grid-cols-2 gap-2 text-xs text-slate-600">
                 <div className="rounded-md bg-slate-100 p-2">
                   <p className="mb-1 text-slate-500">Views</p>
                   <p className="text-sm font-semibold text-slate-800">
-                    {stats.views.toLocaleString()}
+                    <NumberTicker
+                      value={stats.views ?? 0}
+                      className="tracking-normal text-current dark:text-current"
+                    />
                   </p>
                 </div>
                 <div className="rounded-md bg-slate-100 p-2">
                   <p className="mb-1 text-slate-500">Likes</p>
                   <p className="text-sm font-semibold text-slate-800">
-                    {stats.likes.toLocaleString()}
+                    <NumberTicker
+                      value={stats.likes ?? 0}
+                      className="tracking-normal text-current dark:text-current"
+                    />
                   </p>
                 </div>
               </div>

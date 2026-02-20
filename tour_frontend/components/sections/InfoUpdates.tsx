@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/ui/animated-link";
 import { Globe, Mail, MapPin, Phone } from "lucide-react";
 import { ViewMoreButton } from "@/components/atoms/view-more-button";
 import { hotelsApi, type Hotel, type HotelBranch } from "@/lib/api-client";

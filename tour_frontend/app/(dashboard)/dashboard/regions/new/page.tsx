@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import Link from "next/link";
+import Link from "@/components/ui/animated-link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ImagePlus, Save, Send, Sparkles, X } from "lucide-react";

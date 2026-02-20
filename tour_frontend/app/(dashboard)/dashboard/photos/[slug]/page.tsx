@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
+import Link from "@/components/ui/animated-link";
 import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -35,6 +35,7 @@ import Input from "@/components/ui/input";
 import Textarea from "@/components/ui/Textarea";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { Badge } from "@/components/ui/badge";
+import { NumberTicker } from "@/components/ui/number-ticker";
 import { toast } from "@/lib/utils/toast";
 
 const EMPTY_FORM: CreatePhotoFeatureInput = {
@@ -467,7 +468,10 @@ export default function DashboardPhotoDetailPage() {
               <div className="rounded-md bg-slate-50 p-2">
                 <p className="mb-1 text-slate-500">Views</p>
                 <p className="text-sm font-semibold text-slate-800">
-                  {photo.view_count.toLocaleString()}
+                  <NumberTicker
+                    value={photo.view_count ?? 0}
+                    className="tracking-normal text-current dark:text-current"
+                  />
                 </p>
               </div>
               <div className="rounded-md bg-slate-50 p-2">
@@ -479,7 +483,7 @@ export default function DashboardPhotoDetailPage() {
             </div>
 
             <Link
-              href={`/photos/${photo.slug}`}
+              href={`/photos?search=${encodeURIComponent(photo.title)}`}
               className="inline-flex text-xs text-blue-600 hover:underline"
             >
               View public page
