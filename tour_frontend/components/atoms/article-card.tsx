@@ -1,10 +1,14 @@
 import React from "react";
 import Link from "next/link";
+import { CalendarDays, Eye } from "lucide-react";
+import { normalizeMediaUrl } from "@/lib/media-url";
 
 interface ArticleCardProps {
   image: string;
   title: string;
   description: string;
+  date?: string;
+  views?: number;
   href?: string;
 }
 
@@ -12,30 +16,55 @@ export function ArticleCard({
   image,
   title,
   description,
+  date = "",
+  views = 0,
   href = "#",
 }: ArticleCardProps) {
+  const normalizedImage = normalizeMediaUrl(image);
+
+  const formattedViews =
+    views >= 1_000_000
+      ? `${(views / 1_000_000).toFixed(1)}M`
+      : views >= 1_000
+        ? `${(views / 1_000).toFixed(1)}K`
+        : views.toString();
+
   return (
     <Link href={href} className="block group">
       <div className="overflow-hidden rounded-xl border border-[#E8EDF5] bg-white p-3 shadow-[0_6px_16px_rgba(16,33,58,0.08)] transition-shadow hover:shadow-[0_10px_24px_rgba(16,33,58,0.14)]">
         <div className="flex gap-3">
-          <div className="h-[96px] w-[128px] flex-shrink-0 overflow-hidden rounded-lg md:h-[104px] md:w-[146px]">
-            <img
-              src={image}
-              alt={title}
-              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-            />
+          <div className="h-64 w-64 flex-shrink-0 overflow-hidden rounded-lg">
+            {normalizedImage ? (
+              <img
+                src={normalizedImage}
+                alt={title}
+                className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+              />
+            ) : (
+              <div className="h-full w-full bg-gradient-to-br from-[#E9EEF7] to-[#CBD8EE]" />
+            )}
           </div>
           <div className="flex flex-1 flex-col justify-between py-1">
             <div>
-              <h3 className="mb-1.5 line-clamp-2 text-sm font-semibold leading-snug text-[#1A2B49] md:text-base">
+              <h3 className="mb-1.5 line-clamp-2 text-xl font-semibold leading-snug text-[#1A2B49]">
                 {title}
               </h3>
-              <p className="line-clamp-2 text-xs leading-relaxed text-[#66758F] md:text-sm">
+            <div className="flex items-center gap-4 text-[11px] text-[#7A8AA5]">
+              <span className="inline-flex items-center gap-1">
+                <CalendarDays className="h-3.5 w-3.5" />
+                <span>{date}</span>
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <Eye className="h-3.5 w-3.5" />
+                <span>{formattedViews}</span>
+              </span>
+            </div>
+              <p className="line-clamp-2 text-base leading-relaxed text-[#66758F] md:text-sm">
                 {description}
               </p>
             </div>
             <span className="mt-2 inline-flex items-center gap-1 self-end text-[11px] font-semibold uppercase tracking-[0.08em] text-[#008CFF]">
-              View All
+              Read More
               <svg
                 className="h-3.5 w-3.5"
                 fill="none"

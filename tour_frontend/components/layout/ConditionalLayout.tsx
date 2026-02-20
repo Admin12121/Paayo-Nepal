@@ -26,7 +26,7 @@ export function ConditionalLayout({ children }: { children: React.ReactNode }) {
   return (
     <StoreProvider>
       <Header />
-      <main className="pt-16">{children}</main>
+      <main className="pt-20">{children}</main>
       <Footer />
       <Toaster position="top-right" richColors closeButton />
     </StoreProvider>

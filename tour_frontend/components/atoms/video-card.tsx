@@ -1,6 +1,7 @@
 import React from "react";
 import Link from "next/link";
 import { Eye, Play } from "lucide-react";
+import { normalizeMediaUrl } from "@/lib/media-url";
 
 interface VideoCardProps {
   thumbnail: string;
@@ -21,6 +22,8 @@ export function VideoCard({
   date = "Jul 15, 2025",
   href = "#",
 }: VideoCardProps) {
+  const normalizedThumbnail = normalizeMediaUrl(thumbnail);
+
   const formatViews = (count: number) => {
     if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
     if (count >= 1_000) return `${(count / 1_000).toFixed(0)}K`;
@@ -31,9 +34,9 @@ export function VideoCard({
     <Link href={href} className="block">
       <div className="group space-y-2.5">
         <div className="relative aspect-video overflow-hidden rounded-xl bg-gray-200">
-          {thumbnail ? (
+          {normalizedThumbnail ? (
             <img
-              src={thumbnail}
+              src={normalizedThumbnail}
               alt={title}
               className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
             />

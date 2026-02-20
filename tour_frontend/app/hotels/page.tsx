@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Search, MapPin, Star, Eye, IndianRupee } from "lucide-react";
 import { hotelsApi, Hotel } from "@/lib/api-client";
 import Link from "next/link";
+import { normalizeMediaUrl } from "@/lib/media-url";
 
 function Breadcrumbs({ items }: { items: { label: string; href?: string }[] }) {
   return (
@@ -41,6 +42,8 @@ function HotelCardSkeleton() {
 }
 
 function HotelCard({ hotel }: { hotel: Hotel }) {
+  const normalizedCoverImage = normalizeMediaUrl(hotel.cover_image);
+
   const getPriceLabel = (range: string | null) => {
     switch (range) {
       case "budget":
@@ -72,9 +75,9 @@ function HotelCard({ hotel }: { hotel: Hotel }) {
     <Link href={`/hotels/${hotel.slug}`}>
       <div className="bg-white rounded-2xl overflow-hidden hover:shadow-xl transition-shadow cursor-pointer border border-gray-100 group h-full flex flex-col">
         <div className="relative aspect-[4/3] bg-gray-200 overflow-hidden">
-          {hotel.cover_image ? (
+          {normalizedCoverImage ? (
             <img
-              src={hotel.cover_image}
+              src={normalizedCoverImage}
               alt={hotel.name}
               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
             />

@@ -46,25 +46,25 @@ impl PostService {
 
         if let Some(t) = post_type {
             param_idx += 1;
-            where_clauses.push(format!("type = ${}", param_idx));
+            where_clauses.push(format!("type = ${}::post_type", param_idx));
             bind_values.push(t.to_string());
         }
 
         if let Some(a) = author_id {
             param_idx += 1;
-            where_clauses.push(format!("author_id = ${}", param_idx));
+            where_clauses.push(format!("author_id::text = ${}", param_idx));
             bind_values.push(a.to_string());
         }
 
         if let Some(r) = region_id {
             param_idx += 1;
-            where_clauses.push(format!("region_id = ${}", param_idx));
+            where_clauses.push(format!("region_id::text = ${}", param_idx));
             bind_values.push(r.to_string());
         }
 
         if let Some(f) = is_featured {
             param_idx += 1;
-            where_clauses.push(format!("is_featured = ${}", param_idx));
+            where_clauses.push(format!("is_featured = ${}::boolean", param_idx));
             bind_values.push(f.to_string());
         }
 

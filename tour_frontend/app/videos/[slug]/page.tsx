@@ -320,11 +320,6 @@ export default function VideoDetailPage() {
                   {video.platform.charAt(0).toUpperCase() +
                     video.platform.slice(1)}
                 </a>
-                <ShareButtons
-                  title={video.title}
-                  description={video.description || undefined}
-                  compact
-                />
               </div>
             </div>
 

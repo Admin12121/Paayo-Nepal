@@ -47,13 +47,13 @@ impl AttractionService {
 
         if let Some(rid) = region_id {
             param_idx += 1;
-            where_clauses.push(format!("region_id = ${}", param_idx));
+            where_clauses.push(format!("region_id::text = ${}", param_idx));
             bind_values.push(rid.to_string());
         }
 
         if let Some(f) = is_featured {
             param_idx += 1;
-            where_clauses.push(format!("is_featured = ${}", param_idx));
+            where_clauses.push(format!("is_featured = ${}::boolean", param_idx));
             bind_values.push(f.to_string());
         }
 

@@ -1,13 +1,14 @@
 import React from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { normalizeMediaUrl } from "@/lib/media-url";
 
 interface ImageCardProps {
   src: string;
   alt: string;
   title: string;
   href?: string;
-  variant?: "overlay" | "white-bottom";
+  variant?: "overlay" | "white-bottom" | "bottom";
   className?: string;
   imageClassName?: string;
 }
@@ -21,25 +22,53 @@ export function ImageCard({
   className,
   imageClassName,
 }: ImageCardProps) {
+  const normalizedSrc = normalizeMediaUrl(src);
+
   if (variant === "white-bottom") {
     return (
       <Link
         href={href}
         className={cn(
-          "block overflow-hidden rounded-xl border border-[#E7ECF4] bg-white shadow-[0_6px_16px_rgba(16,33,58,0.08)] transition-all duration-300 hover:shadow-[0_10px_22px_rgba(16,33,58,0.14)]",
+          "group block overflow-hidden rounded-xl border border-[#E7ECF4] bg-white shadow-[0_6px_16px_rgba(16,33,58,0.08)] transition-all duration-300 hover:shadow-[0_10px_22px_rgba(16,33,58,0.14)]",
           className,
         )}
       >
-        <div className="overflow-hidden aspect-[4/3]">
+        {normalizedSrc ? (
           <img
-            src={src}
+            src={normalizedSrc}
             alt={alt}
-            className={cn(
-              "h-full w-full object-cover transition-transform duration-500 group-hover:scale-105",
-              imageClassName,
-            )}
+            className={cn("h-full w-full object-cover", imageClassName)}
           />
+        ) : (
+          <div className="h-full w-full bg-gradient-to-br from-[#E9EEF7] to-[#CBD8EE]" />
+        )}
+       
+        <div className="px-3 py-2.5">
+          <h3 className="line-clamp-2 text-sm font-semibold leading-tight text-[#1A2B49] md:text-base">
+            {title}
+          </h3>
         </div>
+      </Link>
+    );
+  } else if (variant === "bottom") {
+    return (
+      <Link
+        href={href}
+        className={cn(
+          "group block transition-all duration-300 hover:shadow-[0_10px_22px_rgba(16,33,58,0.14)]",
+          className,
+        )}
+      >
+        {normalizedSrc ? (
+          <img
+            src={normalizedSrc}
+            alt={alt}
+            className={cn("h-full w-full object-cover", imageClassName)}
+          />
+        ) : (
+          <div className="h-full w-full bg-gradient-to-br from-[#E9EEF7] to-[#CBD8EE]" />
+        )}
+
         <div className="px-3 py-2.5">
           <h3 className="line-clamp-2 text-sm font-semibold leading-tight text-[#1A2B49] md:text-base">
             {title}
@@ -53,18 +82,20 @@ export function ImageCard({
     <Link
       href={href}
       className={cn(
-        "group relative block cursor-pointer overflow-hidden rounded-xl",
+        "group relative block aspect-[4/3] cursor-pointer overflow-hidden rounded-xl",
         className,
       )}
     >
-      <img
-        src={src}
-        alt={alt}
-        className={cn(
-          "h-full w-full object-cover transition-transform duration-500 group-hover:scale-105",
-          imageClassName,
-        )}
-      />
+      {normalizedSrc ? (
+        <img
+          src={normalizedSrc}
+          alt={alt}
+          className={cn("h-full w-full object-cover", imageClassName)}
+        />
+      ) : (
+        <div className="h-full w-full bg-gradient-to-br from-[#12274A] via-[#2D4F7A] to-[#577EAF]" />
+      )}
+
       <div
         className="absolute inset-0 pointer-events-none"
         style={{

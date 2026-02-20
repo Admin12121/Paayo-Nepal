@@ -18,9 +18,8 @@ import { hotelsApi, Hotel, HotelBranch } from "@/lib/api-client";
 import Link from "next/link";
 import Image from "next/image";
 import { useViewTracker } from "@/lib/hooks/use-view-tracker";
-import { CommentSection } from "@/components/ui/CommentSection";
 import { ShareButtons } from "@/components/ui/ShareButtons";
-import { ViewTracker } from "@/components/ui/ViewTracker";
+import { normalizeMediaUrl } from "@/lib/media-url";
 
 function Breadcrumbs({ items }: { items: { label: string; href?: string }[] }) {
   return (
@@ -45,6 +44,8 @@ function Breadcrumbs({ items }: { items: { label: string; href?: string }[] }) {
 }
 
 function RelatedHotelCard({ hotel }: { hotel: Hotel }) {
+  const normalizedCoverImage = normalizeMediaUrl(hotel.cover_image);
+
   const getPriceSymbol = (range: string | null) => {
     switch (range) {
       case "budget":
@@ -62,9 +63,9 @@ function RelatedHotelCard({ hotel }: { hotel: Hotel }) {
     <Link href={`/hotels/${hotel.slug}`}>
       <div className="group cursor-pointer">
         <div className="rounded-[10px] overflow-hidden aspect-[4/3] mb-2 relative bg-gray-200">
-          {hotel.cover_image ? (
+          {normalizedCoverImage ? (
             <img
-              src={hotel.cover_image}
+              src={normalizedCoverImage}
               alt={hotel.name}
               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
             />
@@ -263,7 +264,10 @@ export default function HotelDetailPage() {
   const galleryImages: string[] =
     hotel.gallery && Array.isArray(hotel.gallery)
       ? (hotel.gallery as string[])
+          .map((img) => normalizeMediaUrl(img))
+          .filter((img): img is string => Boolean(img))
       : [];
+  const normalizedCoverImage = normalizeMediaUrl(hotel.cover_image);
 
   return (
     <div className="bg-[#F8F9FA] min-h-screen pt-20">
@@ -350,13 +354,14 @@ export default function HotelDetailPage() {
             </div>
 
             {/* Cover Image */}
-            {hotel.cover_image && (
+            {normalizedCoverImage && (
               <div className="rounded-2xl overflow-hidden mb-6 relative h-[400px] md:h-[500px] shadow-lg">
                 <Image
-                  src={hotel.cover_image}
+                  src={normalizedCoverImage}
                   alt={hotel.name}
                   fill
                   className="object-cover"
+                  unoptimized
                   priority
                 />
               </div>
@@ -375,7 +380,7 @@ export default function HotelDetailPage() {
                       className="aspect-[4/3] rounded-xl overflow-hidden bg-gray-100"
                     >
                       <img
-                        src={typeof img === "string" ? img : ""}
+                        src={img}
                         alt={`${hotel.name} gallery ${index + 1}`}
                         className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
                       />
@@ -465,10 +470,6 @@ export default function HotelDetailPage() {
               />
             </div>
 
-            {/* Comments Section */}
-            <div className="mt-6">
-              <CommentSection targetType="hotel" targetId={hotel.id} />
-            </div>
           </div>
 
           {/* Sidebar */}

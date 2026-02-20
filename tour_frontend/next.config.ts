@@ -11,6 +11,12 @@ const nextConfig: NextConfig = {
 
   // Image optimization configuration
   images: {
+    localPatterns: [
+      {
+        // Allow all local assets from /public (e.g. /logo.webp) and rewritten uploads.
+        pathname: "/**",
+      },
+    ],
     remotePatterns: [
       {
         protocol: "https",
@@ -89,7 +95,7 @@ const nextConfig: NextConfig = {
   },
 
   // -------------------------------------------------------------------------
-  // Rewrites — Development Only
+  // Rewrites
   //
   // In production, nginx handles all routing:
   //   /api/auth/*     → Next.js (BetterAuth)
@@ -98,15 +104,18 @@ const nextConfig: NextConfig = {
   //   /uploads/*      → Rust backend (static files)
   //   /*              → Next.js (SSR pages)
   //
-  // In development (no nginx), we need rewrites so that:
+  // We always keep /uploads rewrite active for Next Image optimization.
+  // Without it, `/_next/image?url=/uploads/...` can fail with 400 when Next.js
+  // is accessed directly (or from a different host than nginx/backend).
+  //
+  // In development (no nginx), we also need /api rewrite so that:
   //   - /api/* requests from the browser reach the Rust backend
   //     (except /api/auth/* which stays in Next.js for BetterAuth)
   //   - /uploads/* requests reach the Rust backend for static files
   //
-  // The DOCKER_ENV variable is set in docker-compose.yml. When running
-  // with Docker + nginx, rewrites are unnecessary (nginx handles routing).
-  // When running locally without Docker, these rewrites forward requests
-  // to the local Rust backend.
+  // The DOCKER_ENV variable is set in docker-compose.yml. In Docker mode we
+  // avoid /api rewrite to prevent auth route proxy conflicts, but /uploads
+  // rewrite remains enabled so image optimization stays reliable.
   //
   // Note: /api/auth/* is handled by Next.js App Router routes
   // (app/api/auth/[...all]/route.ts, app/api/auth/sync-session/route.ts,
@@ -122,26 +131,31 @@ const nextConfig: NextConfig = {
     // In Docker dev/prod, nginx is always the source of truth for routing.
     // Rewriting `/api/*` inside Next in that mode can hijack `/api/auth/*`
     // flows and cause incorrect upstream behavior.
-    if (
-      process.env.DISABLE_DEV_API_REWRITES === "true" ||
-      process.env.DOCKER_ENV === "true"
-    ) {
-      return [];
-    }
-
-    // Local development: rewrite /api/* and /uploads/* to the Rust backend
+    // Resolve backend origin for rewrites.
     const backendBase =
       process.env.BACKEND_URL ||
       (process.env.INTERNAL_API_URL
         ? process.env.INTERNAL_API_URL.replace(/\/api\/?$/, "")
         : "http://localhost:8080");
 
-    return [
+    const rewrites = [
       // Static uploads → Rust backend
       {
         source: "/uploads/:path*",
         destination: `${backendBase}/uploads/:path*`,
       },
+    ];
+
+    // In Docker mode (or explicit opt-out), keep only uploads rewrite.
+    // This protects /api/auth/* routing while still fixing image loads.
+    if (
+      process.env.DISABLE_DEV_API_REWRITES === "true" ||
+      process.env.DOCKER_ENV === "true"
+    ) {
+      return rewrites;
+    }
+
+    rewrites.push(
       // API requests → Rust backend (except /api/auth/* which is handled
       // by Next.js App Router routes — those match before rewrites).
       //
@@ -151,7 +165,9 @@ const nextConfig: NextConfig = {
         source: "/api/:path*",
         destination: `${backendBase}/api/:path*`,
       },
-    ];
+    );
+
+    return rewrites;
   },
 };
 

@@ -1,19 +1,50 @@
 import { SectionHeading } from "@/components/atoms/section-heading";
 import { ImageCard } from "@/components/atoms/image-card";
 import { ViewMoreButton } from "@/components/atoms/view-more-button";
-import { PhotoFeaturesSkeleton } from "@/components/ui/Skeleton";
-import { mediaApi } from "@/lib/api-client";
+import { photoFeaturesApi, type PhotoFeature } from "@/lib/api-client";
+
+function pickFirstImage(photo: PhotoFeature): string | null {
+  if (photo.cover_image_url) return photo.cover_image_url;
+  if (!photo.images || photo.images.length === 0) return null;
+
+  const sorted = [...photo.images].sort(
+    (a, b) => a.display_order - b.display_order,
+  );
+  return sorted[0]?.image_url ?? null;
+}
+
+async function resolveCoverImage(photo: PhotoFeature): Promise<string | null> {
+  const imageFromPayload = pickFirstImage(photo);
+  if (imageFromPayload) return imageFromPayload;
+
+  try {
+    const images = await photoFeaturesApi.listImages(photo.id);
+    if (!images || images.length === 0) return null;
+    const sorted = [...images].sort((a, b) => a.display_order - b.display_order);
+    return sorted[0]?.image_url ?? null;
+  } catch {
+    return null;
+  }
+}
 
 export async function PhotoFeaturesSection() {
-  let photos;
+  let photos: Array<PhotoFeature & { coverImage: string | null }> = [];
   try {
-    const res = await mediaApi.gallery({ limit: 5 });
-    photos = res.data;
+    const res = await photoFeaturesApi.list({ limit: 5, status: "published" });
+    const photoFeatures = res.data;
+
+    const withCover = await Promise.all(
+      photoFeatures.map(async (photo) => ({
+        ...photo,
+        coverImage: await resolveCoverImage(photo),
+      })),
+    );
+    photos = withCover.filter((photo) => Boolean(photo.coverImage));
   } catch {
-    return <PhotoFeaturesSkeleton />;
+    return null;
   }
 
-  if (!photos || photos.length === 0) return <PhotoFeaturesSkeleton />;
+  if (!photos || photos.length === 0) return null;
 
   const lead = photos[0];
   const sideItems = photos.slice(1, 5);
@@ -27,27 +58,22 @@ export async function PhotoFeaturesSection() {
           {lead ? (
             <ImageCard
               key={lead.id}
-              src={
-                lead.url || (lead.filename ? `/uploads/${lead.filename}` : "")
-              }
-              alt={lead.alt || lead.original_name}
-              title={lead.caption || lead.original_name}
-              href="/photos"
-              className="h-[210px] md:col-span-6 md:h-[320px]"
+              src={lead.coverImage || ""}
+              alt={lead.title}
+              title={lead.title}
+              href={`/photos/${lead.slug}`}
+              className="h-[512px] md:col-span-6 md:h-[512px]"
             />
           ) : null}
           <div className="grid grid-cols-2 gap-3 md:col-span-6">
             {sideItems.map((photo) => (
               <ImageCard
                 key={photo.id}
-                src={
-                  photo.url ||
-                  (photo.filename ? `/uploads/${photo.filename}` : "")
-                }
-                alt={photo.alt || photo.original_name}
-                title={photo.caption || photo.original_name}
-                href="/photos"
-                className="h-[100px] md:h-[153px]"
+                src={photo.coverImage || ""}
+                alt={photo.title}
+                title={photo.title}
+                href={`/photos/${photo.slug}`}
+                className="h-[250px] md:h-[250px]"
               />
             ))}
           </div>

@@ -42,7 +42,7 @@ impl PhotoFeatureService {
 
         if let Some(r) = region_id {
             param_idx += 1;
-            where_clauses.push(format!("pf.region_id = ${}", param_idx));
+            where_clauses.push(format!("pf.region_id::text = ${}", param_idx));
             bind_values.push(r.to_string());
         }
 

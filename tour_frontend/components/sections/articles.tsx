@@ -1,22 +1,20 @@
 import { SectionHeading } from "@/components/atoms/section-heading";
 import { ArticleCard } from "@/components/atoms/article-card";
 import { ViewMoreButton } from "@/components/atoms/view-more-button";
-import { ArticlesSkeleton } from "@/components/ui/Skeleton";
 import { postsApi } from "@/lib/api-client";
 
 export async function ArticlesSection() {
-  let articles;
+  let articles: Awaited<ReturnType<typeof postsApi.list>>["data"] = [];
   try {
-    const res = await postsApi.list({ limit: 4, status: "published" });
-    articles = res.data;
+    const res = await postsApi.list({
+      limit: 4,
+      status: "published",
+      type: "article",
+    });
+    console.log("Fetched articles:", res);
+    articles = res.data.filter((item) => item.post_type === "article");
   } catch {
-    // Show skeleton on error
-    return <ArticlesSkeleton />;
-  }
-
-  // Show skeleton when no articles
-  if (!articles || articles.length === 0) {
-    return <ArticlesSkeleton />;
+    articles = [];
   }
 
   return (
@@ -25,15 +23,27 @@ export async function ArticlesSection() {
         <SectionHeading title="ARTICLES" />
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {articles.map((article) => (
-            <ArticleCard
-              key={article.id}
-              image={article.cover_image || ""}
-              title={article.title}
-              description={article.short_description || ""}
-              href={`/blogs/${article.slug}`}
-            />
-          ))}
+          {!articles || articles.length === 0 ? (
+            <h1>NO content available</h1>
+          ) : (
+            articles.map((article) => (
+              <ArticleCard
+                key={article.id}
+                image={article.cover_image || ""}
+                title={article.title}
+                description={article.short_description || ""}
+                date={new Date(
+                  article.published_at || article.created_at,
+                ).toLocaleDateString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })}
+                views={article.views ?? article.view_count ?? 0}
+                href={`/blogs/${article.slug}`}
+              />
+            ))
+          )}
         </div>
 
         <ViewMoreButton href="/articles" />

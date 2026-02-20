@@ -4,13 +4,54 @@ import { useState, useEffect } from "react";
 import { useParams, notFound } from "next/navigation";
 import { Eye } from "lucide-react";
 import { postsApi, Post, contentLinksApi } from "@/lib/api-client";
-import Image from "next/image";
 import Link from "next/link";
 import { useViewTracker } from "@/lib/hooks/use-view-tracker";
 import { LikeButton } from "@/components/ui/LikeButton";
 import { CommentSection } from "@/components/ui/CommentSection";
 import { ShareButtons } from "@/components/ui/ShareButtons";
 import { prepareContent } from "@/lib/sanitize";
+import { normalizeMediaUrl } from "@/lib/media-url";
+
+function getPublisherName(post: Post): string {
+  const enrichedPost = post as Post & {
+    author_name?: string | null;
+    author?: { name?: string | null; email?: string | null } | null;
+  };
+
+  const directAuthorName = enrichedPost.author_name?.trim();
+  if (directAuthorName) return directAuthorName;
+
+  const nestedAuthorName = enrichedPost.author?.name?.trim();
+  if (nestedAuthorName) return nestedAuthorName;
+
+  const content =
+    post.content && typeof post.content === "object" && !Array.isArray(post.content)
+      ? (post.content as Record<string, unknown>)
+      : null;
+
+  if (content) {
+    const contentAuthorCandidates = [
+      content.author_name,
+      content.authorName,
+      content.publisher_name,
+      content.publisherName,
+      content.writer_name,
+      content.writerName,
+    ];
+
+    for (const candidate of contentAuthorCandidates) {
+      if (typeof candidate === "string" && candidate.trim()) {
+        return candidate.trim();
+      }
+    }
+  }
+
+  if (post.author_id) {
+    return "Paayo Editor";
+  }
+
+  return "Paayo Editor";
+}
 
 // Breadcrumbs Component
 function Breadcrumbs({ items }: { items: { label: string; href?: string }[] }) {
@@ -37,16 +78,17 @@ function Breadcrumbs({ items }: { items: { label: string; href?: string }[] }) {
 
 // Related Article Card for Sidebar
 function RelatedArticleCard({ article }: { article: Post }) {
+  const coverImage = normalizeMediaUrl(article.cover_image);
+
   return (
     <Link href={`/blogs/${article.slug}`}>
       <div className="group cursor-pointer">
         <div className="rounded-[10px] overflow-hidden aspect-video mb-2 relative">
-          {article.cover_image ? (
-            <Image
-              src={article.cover_image}
+          {coverImage ? (
+            <img
+              src={coverImage}
               alt={article.title}
-              fill
-              className="object-cover group-hover:scale-105 transition-transform duration-300"
+              className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
             />
           ) : (
             <div className="w-full h-full bg-gray-200" />
@@ -156,6 +198,9 @@ export default function BlogDetailPage() {
     notFound();
   }
 
+  const coverImage = normalizeMediaUrl(post.cover_image);
+  const publisherName = getPublisherName(post);
+
   return (
     <div className="bg-[#F8F9FA] min-h-screen pt-20">
       <div className="max-w-[1400px] mx-auto px-6 py-10">
@@ -187,9 +232,7 @@ export default function BlogDetailPage() {
                     })}
                   </span>
                   <span>|</span>
-                  <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold uppercase">
-                    {post.post_type}
-                  </span>
+                  <span className="text-sm">{publisherName}</span>
                 </div>
                 <ShareButtons
                   title={post.title}
@@ -200,14 +243,12 @@ export default function BlogDetailPage() {
             </div>
 
             {/* Featured Image */}
-            {post.cover_image && (
+            {coverImage && (
               <div className="rounded-[12px] overflow-hidden mb-4 relative h-[500px]">
-                <Image
-                  src={post.cover_image}
+                <img
+                  src={coverImage}
                   alt={post.title}
-                  fill
-                  className="object-cover"
-                  priority
+                  className="h-full w-full object-cover"
                 />
               </div>
             )}
@@ -277,7 +318,7 @@ export default function BlogDetailPage() {
           </div>
 
           {/* Sidebar */}
-          <aside className="lg:col-span-1 rounded-xl bg-white p-5 shadow-sm h-fit">
+          <aside className="lg:col-span-1 p-5 h-fit">
             <h3 className="font-display text-lg font-bold text-[#1A2B49] mb-5 uppercase tracking-wide">
               MORE ARTICLES
             </h3>

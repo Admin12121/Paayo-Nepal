@@ -1,7 +1,6 @@
 import { SectionHeading } from "@/components/atoms/section-heading";
 import { ImageCard } from "@/components/atoms/image-card";
 import { ViewMoreButton } from "@/components/atoms/view-more-button";
-import { ActivitiesSkeleton } from "@/components/ui/Skeleton";
 import { activitiesApi } from "@/lib/api-client";
 
 export async function ActivitiesSection() {
@@ -10,17 +9,17 @@ export async function ActivitiesSection() {
     const res = await activitiesApi.list({ limit: 8 });
     activities = res.data;
   } catch {
-    return <ActivitiesSkeleton />;
+    return null;
   }
 
-  if (!activities || activities.length === 0) return <ActivitiesSkeleton />;
+  if (!activities || activities.length === 0) return null;
 
   return (
     <section className="py-10 px-6 bg-white">
       <div className="max-w-[1400px] mx-auto">
         <SectionHeading title="ACTIVITIES" />
 
-        <div className="grid grid-cols-2 gap-5 lg:grid-cols-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-5">
           {activities.slice(0, 8).map((activity) => (
             <ImageCard
               key={activity.id}

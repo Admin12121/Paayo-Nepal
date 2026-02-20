@@ -1,4 +1,5 @@
 import { getCsrfToken } from "@/lib/csrf";
+import { normalizeMediaUrlsDeep } from "@/lib/media-url";
 
 // ---------------------------------------------------------------------------
 // Shared API client
@@ -129,7 +130,8 @@ class ApiClient {
     }
 
     try {
-      return JSON.parse(raw) as T;
+      const parsed = JSON.parse(raw) as T;
+      return normalizeMediaUrlsDeep(parsed);
     } catch {
       return raw as T;
     }

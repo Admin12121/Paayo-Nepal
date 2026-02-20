@@ -4,6 +4,8 @@ import {
   Search,
   Menu,
   X,
+  ChevronDown,
+  Flag,
   LayoutDashboard,
   LogIn,
   UserPlus,
@@ -14,7 +16,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
-import { UserAvatar } from "./UserAvatar";
 import { useSession, signOut } from "@/lib/auth-client";
 
 export function Header() {
@@ -25,24 +26,31 @@ export function Header() {
 
   const navLinks = [
     { id: "home", label: "Home", href: "/" },
-    { id: "about", label: "About us", href: "/about" },
-    { id: "regions", label: "Regions", href: "/regions" },
-    { id: "attractions", label: "Attractions", href: "/attractions" },
+    {
+      id: "recent-posts",
+      label: "Recent Posts",
+      href: "/articles",
+      chevron: true,
+    },
+    { id: "explore", label: "Explore", href: "/regions", chevron: true },
+    { id: "events", label: "Events and Festivals", href: "/events" },
     { id: "activities", label: "Activities", href: "/activities" },
-    { id: "events", label: "Events", href: "/events" },
-    { id: "blog", label: "Blog", href: "/articles" },
   ];
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 h-16 bg-white border-b border-gray-200">
-      <div className="px-6 h-full flex items-center justify-between max-w-[1400px] mx-auto">
-        {/* Logo */}
-        <div className="flex items-center gap-3">
-          <Image src="/logo.webp" alt="Paayo Nepal" width={40} height={40} />
-        </div>
+    <header className="fixed inset-x-0 top-0 z-50 border-b border-[#E3E7EE] bg-white">
+      <div className="mx-auto flex h-20 w-full max-w-[1820px] items-center justify-between px-4 md:px-8 lg:px-12">
+        <Link href="/" className="flex items-center gap-3">
+          <Image
+            src="/logo.webp"
+            alt="Paayo Nepal"
+            width={88}
+            height={48}
+            priority
+          />
+        </Link>
 
-        {/* Desktop Navigation */}
-        <nav className="hidden lg:flex items-center gap-10">
+        <nav className="hidden items-center gap-10 lg:flex">
           {navLinks.map((link) => {
             const isActive =
               link.href === "/"
@@ -52,22 +60,24 @@ export function Header() {
               <Link
                 key={link.id}
                 href={link.href}
-                className={`text-base font-medium transition-colors ${
+                className={`inline-flex items-center gap-2 text-base font-medium tracking-[0.005em] transition-colors ${
                   isActive
-                    ? "text-[#0D9488]"
-                    : "text-[#4B5563] hover:text-[#0D9488]"
+                    ? "text-[#0078C0]"
+                    : "text-[#2F4B75] hover:text-[#0078C0]"
                 }`}
               >
-                {link.label}
+                <span className={isActive ? "font-semibold" : ""}>
+                  {link.label}
+                </span>
+                {link.chevron ? <ChevronDown className="h-4 w-4" /> : null}
               </Link>
             );
           })}
         </nav>
 
-        {/* Search + User Avatar */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
           <form
-            className="hidden md:flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-full hover:border-[#0D9488] transition-colors bg-white"
+            className="hidden items-center gap-2 rounded-full border border-[#CCD3DF] bg-white px-5 py-2.5 transition-colors hover:border-[#0078C0] sm:flex"
             onSubmit={(e) => {
               e.preventDefault();
               const input = e.currentTarget.querySelector("input");
@@ -77,35 +87,38 @@ export function Header() {
               }
             }}
           >
-            <Search className="w-4 h-4 text-[#0D9488]" />
+            <Search className="h-4 w-4 text-[#7B8CA8]" />
             <input
               type="text"
               placeholder="Search"
-              className="outline-none bg-transparent text-sm w-24 placeholder:text-gray-400"
+              className="w-32 bg-transparent text-sm text-[#2E4A75] outline-none placeholder:text-[#95A3BA] md:w-44 lg:w-52"
               aria-label="Search"
             />
           </form>
-          <div className="hidden lg:block">
-            <UserAvatar />
-          </div>
+
+          <button
+            type="button"
+            aria-label="Nepal Locale"
+            className="hidden items-center justify-center text-xl lg:inline-flex"
+          >
+            <Flag className="h-4 w-4 text-[#DC2626]" />
+          </button>
         </div>
 
-        {/* Mobile menu button */}
         <button
-          className="lg:hidden p-2"
+          className="rounded-lg p-2 lg:hidden"
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
         >
           {mobileMenuOpen ? (
-            <X className="w-6 h-6 text-[#1E1E1E]" />
+            <X className="h-6 w-6 text-[#1E1E1E]" />
           ) : (
-            <Menu className="w-6 h-6 text-[#1E1E1E]" />
+            <Menu className="h-6 w-6 text-[#1E1E1E]" />
           )}
         </button>
       </div>
 
-      {/* Mobile menu */}
       {mobileMenuOpen && (
-        <div className="lg:hidden absolute top-16 left-0 right-0 bg-white border-b border-gray-200 shadow-lg">
+        <div className="absolute left-0 right-0 top-20 border-b border-gray-200 bg-white shadow-lg lg:hidden">
           <nav className="flex flex-col p-4">
             {navLinks.map((link) => {
               const isActive =
@@ -117,9 +130,9 @@ export function Header() {
                   key={link.id}
                   href={link.href}
                   onClick={() => setMobileMenuOpen(false)}
-                  className={`py-3 px-4 text-sm font-medium transition-colors rounded-lg ${
+                  className={`rounded-lg px-4 py-3 text-sm font-medium transition-colors ${
                     isActive
-                      ? "text-[#0D9488] bg-teal-50"
+                      ? "bg-blue-50 text-[#0078C0]"
                       : "text-[#4B5563] hover:bg-gray-50"
                   }`}
                 >
@@ -127,9 +140,9 @@ export function Header() {
                 </Link>
               );
             })}
-            {/* Mobile search */}
+
             <form
-              className="flex items-center gap-2 px-4 py-3 mt-2 border border-gray-300 rounded-full bg-white"
+              className="mt-2 flex items-center gap-2 rounded-full border border-gray-300 bg-white px-4 py-3"
               onSubmit={(e) => {
                 e.preventDefault();
                 const input = e.currentTarget.querySelector("input");
@@ -140,33 +153,32 @@ export function Header() {
                 }
               }}
             >
-              <Search className="w-4 h-4 text-[#0D9488]" />
+              <Search className="h-4 w-4 text-[#0078C0]" />
               <input
                 type="text"
                 placeholder="Search"
-                className="outline-none bg-transparent text-sm flex-1 placeholder:text-gray-400"
+                className="flex-1 bg-transparent text-sm outline-none placeholder:text-gray-400"
                 aria-label="Search"
               />
             </form>
 
-            {/* Mobile auth links */}
             <div className="mt-2 border-t border-gray-200 pt-2">
               {session?.user ? (
                 <>
                   <Link
                     href="/dashboard"
                     onClick={() => setMobileMenuOpen(false)}
-                    className="flex items-center gap-2 py-3 px-4 text-sm font-medium text-[#4B5563] hover:bg-gray-50 rounded-lg"
+                    className="flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium text-[#4B5563] hover:bg-gray-50"
                   >
-                    <LayoutDashboard className="w-4 h-4" />
+                    <LayoutDashboard className="h-4 w-4" />
                     Dashboard
                   </Link>
                   <Link
                     href="/dashboard/settings"
                     onClick={() => setMobileMenuOpen(false)}
-                    className="flex items-center gap-2 py-3 px-4 text-sm font-medium text-[#4B5563] hover:bg-gray-50 rounded-lg"
+                    className="flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium text-[#4B5563] hover:bg-gray-50"
                   >
-                    <Settings className="w-4 h-4" />
+                    <Settings className="h-4 w-4" />
                     Settings
                   </Link>
                   <button
@@ -175,9 +187,9 @@ export function Header() {
                       await signOut();
                       router.push("/");
                     }}
-                    className="flex items-center gap-2 w-full py-3 px-4 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg"
+                    className="flex w-full items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium text-red-600 hover:bg-red-50"
                   >
-                    <LogOut className="w-4 h-4" />
+                    <LogOut className="h-4 w-4" />
                     Sign Out
                   </button>
                 </>
@@ -186,17 +198,17 @@ export function Header() {
                   <Link
                     href="/login"
                     onClick={() => setMobileMenuOpen(false)}
-                    className="flex items-center gap-2 py-3 px-4 text-sm font-medium text-[#0D9488] hover:bg-teal-50 rounded-lg"
+                    className="flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium text-[#0078C0] hover:bg-blue-50"
                   >
-                    <LogIn className="w-4 h-4" />
+                    <LogIn className="h-4 w-4" />
                     Sign In
                   </Link>
                   <Link
                     href="/register"
                     onClick={() => setMobileMenuOpen(false)}
-                    className="flex items-center gap-2 py-3 px-4 text-sm font-medium text-[#0D9488] hover:bg-teal-50 rounded-lg"
+                    className="flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium text-[#0078C0] hover:bg-blue-50"
                   >
-                    <UserPlus className="w-4 h-4" />
+                    <UserPlus className="h-4 w-4" />
                     Register
                   </Link>
                 </>

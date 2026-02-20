@@ -1,7 +1,6 @@
 import { SectionHeading } from "@/components/atoms/section-heading";
 import { EventCard } from "@/components/atoms/event-card";
 import { ViewMoreButton } from "@/components/atoms/view-more-button";
-import { EventsSkeleton } from "@/components/ui/Skeleton";
 import { eventsApi } from "@/lib/api-client";
 
 export async function EventsSection() {
@@ -10,10 +9,10 @@ export async function EventsSection() {
     const res = await eventsApi.upcoming({ limit: 4 });
     events = res.data;
   } catch {
-    return <EventsSkeleton />;
+    return null;
   }
 
-  if (!events || events.length === 0) return <EventsSkeleton />;
+  if (!events || events.length === 0) return null;
 
   return (
     <section className="py-10 px-6 bg-white">

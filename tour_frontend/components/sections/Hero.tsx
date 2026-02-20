@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { HeroSkeleton } from "@/components/ui/Skeleton";
+import { normalizeMediaUrl } from "@/lib/media-url";
 
 export interface HeroSlideItem {
   id: string;
@@ -32,12 +33,16 @@ export function HeroSection({ slides, loading }: HeroSectionProps) {
     return () => clearInterval(timer);
   }, [slides.length]);
 
-  // Show skeleton while loading or when no slides
-  if (loading || !slides || slides.length === 0) {
+  if (loading) {
     return <HeroSkeleton />;
   }
 
+  if (!slides || slides.length === 0) {
+    return null;
+  }
+
   const slide = slides[currentSlide];
+  const normalizedCoverImage = normalizeMediaUrl(slide.cover_image);
 
   const nextSlide = () => {
     setCurrentSlide((prev) => (prev + 1) % slides.length);
@@ -66,8 +71,8 @@ export function HeroSection({ slides, loading }: HeroSectionProps) {
       <div
         className="absolute inset-0 bg-cover bg-center transition-all duration-700"
         style={{
-          backgroundImage: slide.cover_image
-            ? `url(${slide.cover_image})`
+          backgroundImage: normalizedCoverImage
+            ? `url(${normalizedCoverImage})`
             : undefined,
         }}
       >

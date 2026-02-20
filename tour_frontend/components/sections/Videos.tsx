@@ -1,7 +1,6 @@
 import { SectionHeading } from "@/components/atoms/section-heading";
 import { VideoCard } from "@/components/atoms/video-card";
 import { ViewMoreButton } from "@/components/atoms/view-more-button";
-import { VideosSkeleton } from "@/components/ui/Skeleton";
 import { videosApi } from "@/lib/api-client";
 
 export async function VideosSection() {
@@ -10,10 +9,10 @@ export async function VideosSection() {
     const res = await videosApi.list({ limit: 6 });
     videos = res.data;
   } catch {
-    return <VideosSkeleton />;
+    return null;
   }
 
-  if (!videos || videos.length === 0) return <VideosSkeleton />;
+  if (!videos || videos.length === 0) return null;
 
   return (
     <section className="py-10 px-6 bg-white">
