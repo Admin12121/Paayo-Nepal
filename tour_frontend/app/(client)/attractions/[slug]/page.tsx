@@ -679,20 +679,38 @@ export default async function AttractionDetailPage({
                     <Link
                       key={item.id}
                       href={`/attractions/${item.slug}`}
-                      className="overflow-hidden"
+                      className="group block"
                     >
-                      {normalizeMediaUrl(item.cover_image) ? (
-                        <img
-                          src={normalizeMediaUrl(item.cover_image) || ""}
-                          alt={item.title}
-                          className="h-full w-full object-cover rounded-xl"
-                        />
-                      ) : (
-                        <div className="h-full w-full bg-gradient-to-br from-[#E9EEF7] to-[#CBD8EE]" />
-                      )}
-                      <p className="line-clamp-1 p-2 text-xs font-medium text-[#1A2B49]">
+                      <div className="rounded-[10px] overflow-hidden aspect-video mb-2 relative">
+                        {normalizeMediaUrl(item.cover_image) ? (
+                          <img
+                            src={normalizeMediaUrl(item.cover_image) || ""}
+                            alt={item.title}
+                            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-sm text-[#6B7280]">
+                            No image
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between text-xs text-[#868383] mb-1">
+                        <span>
+                          {new Date(
+                            item.published_at || item.created_at,
+                          ).toLocaleDateString()}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Eye className="w-3 h-3" />
+                          <NumberTicker
+                            value={item.views || 0}
+                            className="tracking-normal text-current dark:text-current"
+                          />
+                        </span>
+                      </div>
+                      <h4 className="font-display text-sm font-semibold text-[#F29C72] leading-snug uppercase tracking-wide line-clamp-2">
                         {item.title}
-                      </p>
+                      </h4>
                     </Link>
                   ))}
                 </div>
@@ -713,22 +731,38 @@ export default async function AttractionDetailPage({
                     <Link
                       key={item.id}
                       href={`/attractions/${item.slug}`}
-                      className="overflow-hidden"
+                      className="group block"
                     >
-                      {normalizeMediaUrl(item.cover_image) ? (
-                        <img
-                          src={normalizeMediaUrl(item.cover_image) || ""}
-                          alt={item.title}
-                          className="h-full w-full object-cover rounded-xl"
-                        />
-                      ) : (
-                        <div className="h-full w-full bg-gradient-to-br from-[#E9EEF7] to-[#CBD8EE]" />
-                      )}
-                      <div className="px-3 py-2.5">
-                        <h3 className="line-clamp-2 text-sm font-semibold">
-                          {item.title}
-                        </h3>
+                      <div className="rounded-[10px] overflow-hidden aspect-video mb-2 relative">
+                        {normalizeMediaUrl(item.cover_image) ? (
+                          <img
+                            src={normalizeMediaUrl(item.cover_image) || ""}
+                            alt={item.title}
+                            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-sm text-[#6B7280]">
+                            No image
+                          </div>
+                        )}
                       </div>
+                      <div className="flex items-center justify-between text-xs text-[#868383] mb-1">
+                        <span>
+                          {new Date(
+                            item.published_at || item.created_at,
+                          ).toLocaleDateString()}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Eye className="w-3 h-3" />
+                          <NumberTicker
+                            value={item.views || 0}
+                            className="tracking-normal text-current dark:text-current"
+                          />
+                        </span>
+                      </div>
+                      <h4 className="font-display text-sm font-semibold text-[#F29C72] leading-snug uppercase tracking-wide line-clamp-2">
+                        {item.title}
+                      </h4>
                     </Link>
                   ))}
                 </div>

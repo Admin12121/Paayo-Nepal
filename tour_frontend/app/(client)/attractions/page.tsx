@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { MapPin, Star, Clock, IndianRupee, Filter } from "lucide-react";
+import { MapPin, Star, Clock, IndianRupee } from "lucide-react";
 import {
   attractionsApi,
   Attraction,
@@ -271,37 +271,23 @@ export default function AttractionsPage() {
         )}
 
         {/* Region Filter */}
-        <div className="bg-white rounded-2xl p-6 mb-8 shadow-sm">
-          <div className="flex items-center gap-2 flex-wrap">
-            <Filter className="w-5 h-5 text-gray-600" />
+        <div className="mb-8 p-4 sm:p-5">
+          <div className="flex w-full flex-row flex-wrap items-end justify-between gap-3">
             <span className="text-sm font-medium text-gray-700">
-              Filter by region:
+              Filter by region
             </span>
-            <div className="flex gap-2 flex-wrap">
-              <button
-                onClick={() => handleRegionChange("all")}
-                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                  selectedRegion === "all"
-                    ? "bg-[#0078C0] text-white"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
-              >
-                All Regions
-              </button>
+            <select
+              value={selectedRegion}
+              onChange={(e) => handleRegionChange(e.target.value)}
+              className="h-9 min-w-[180px] rounded-md border border-input bg-transparent px-3 text-sm"
+            >
+              <option value="all">All Regions</option>
               {regions.map((region) => (
-                <button
-                  key={region.id}
-                  onClick={() => handleRegionChange(region.id)}
-                  className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                    selectedRegion === region.id
-                      ? "bg-[#0078C0] text-white"
-                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                  }`}
-                >
+                <option key={region.id} value={region.id}>
                   {region.name}
-                </button>
+                </option>
               ))}
-            </div>
+            </select>
           </div>
         </div>
 

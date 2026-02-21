@@ -94,6 +94,8 @@ export default function ActivitiesPage() {
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [searchInput, setSearchInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const limit = 12;
 
@@ -122,6 +124,21 @@ export default function ActivitiesPage() {
     }
   };
 
+  const handleSearch = () => {
+    setSearchQuery(searchInput);
+    setCurrentPage(1);
+  };
+
+  const filteredActivities = searchQuery
+    ? activities.filter(
+        (activity) =>
+          activity.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          activity.short_description
+            ?.toLowerCase()
+            .includes(searchQuery.toLowerCase()),
+      )
+    : activities;
+
   return (
     <div className="bg-[#F8F9FA] min-h-screen pt-20">
       <div className="max-w-[1400px] mx-auto px-6 py-10">
@@ -141,6 +158,25 @@ export default function ActivitiesPage() {
           </p>
         </div>
 
+        <div className="mb-8 p-4 sm:p-5">
+          <div className="flex w-full flex-row flex-wrap items-end justify-between gap-3">
+            <input
+              type="text"
+              placeholder="Search activities..."
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+              className="h-9 w-full max-w-[300px] rounded-md border border-input bg-transparent px-3 text-sm outline-none placeholder:text-gray-400"
+            />
+            <button
+              onClick={handleSearch}
+              className="h-9 rounded-md border border-input bg-transparent px-4 text-sm font-medium transition-colors hover:border-[#0078C0] hover:text-[#0078C0]"
+            >
+              Search
+            </button>
+          </div>
+        </div>
+
         {/* Activities Grid */}
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -148,20 +184,22 @@ export default function ActivitiesPage() {
               <ActivityCardSkeleton key={i} />
             ))}
           </div>
-        ) : activities.length === 0 ? (
+        ) : filteredActivities.length === 0 ? (
           <div className="bg-white rounded-2xl p-12 text-center">
             <div className="text-gray-400 text-6xl mb-4">🎯</div>
             <h3 className="text-xl font-semibold text-gray-900 mb-2">
               No Activities Found
             </h3>
             <p className="text-gray-600">
-              No activities available at the moment
+              {searchQuery
+                ? `No activities match your search "${searchQuery}"`
+                : "No activities available at the moment"}
             </p>
           </div>
         ) : (
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {activities.map((activity) => (
+              {filteredActivities.map((activity) => (
                 <ActivityCard key={activity.id} activity={activity} />
               ))}
             </div>

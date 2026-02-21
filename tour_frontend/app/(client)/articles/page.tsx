@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Search, Filter } from "lucide-react";
 import { postsApi, Post } from "@/lib/api-client";
 import Link from "@/components/ui/animated-link";
 import { normalizeMediaUrl } from "@/lib/media-url";
@@ -30,7 +29,6 @@ function Breadcrumbs({ items }: { items: { label: string; href?: string }[] }) {
     </nav>
   );
 }
-
 // Article Card Skeleton
 function ArticleCardSkeleton() {
   return (
@@ -342,49 +340,31 @@ export default function ArticlesPage() {
         </div>
 
         {/* Filters and Search */}
-        <div className="bg-white rounded-2xl p-6 mb-8 shadow-sm">
-          <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
-            {/* Type Filter */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <Filter className="w-5 h-5 text-gray-600" />
-              <span className="text-sm font-medium text-gray-700">
-                Filter by:
-              </span>
-              <div className="flex gap-2">
-                {["all", "article", "event", "activity", "explore"].map(
-                  (type) => (
-                    <button
-                      key={type}
-                      onClick={() => handleTypeChange(type)}
-                      className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                        selectedType === type
-                          ? "bg-[#0078C0] text-white"
-                          : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                      }`}
-                    >
-                      {type.charAt(0).toUpperCase() + type.slice(1)}
-                    </button>
-                  ),
-                )}
-              </div>
-            </div>
-
-            {/* Search */}
-            <div className="flex items-center gap-2 w-full md:w-auto">
-              <div className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-full hover:border-[#0078C0] transition-colors bg-white flex-1 md:flex-initial">
-                <Search className="w-4 h-4 text-[#0078C0]" />
-                <input
-                  type="text"
-                  placeholder="Search articles..."
-                  value={searchInput}
-                  onChange={(e) => setSearchInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                  className="outline-none bg-transparent text-sm w-full md:w-64 placeholder:text-gray-400"
-                />
-              </div>
+        <div className="mb-8 p-4 sm:p-5">
+          <div className="flex w-full flex-row flex-wrap items-end justify-between gap-3">
+            <input
+              type="text"
+              placeholder="Search articles..."
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+              className="h-9 w-full max-w-[300px] rounded-md border border-input bg-transparent px-3 text-sm outline-none placeholder:text-gray-400"
+            />
+            <div className="flex flex-row flex-wrap gap-3">
+              <select
+                value={selectedType}
+                onChange={(e) => handleTypeChange(e.target.value)}
+                className="h-9 min-w-[150px] rounded-md border border-input bg-transparent px-3 text-sm"
+              >
+                <option value="all">All Types</option>
+                <option value="article">Article</option>
+                <option value="event">Event</option>
+                <option value="activity">Activity</option>
+                <option value="explore">Explore</option>
+              </select>
               <button
                 onClick={handleSearch}
-                className="px-6 py-2 bg-[#0078C0] text-white rounded-full hover:bg-[#0068A0] transition-colors font-medium"
+                className="h-9 rounded-md border border-input bg-transparent px-4 text-sm font-medium transition-colors hover:border-[#0078C0] hover:text-[#0078C0]"
               >
                 Search
               </button>
@@ -451,3 +431,4 @@ export default function ArticlesPage() {
     </div>
   );
 }
+

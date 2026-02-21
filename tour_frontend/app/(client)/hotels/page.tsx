@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Search, MapPin, Star, Eye, IndianRupee } from "lucide-react";
+import { MapPin, Star, Eye } from "lucide-react";
 import { hotelsApi, Hotel } from "@/lib/api-client";
 import Link from "@/components/ui/animated-link";
 import { normalizeMediaUrl } from "@/lib/media-url";
@@ -28,7 +28,6 @@ function Breadcrumbs({ items }: { items: { label: string; href?: string }[] }) {
     </nav>
   );
 }
-
 function HotelCardSkeleton() {
   return (
     <div className="bg-white rounded-2xl overflow-hidden border border-gray-100 animate-pulse">
@@ -324,52 +323,30 @@ export default function HotelsPage() {
         </div>
 
         {/* Filters and Search */}
-        <div className="bg-white rounded-2xl p-6 mb-8 shadow-sm">
-          <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
-            {/* Price Filter */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <IndianRupee className="w-5 h-5 text-gray-600" />
-              <span className="text-sm font-medium text-gray-700">
-                Price range:
-              </span>
-              <div className="flex gap-2">
-                {[
-                  { value: "all", label: "All" },
-                  { value: "budget", label: "Budget (रु)" },
-                  { value: "mid", label: "Mid (रु रु)" },
-                  { value: "luxury", label: "Luxury (रु रु रु)" },
-                ].map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => handlePriceChange(option.value)}
-                    className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                      priceFilter === option.value
-                        ? "bg-[#0078C0] text-white"
-                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Search */}
-            <div className="flex items-center gap-2 w-full md:w-auto">
-              <div className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-full hover:border-[#0078C0] transition-colors bg-white flex-1 md:flex-initial">
-                <Search className="w-4 h-4 text-[#0078C0]" />
-                <input
-                  type="text"
-                  placeholder="Search hotels..."
-                  value={searchInput}
-                  onChange={(e) => setSearchInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                  className="outline-none bg-transparent text-sm w-full md:w-64 placeholder:text-gray-400"
-                />
-              </div>
+        <div className="mb-8 p-4 sm:p-5">
+          <div className="flex w-full flex-row flex-wrap items-end justify-between gap-3">
+            <input
+              type="text"
+              placeholder="Search hotels..."
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+              className="h-9 w-full max-w-[300px] rounded-md border border-input bg-transparent px-3 text-sm outline-none placeholder:text-gray-400"
+            />
+            <div className="flex flex-row flex-wrap gap-3">
+              <select
+                value={priceFilter}
+                onChange={(e) => handlePriceChange(e.target.value)}
+                className="h-9 min-w-[150px] rounded-md border border-input bg-transparent px-3 text-sm"
+              >
+                <option value="all">All Prices</option>
+                <option value="budget">Budget (रु)</option>
+                <option value="mid">Mid (रु रु)</option>
+                <option value="luxury">Luxury (रु रु रु)</option>
+              </select>
               <button
                 onClick={handleSearch}
-                className="px-6 py-2 bg-[#0078C0] text-white rounded-full hover:bg-[#0068A0] transition-colors font-medium"
+                className="h-9 rounded-md border border-input bg-transparent px-4 text-sm font-medium transition-colors hover:border-[#0078C0] hover:text-[#0078C0]"
               >
                 Search
               </button>
@@ -436,3 +413,4 @@ export default function HotelsPage() {
     </div>
   );
 }
+

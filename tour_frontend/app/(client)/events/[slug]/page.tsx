@@ -67,10 +67,11 @@ function RelatedEventCard({ event }: { event: Event }) {
         </div>
         <div className="flex items-center justify-between text-xs text-[#868383] mb-1">
           <span>
-            {event.event_date ? formatDate(event.event_date) : `${new Date(
-              event.published_at || event.created_at,
-            ).toLocaleDateString()}
-`}
+            {event.event_date
+              ? formatDate(event.event_date)
+              : `${new Date(
+                  event.published_at || event.created_at,
+                ).toLocaleDateString()}`}
           </span>
           <span className="flex items-center gap-1">
             <Eye className="w-3 h-3" />
@@ -246,21 +247,27 @@ export default function EventDetailPage() {
 
               {/* Event Details Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-6 border-b border-gray-200">
-                {event.event_date && <div className="flex items-start gap-3">
-                  <Calendar className="w-5 h-5 text-[#0078C0] mt-1 shrink-0" />
-                  <div>
-                    <p className="text-sm text-gray-600 mb-1">Date</p>
-                    <p className="font-semibold text-gray-900">
-                      {event.event_date ? formatDate(event.event_date) : "TBD"}
-                      {event.event_end_date &&
-                        event.event_end_date !== event.event_date && (
-                          <span className="block text-sm font-normal text-gray-600 mt-1">
-                            to {formatDate(event.event_end_date)}
-                          </span>
-                        )}
-                    </p>
+                {event.event_date && (
+                  <div className="flex items-start gap-3">
+                    <Calendar className="w-5 h-5 text-[#0078C0] mt-1 shrink-0" />
+                    <div>
+                      <p className="text-sm text-gray-600 mb-1">Date</p>
+                      <p className="font-semibold text-gray-900">
+                        {event.event_date
+                          ? formatDate(event.event_date)
+                          : `${new Date(
+                              event.published_at || event.created_at,
+                            ).toLocaleDateString()}`}
+                        {event.event_end_date &&
+                          event.event_end_date !== event.event_date && (
+                            <span className="block text-sm font-normal text-gray-600 mt-1">
+                              to {formatDate(event.event_end_date)}
+                            </span>
+                          )}
+                      </p>
+                    </div>
                   </div>
-                </div>}
+                )}
 
                 {event.start_time && (
                   <div className="flex items-start gap-3">
@@ -356,11 +363,16 @@ export default function EventDetailPage() {
               {relatedEvents.length > 0 ? (
                 <div className="space-y-4 overflow-y-auto pr-1">
                   {relatedEvents.slice(0, 10).map((relatedEvent) => (
-                    <RelatedEventCard key={relatedEvent.id} event={relatedEvent} />
+                    <RelatedEventCard
+                      key={relatedEvent.id}
+                      event={relatedEvent}
+                    />
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-[#6B7280]">No related events available.</p>
+                <p className="text-sm text-[#6B7280]">
+                  No related events available.
+                </p>
               )}
               <Link
                 href="/events"

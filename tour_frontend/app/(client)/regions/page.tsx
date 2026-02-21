@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useEffect, useState } from "react";
-import { MapPin, Filter } from "lucide-react";
+import { MapPin } from "lucide-react";
 import { regionsApi, Region } from "@/lib/api-client";
 import Link from "@/components/ui/animated-link";
 import { normalizeMediaUrl } from "@/lib/media-url";
@@ -138,37 +138,23 @@ export default function RegionsPage() {
           </p>
         </div>
 
-        <div className="mb-7 rounded-2xl bg-white p-5 shadow-[0_5px_20px_rgba(14,35,63,0.08)]">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2 text-sm font-medium text-[#47597A]">
-              <Filter className="h-4 w-4" />
+        <div className="mb-7 p-4 sm:p-5">
+          <div className="flex w-full flex-row flex-wrap items-end justify-between gap-3">
+            <div className="text-sm font-medium text-[#47597A]">
               Filter by province
             </div>
-
-            <button
-              onClick={() => handleProvinceChange("all")}
-              className={`rounded-full px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.06em] transition-colors ${
-                selectedProvince === "all"
-                  ? "bg-[#0078C0] text-white"
-                  : "bg-[#ECF1F8] text-[#4E6284] hover:bg-[#DFE7F2]"
-              }`}
+            <select
+              value={selectedProvince}
+              onChange={(e) => handleProvinceChange(e.target.value)}
+              className="h-9 min-w-[180px] rounded-md border border-input bg-transparent px-3 text-sm"
             >
-              All
-            </button>
-
-            {provinces.map((province) => (
-              <button
-                key={province}
-                onClick={() => handleProvinceChange(province)}
-                className={`rounded-full px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.06em] transition-colors ${
-                  selectedProvince === province
-                    ? "bg-[#0078C0] text-white"
-                    : "bg-[#ECF1F8] text-[#4E6284] hover:bg-[#DFE7F2]"
-                }`}
-              >
-                {province}
-              </button>
-            ))}
+              <option value="all">All Provinces</option>
+              {provinces.map((province) => (
+                <option key={province} value={province}>
+                  {province}
+                </option>
+              ))}
+            </select>
           </div>
 
           <p className="mt-3 text-xs text-[#6A7898]">
