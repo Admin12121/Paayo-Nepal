@@ -39,3 +39,14 @@ Override any default at runtime:
 ```bash
 APP_DOMAIN=paayonepal.com ALERT_EMAIL=info@paayonepal.com bash scripts/prod/setup-production.sh
 ```
+
+If you already created the deploy user manually and want to skip user/password
+management in the script:
+
+```bash
+MANAGE_APP_USER=false bash scripts/prod/setup-production.sh
+```
+
+In this mode, the script still hardens SSH and sets:
+- `PermitRootLogin no`
+- `AllowUsers <current shell user>`

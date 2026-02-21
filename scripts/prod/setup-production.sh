@@ -56,9 +56,9 @@ safe_load_env_file "${ENV_FILE}"
 
 # User/domain settings (sensitive vars must be provided via env/.env)
 #
-# APP_USER defaults to the invoking shell user so manual user provisioning
-# works out-of-the-box.
-APP_USER="${APP_USER:-${USER:-clerk}}"
+# Always use the invoking shell user (ignore APP_USER from env/.env).
+# This script must be run as a normal sudo user, not root.
+APP_USER="$(id -un)"
 APP_USER_PASSWORD="${APP_USER_PASSWORD:-}"
 # When true (default), script creates/updates APP_USER and password.
 # Set to "false" to skip user management and only harden SSH for APP_USER.
