@@ -55,8 +55,14 @@ safe_load_env_file() {
 safe_load_env_file "${ENV_FILE}"
 
 # User/domain settings (sensitive vars must be provided via env/.env)
-APP_USER="${APP_USER:-clerk}"
+#
+# APP_USER defaults to the invoking shell user so manual user provisioning
+# works out-of-the-box.
+APP_USER="${APP_USER:-${USER:-clerk}}"
 APP_USER_PASSWORD="${APP_USER_PASSWORD:-}"
+# When true (default), script creates/updates APP_USER and password.
+# Set to "false" to skip user management and only harden SSH for APP_USER.
+MANAGE_APP_USER="${MANAGE_APP_USER:-true}"
 APP_DOMAIN="${APP_DOMAIN:-}"
 ALERT_EMAIL="${ALERT_EMAIL:-}"
 
@@ -117,7 +123,9 @@ require_env_var() {
 }
 
 validate_required_env() {
-  require_env_var "APP_USER_PASSWORD"
+  if [[ "${MANAGE_APP_USER,,}" != "false" ]]; then
+    require_env_var "APP_USER_PASSWORD"
+  fi
   require_env_var "APP_DOMAIN"
   require_env_var "ALERT_EMAIL"
   require_env_var "DATABASE_PASSWORD"
@@ -266,21 +274,26 @@ configure_redis() {
 }
 
 configure_user_and_ssh() {
-  log "Creating/updating '${APP_USER}' user and hardening SSH..."
+  if [[ "${MANAGE_APP_USER,,}" != "false" ]]; then
+    log "Creating/updating '${APP_USER}' user and hardening SSH..."
 
-  if ! id -u "${APP_USER}" >/dev/null 2>&1; then
-    sudo useradd -m -s /bin/bash "${APP_USER}"
-  fi
+    if ! id -u "${APP_USER}" >/dev/null 2>&1; then
+      sudo useradd -m -s /bin/bash "${APP_USER}"
+    fi
 
-  echo "${APP_USER}:${APP_USER_PASSWORD}" | sudo chpasswd
-  sudo usermod -aG sudo,docker "${APP_USER}" || true
+    echo "${APP_USER}:${APP_USER_PASSWORD}" | sudo chpasswd
+    sudo usermod -aG sudo,docker "${APP_USER}" || true
 
-  if [[ -f "${HOME}/.ssh/authorized_keys" ]]; then
-    sudo mkdir -p "/home/${APP_USER}/.ssh"
-    sudo cp "${HOME}/.ssh/authorized_keys" "/home/${APP_USER}/.ssh/authorized_keys"
-    sudo chown -R "${APP_USER}:${APP_USER}" "/home/${APP_USER}/.ssh"
-    sudo chmod 700 "/home/${APP_USER}/.ssh"
-    sudo chmod 600 "/home/${APP_USER}/.ssh/authorized_keys"
+    if [[ -f "${HOME}/.ssh/authorized_keys" ]]; then
+      sudo mkdir -p "/home/${APP_USER}/.ssh"
+      sudo cp "${HOME}/.ssh/authorized_keys" "/home/${APP_USER}/.ssh/authorized_keys"
+      sudo chown -R "${APP_USER}:${APP_USER}" "/home/${APP_USER}/.ssh"
+      sudo chmod 700 "/home/${APP_USER}/.ssh"
+      sudo chmod 600 "/home/${APP_USER}/.ssh/authorized_keys"
+    fi
+  else
+    log "Skipping user creation/update (MANAGE_APP_USER=false). Hardening SSH for existing user '${APP_USER}'..."
+    id -u "${APP_USER}" >/dev/null 2>&1 || die "APP_USER '${APP_USER}' does not exist."
   fi
 
   local sshd="/etc/ssh/sshd_config"
