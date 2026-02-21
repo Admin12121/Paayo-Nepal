@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useId } from "react";
 import {
   MessageCircle,
   User,
@@ -8,6 +8,7 @@ import {
   ChevronDown,
   Clock,
   AlertCircle,
+  CornerDownRight,
 } from "lucide-react";
 import {
   ApiError,
@@ -57,11 +58,26 @@ function getInitials(name: string): string {
     .toUpperCase();
 }
 
-function CommentItem({ comment }: { comment: Comment }) {
+function CommentItem({
+  comment,
+  onReply,
+  isReplying,
+  replyCount,
+  isReply = false,
+}: {
+  comment: Comment;
+  onReply?: () => void;
+  isReplying?: boolean;
+  replyCount?: number;
+  isReply?: boolean;
+}) {
   return (
     <div className="flex gap-3 py-4 first:pt-0 last:pb-0">
-      {/* Avatar */}
-      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#0078C0] to-[#00A3E0] flex items-center justify-center shrink-0">
+      <div
+        className={`rounded-full bg-gradient-to-br from-[#0078C0] to-[#00A3E0] flex items-center justify-center shrink-0 ${
+          isReply ? "w-8 h-8" : "w-10 h-10"
+        }`}
+      >
         <span className="text-white text-xs font-bold">
           {comment.guest_name ? (
             getInitials(comment.guest_name)
@@ -71,7 +87,6 @@ function CommentItem({ comment }: { comment: Comment }) {
         </span>
       </div>
 
-      {/* Content */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1">
           <span className="text-sm font-semibold text-gray-900 truncate">
@@ -85,6 +100,23 @@ function CommentItem({ comment }: { comment: Comment }) {
         <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap break-words">
           {comment.content}
         </p>
+        {!isReply && onReply && (
+          <div className="mt-2 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={onReply}
+              className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 hover:underline"
+            >
+              <CornerDownRight className="w-3.5 h-3.5" />
+              {isReplying ? "Cancel reply" : "Reply"}
+            </button>
+            {typeof replyCount === "number" && replyCount > 0 && (
+              <span className="text-xs text-gray-500">
+                {replyCount} repl{replyCount > 1 ? "ies" : "y"}
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -93,10 +125,19 @@ function CommentItem({ comment }: { comment: Comment }) {
 function CommentForm({
   onSubmit,
   isSubmitting,
+  submitLabel = "Post Comment",
+  helperText = "Your email will not be published.",
 }: {
   onSubmit: (data: CommentFormData) => Promise<void>;
   isSubmitting: boolean;
+  submitLabel?: string;
+  helperText?: string;
 }) {
+  const formId = useId();
+  const nameInputId = `comment-name-${formId}`;
+  const emailInputId = `comment-email-${formId}`;
+  const contentInputId = `comment-content-${formId}`;
+
   const [formData, setFormData] = useState<CommentFormData>({
     guest_name: "",
     guest_email: "",
@@ -141,7 +182,6 @@ function CommentForm({
       content: formData.content.trim(),
     });
 
-    // Keep name and email for convenience, clear comment
     setFormData((prev) => ({ ...prev, content: "" }));
     setErrors({});
   };
@@ -149,16 +189,15 @@ function CommentForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {/* Name */}
         <div>
           <label
-            htmlFor="comment-name"
+            htmlFor={nameInputId}
             className="block text-sm font-medium text-gray-700 mb-1"
           >
             Name <span className="text-red-500">*</span>
           </label>
           <input
-            id="comment-name"
+            id={nameInputId}
             type="text"
             placeholder="Your name"
             value={formData.guest_name}
@@ -182,16 +221,15 @@ function CommentForm({
           )}
         </div>
 
-        {/* Email */}
         <div>
           <label
-            htmlFor="comment-email"
+            htmlFor={emailInputId}
             className="block text-sm font-medium text-gray-700 mb-1"
           >
             Email <span className="text-red-500">*</span>
           </label>
           <input
-            id="comment-email"
+            id={emailInputId}
             type="email"
             placeholder="your@email.com"
             value={formData.guest_email}
@@ -216,17 +254,16 @@ function CommentForm({
         </div>
       </div>
 
-      {/* Comment Content */}
       <div>
         <label
-          htmlFor="comment-content"
+          htmlFor={contentInputId}
           className="block text-sm font-medium text-gray-700 mb-1"
         >
           Comment <span className="text-red-500">*</span>
         </label>
         <div className="relative">
           <textarea
-            id="comment-content"
+            id={contentInputId}
             rows={3}
             placeholder="Write your comment..."
             value={formData.content}
@@ -251,11 +288,8 @@ function CommentForm({
         </div>
       </div>
 
-      {/* Submit */}
       <div className="flex items-center justify-between">
-        <p className="text-xs text-gray-400">
-          Your email will not be published.
-        </p>
+        <p className="text-xs text-gray-400">{helperText}</p>
         <button
           type="submit"
           disabled={isSubmitting}
@@ -282,12 +316,12 @@ function CommentForm({
                   d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
                 />
               </svg>
-              Posting…
+              Posting...
             </>
           ) : (
             <>
               <Send className="w-4 h-4" />
-              Post Comment
+              {submitLabel}
             </>
           )}
         </button>
@@ -298,19 +332,34 @@ function CommentForm({
 
 export function CommentSection({ targetType, targetId }: CommentSectionProps) {
   const [comments, setComments] = useState<Comment[]>([]);
+  const [repliesByParent, setRepliesByParent] = useState<
+    Record<string, Comment[]>
+  >({});
+  const [loadingRepliesByParent, setLoadingRepliesByParent] = useState<
+    Record<string, boolean>
+  >({});
+
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [replySubmittingFor, setReplySubmittingFor] = useState<string | null>(
+    null,
+  );
+  const [activeReplyFor, setActiveReplyFor] = useState<string | null>(null);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [replySubmitSuccessFor, setReplySubmitSuccessFor] = useState<
+    string | null
+  >(null);
   const [error, setError] = useState<string | null>(null);
 
   const fetchComments = useCallback(
     async (pageNum: number, append = false) => {
       if (!targetId?.trim()) {
         setComments([]);
+        setRepliesByParent({});
         setTotal(0);
         setPage(1);
         setTotalPages(1);
@@ -350,7 +399,6 @@ export function CommentSection({ targetType, targetId }: CommentSectionProps) {
             (err instanceof Error &&
               err.message.toLowerCase().includes("not found"));
           if (isNotFound) {
-            // Compatibility fallback: treat missing comments route/content as empty.
             response = {
               data: [],
               total: 0,
@@ -367,13 +415,13 @@ export function CommentSection({ targetType, targetId }: CommentSectionProps) {
           setComments((prev) => [...prev, ...response.data]);
         } else {
           setComments(response.data);
+          setRepliesByParent({});
         }
         setTotal(response.total);
         setPage(response.page);
         setTotalPages(response.total_pages);
       } catch (err) {
         console.error("Failed to fetch comments:", err);
-        // Don't show error for empty comments — that's normal
         if (!append) {
           setComments([]);
           setTotal(0);
@@ -386,8 +434,22 @@ export function CommentSection({ targetType, targetId }: CommentSectionProps) {
     [targetId, targetType],
   );
 
+  const fetchReplies = useCallback(async (parentId: string) => {
+    setLoadingRepliesByParent((prev) => ({ ...prev, [parentId]: true }));
+    try {
+      const replies = await commentsApi.listReplies(parentId);
+      setRepliesByParent((prev) => ({ ...prev, [parentId]: replies }));
+    } catch {
+      setRepliesByParent((prev) => ({ ...prev, [parentId]: [] }));
+    } finally {
+      setLoadingRepliesByParent((prev) => ({ ...prev, [parentId]: false }));
+    }
+  }, []);
+
   useEffect(() => {
     if (!targetId?.trim()) return;
+    setActiveReplyFor(null);
+    setReplySubmitSuccessFor(null);
     fetchComments(1);
   }, [fetchComments, targetId]);
 
@@ -406,11 +468,7 @@ export function CommentSection({ targetType, targetId }: CommentSectionProps) {
       });
 
       setSubmitSuccess(true);
-
-      // Refresh comments from page 1
       await fetchComments(1);
-
-      // Auto-hide success message after 5s
       setTimeout(() => setSubmitSuccess(false), 5000);
     } catch (err: unknown) {
       const message =
@@ -420,6 +478,49 @@ export function CommentSection({ targetType, targetId }: CommentSectionProps) {
       setError(message);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleReplySubmit = async (parentId: string, data: CommentFormData) => {
+    try {
+      setReplySubmittingFor(parentId);
+      setError(null);
+      setReplySubmitSuccessFor(null);
+
+      await commentsApi.create({
+        target_type: targetType,
+        target_id: targetId,
+        parent_id: parentId,
+        guest_name: data.guest_name,
+        guest_email: data.guest_email,
+        content: data.content,
+      });
+
+      await fetchReplies(parentId);
+      setReplySubmitSuccessFor(parentId);
+      setTimeout(() => {
+        setReplySubmitSuccessFor((current) =>
+          current === parentId ? null : current,
+        );
+      }, 5000);
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Failed to post reply. Please try again.";
+      setError(message);
+    } finally {
+      setReplySubmittingFor((current) => (current === parentId ? null : current));
+    }
+  };
+
+  const handleToggleReply = async (commentId: string) => {
+    const nextOpenId = activeReplyFor === commentId ? null : commentId;
+    setActiveReplyFor(nextOpenId);
+    setReplySubmitSuccessFor(null);
+
+    if (nextOpenId && repliesByParent[commentId] === undefined) {
+      await fetchReplies(commentId);
     }
   };
 
@@ -440,18 +541,15 @@ export function CommentSection({ targetType, targetId }: CommentSectionProps) {
       </h3>
       <p className="text-sm text-gray-500 mb-6">Share your thoughts with us</p>
 
-      {/* Comment Form */}
       <div className="mb-8 pb-6 border-b border-gray-100">
         <CommentForm onSubmit={handleSubmit} isSubmitting={isSubmitting} />
 
-        {/* Success message */}
         {submitSuccess && (
           <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
-            ✓ Comment submitted! It may need moderation before appearing.
+            Comment posted successfully.
           </div>
         )}
 
-        {/* Error message */}
         {error && (
           <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0" />
@@ -460,7 +558,6 @@ export function CommentSection({ targetType, targetId }: CommentSectionProps) {
         )}
       </div>
 
-      {/* Comment List */}
       {loading ? (
         <div className="space-y-4">
           {[1, 2, 3].map((i) => (
@@ -477,12 +574,58 @@ export function CommentSection({ targetType, targetId }: CommentSectionProps) {
       ) : comments.length > 0 ? (
         <>
           <div className="divide-y divide-gray-100">
-            {comments.map((comment) => (
-              <CommentItem key={comment.id} comment={comment} />
-            ))}
+            {comments.map((comment) => {
+              const replies = repliesByParent[comment.id] ?? [];
+              const loadingReplies = loadingRepliesByParent[comment.id] ?? false;
+              const isReplying = activeReplyFor === comment.id;
+
+              return (
+                <div key={comment.id} className="py-1">
+                  <CommentItem
+                    comment={comment}
+                    onReply={() => {
+                      void handleToggleReply(comment.id);
+                    }}
+                    isReplying={isReplying}
+                    replyCount={replies.length}
+                  />
+
+                  {loadingReplies && (
+                    <div className="ml-12 text-xs text-gray-500">
+                      Loading replies...
+                    </div>
+                  )}
+
+                  {replies.length > 0 && (
+                    <div className="ml-12 pl-4 border-l border-gray-100 divide-y divide-gray-100">
+                      {replies.map((reply) => (
+                        <CommentItem key={reply.id} comment={reply} isReply />
+                      ))}
+                    </div>
+                  )}
+
+                  {isReplying && (
+                    <div className="ml-12 mt-3 pl-4 border-l border-gray-100">
+                      <div className="rounded-lg border border-gray-200 p-3 bg-gray-50/70">
+                        <CommentForm
+                          onSubmit={(data) => handleReplySubmit(comment.id, data)}
+                          isSubmitting={replySubmittingFor === comment.id}
+                          submitLabel="Post Reply"
+                          helperText=""
+                        />
+                        {replySubmitSuccessFor === comment.id && (
+                          <div className="mt-3 p-2.5 bg-green-50 border border-green-200 rounded-lg text-xs text-green-700">
+                            Reply posted.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
-          {/* Load More */}
           {page < totalPages && (
             <div className="flex justify-center mt-6">
               <button
@@ -511,7 +654,7 @@ export function CommentSection({ targetType, targetId }: CommentSectionProps) {
                         d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
                       />
                     </svg>
-                    Loading…
+                    Loading...
                   </>
                 ) : (
                   <>

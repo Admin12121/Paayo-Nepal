@@ -20,10 +20,35 @@ let redisClient: RedisClientType | null = null;
 let redisReady = false;
 let redisErrorLogged = false;
 
+function normalizeAbsoluteOrigin(
+  value: string | undefined | null,
+): string | undefined {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  try {
+    return new URL(trimmed).origin;
+  } catch {
+    return undefined;
+  }
+}
+
 const appBaseUrl =
-  process.env.NEXT_PUBLIC_APP_URL ||
-  process.env.BETTER_AUTH_URL ||
+  normalizeAbsoluteOrigin(process.env.NEXT_PUBLIC_APP_URL) ||
+  normalizeAbsoluteOrigin(process.env.BETTER_AUTH_URL) ||
   "http://localhost:3000";
+
+const passkeyOrigin = normalizeAbsoluteOrigin(process.env.PASSKEY_ORIGIN);
+
+const passkeyRpId = (() => {
+  if (process.env.PASSKEY_RP_ID?.trim()) return process.env.PASSKEY_RP_ID;
+  if (!passkeyOrigin) return undefined;
+  try {
+    return new URL(passkeyOrigin).hostname;
+  } catch {
+    return undefined;
+  }
+})();
 
 function normalizeTrustedOrigin(
   value: string | undefined | null,
@@ -241,8 +266,8 @@ export const auth = betterAuth({
     }),
     passkey({
       rpName: "Paayo Nepal",
-      rpID: process.env.PASSKEY_RP_ID || "localhost",
-      origin: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+      ...(passkeyRpId ? { rpID: passkeyRpId } : {}),
+      ...(passkeyOrigin ? { origin: passkeyOrigin } : {}),
     }),
   ],
   session: {

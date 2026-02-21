@@ -11,6 +11,23 @@ pub struct HealthResponse {
     redis: String,
 }
 
+#[derive(Serialize)]
+pub struct LiveResponse {
+    status: String,
+    version: String,
+}
+
+/// Lightweight liveness endpoint for container health checks.
+///
+/// Intentionally avoids DB/Redis checks to keep periodic probe logs quiet and
+/// prevent probe traffic from generating SQL trace noise.
+pub async fn live_check() -> Json<LiveResponse> {
+    Json(LiveResponse {
+        status: "ok".to_string(),
+        version: env!("CARGO_PKG_VERSION").to_string(),
+    })
+}
+
 pub async fn health_check(State(state): State<AppState>) -> Json<HealthResponse> {
     // Check database connection
     let db_status = match sqlx::query("SELECT 1").execute(&state.db).await {

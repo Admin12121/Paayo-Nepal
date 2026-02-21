@@ -20,6 +20,7 @@ import {
   generateBreadcrumbJsonLd,
   jsonLdScriptProps,
 } from "@/lib/seo";
+import { getPostPublicPath } from "@/lib/post-routes";
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://paayonepal.com";
 
@@ -127,6 +128,20 @@ function LinkedContentCard({
       </div>
     </Link>
   );
+}
+
+function getPostMetaLabel(post: Post): string {
+  switch ((post.post_type || post.type || "").toLowerCase()) {
+    case "event":
+      return "Event";
+    case "activity":
+      return "Activity";
+    case "explore":
+    case "attraction":
+      return "Attraction";
+    default:
+      return "Article";
+  }
 }
 
 export default async function RegionDetailPage({
@@ -359,16 +374,16 @@ export default async function RegionDetailPage({
             {linkedPosts.length > 0 && (
               <div>
                 <h2 className="font-display text-2xl font-bold text-[#1A2B49] mb-4">
-                  Related Articles
+                  Related Stories
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {linkedPosts.map((item) => (
                     <LinkedContentCard
                       key={item.id}
-                      href={`/blogs/${item.slug}`}
+                      href={getPostPublicPath(item)}
                       title={item.title}
                       image={item.cover_image}
-                      meta="Article"
+                      meta={getPostMetaLabel(item)}
                     />
                   ))}
                 </div>

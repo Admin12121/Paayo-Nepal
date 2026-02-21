@@ -26,6 +26,7 @@ import {
   PaginatedResponse,
   PostRaw,
 } from "@/lib/api-client";
+import { getPostPublicPathByType } from "@/lib/post-routes";
 import { useDashboard } from "@/lib/contexts/DashboardContext";
 import DashboardRefresher from "@/components/dashboard/DashboardRefresher";
 import { Badge } from "@/components/ui/badge";
@@ -976,7 +977,10 @@ export default function DashboardPage() {
                               </Link>
                             </DropdownMenuItem>
                             <DropdownMenuItem asChild>
-                              <Link href={`/blogs/${row.slug}`} target="_blank">
+                              <Link
+                                href={getPostPublicPathByType(row.type, row.slug)}
+                                target="_blank"
+                              >
                                 Open public page
                               </Link>
                             </DropdownMenuItem>

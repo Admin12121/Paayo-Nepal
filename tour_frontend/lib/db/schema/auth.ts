@@ -78,6 +78,9 @@ export const verification = pgTable("verification", {
   value: varchar("value", { length: 255 }).notNull(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
 });
 
 // BetterAuth twoFactor plugin table

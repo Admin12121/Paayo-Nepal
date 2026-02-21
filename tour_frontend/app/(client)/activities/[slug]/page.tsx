@@ -26,6 +26,7 @@ import {
   generateBreadcrumbJsonLd,
   jsonLdScriptProps,
 } from "@/lib/seo";
+import { getPostPublicPath } from "@/lib/post-routes";
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://paayonepal.com";
 
@@ -114,6 +115,44 @@ function resolvePhotoCover(photo: PhotoFeature) {
     return normalizeMediaUrl(photo.images[0]?.image_url);
   }
   return null;
+}
+
+type GalleryPhotoItem = {
+  id: string;
+  title: string;
+  image: string | null;
+};
+
+function buildPhotoGalleryItems(photoFeatures: PhotoFeature[]): GalleryPhotoItem[] {
+  const gallery: GalleryPhotoItem[] = [];
+
+  for (const feature of photoFeatures) {
+    const images = Array.isArray(feature.images) ? feature.images : [];
+
+    if (images.length > 0) {
+      for (let i = 0; i < images.length; i += 1) {
+        const image = normalizeMediaUrl(images[i]?.image_url);
+        if (!image) continue;
+        gallery.push({
+          id: `${feature.id}-${images[i]?.id || i}`,
+          title: feature.title,
+          image,
+        });
+      }
+      continue;
+    }
+
+    const cover = resolvePhotoCover(feature);
+    if (cover) {
+      gallery.push({
+        id: feature.id,
+        title: feature.title,
+        image: cover,
+      });
+    }
+  }
+
+  return gallery;
 }
 
 type RecommendationItem = {
@@ -310,7 +349,7 @@ export default async function ActivityDetailPage({
       recommendations = linkedPosts.map((item) => ({
         id: item.id,
         title: item.title,
-        href: item.post_type === "explore" ? `/attractions/${item.slug}` : `/blogs/${item.slug}`,
+        href: getPostPublicPath(item),
         image: normalizeMediaUrl(item.cover_image),
         subtitle: item.short_description || null,
       }));
@@ -341,15 +380,10 @@ export default async function ActivityDetailPage({
   const publisherName = resolvePublisherName(activity);
   const publishedDate = formatDate(activity.published_at || activity.created_at);
   const overviewHtml = activity.content ? prepareContent(activity.content) : "";
-  const leadPhoto = regionPhotos.length > 0 ? resolvePhotoCover(regionPhotos[0]) : null;
-  const gridPhotos = regionPhotos
-    .slice(1, 10)
-    .map((item) => ({
-      id: item.id,
-      title: item.title,
-      image: resolvePhotoCover(item),
-    }))
-    .filter((item) => item.image);
+  const galleryPhotos = buildPhotoGalleryItems(regionPhotos);
+  const leadPhoto = galleryPhotos[0]?.image || null;
+  const leadPhotoTitle = galleryPhotos[0]?.title || `${activity.title} photo`;
+  const gridPhotos = galleryPhotos.slice(1, 10);
   const leadVideo = regionVideos[0] || null;
   const sideVideos = regionVideos.slice(1, 9);
 
@@ -424,7 +458,7 @@ export default async function ActivityDetailPage({
               </h2>
               {overviewHtml ? (
                 <div
-                  className="prose mt-5 max-w-none leading-relaxed text-[#4B5563]"
+                  className="rich-content mt-5 max-w-none"
                   dangerouslySetInnerHTML={{ __html: overviewHtml }}
                 />
               ) : (
@@ -488,11 +522,11 @@ export default async function ActivityDetailPage({
                 <div className="mt-5 overflow-hidden rounded-lg border border-[#E5E7EB] bg-white">
                   <img
                     src={leadPhoto}
-                    alt={regionPhotos[0]?.title || `${activity.title} photo`}
+                    alt={leadPhotoTitle}
                     className="h-[360px] w-full object-cover"
                   />
                   <div className="p-3 text-sm text-[#1A2B49]">
-                    {(region?.name || "Nepal").trim()} photo feature
+                    {(region?.name || "Nepal").trim()} photo gallery
                   </div>
                 </div>
               ) : (

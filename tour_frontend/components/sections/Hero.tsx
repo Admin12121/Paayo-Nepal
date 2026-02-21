@@ -24,6 +24,14 @@ interface HeroSectionProps {
   loading?: boolean;
 }
 
+function truncateText(value: string | null | undefined, maxLength: number): string {
+  const normalized = (value ?? "").trim();
+  if (!normalized) return "";
+  if (normalized.length <= maxLength) return normalized;
+  if (maxLength <= 3) return normalized.slice(0, maxLength);
+  return `${normalized.slice(0, maxLength - 3).trimEnd()}...`;
+}
+
 export function HeroSection({ slides, loading }: HeroSectionProps) {
   const [currentSlide, setCurrentSlide] = useState(0);
 
@@ -45,6 +53,8 @@ export function HeroSection({ slides, loading }: HeroSectionProps) {
 
   const slide = slides[currentSlide];
   const normalizedCoverImage = normalizeMediaUrl(slide.cover_image);
+  const titleText = truncateText(slide.title, 120);
+  const subtitleText = truncateText(slide.subtitle, 180);
 
   const nextSlide = () => {
     setCurrentSlide((prev) => (prev + 1) % slides.length);
@@ -65,7 +75,7 @@ export function HeroSection({ slides, loading }: HeroSectionProps) {
     : "";
 
   // For hero slides, the slug already contains the full link path (e.g. "/photos/some-slug").
-  // For fallback posts, slug is already prefixed with "/blogs/..." from the homepage mapper.
+  // For fallback posts, slug is pre-resolved from post type by the homepage mapper.
   const linkHref = slide._isHeroSlide ? slide.slug || "#" : slide.slug;
 
   return (
@@ -103,13 +113,13 @@ export function HeroSection({ slides, loading }: HeroSectionProps) {
 
       <div className="relative h-full flex flex-col justify-end pb-12 sm:pb-16">
         <div className="text-white px-6 sm:px-8 lg:px-12 max-w-4xl z-10">
-          {slide.subtitle && (
-            <p className="text-sm sm:text-base font-light tracking-[0.15em] uppercase text-white/80 mb-3">
-              {slide.subtitle}
+          {subtitleText && (
+            <p className="text-sm sm:text-base font-light tracking-[0.15em] uppercase text-white/80 mb-3 line-clamp-2">
+              {subtitleText}
             </p>
           )}
-          <h1 className="font-display text-4xl sm:text-3xl lg:text-4xl xl:text-5xl mb-8 leading-[1.1] tracking-tight uppercase">
-            {slide.title}
+          <h1 className="font-display text-4xl sm:text-3xl lg:text-4xl xl:text-5xl mb-8 leading-[1.1] tracking-tight uppercase line-clamp-3">
+            {titleText}
           </h1>
           <div className="flex items-center gap-6 mb-5 text-xs sm:text-sm font-light tracking-[0.15em] uppercase">
             {publishedDate && <span>{publishedDate}</span>}

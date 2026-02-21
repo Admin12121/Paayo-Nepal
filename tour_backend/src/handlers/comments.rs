@@ -117,8 +117,8 @@ pub async fn replies(
     Ok(Json(replies))
 }
 
-/// Create a new guest comment (public — no auth required).
-/// Comments start as 'pending' and must be approved by an admin.
+/// Create a new guest comment (public - no auth required).
+/// Comments are published immediately (no moderation gate).
 /// Rate-limited by viewer_hash.
 pub async fn create(
     State(state): State<AppState>,
@@ -230,14 +230,14 @@ pub async fn create(
         )
         .await?;
 
-    // Notify admins about new pending comment
+    // Notify admins about new comment
     let notif_service =
         crate::services::NotificationService::with_redis(state.db.clone(), state.redis.clone());
     let _ = notif_service
         .notify_admins(
             None,
             "comment",
-            "New Comment Pending",
+            "New Comment",
             Some(&format!(
                 "{} commented on {} {}",
                 input.guest_name.trim(),

@@ -344,24 +344,24 @@ export default function VideoDetailPage() {
           </div>
 
           {/* Sidebar */}
-          <aside className="lg:col-span-1 p-5 pt-0 h-fit">
+          <aside className="lg:sticky lg:top-24 lg:self-start">
             {relatedVideos.length > 0 && (
-              <>
+              <div className="flex flex-col p-5 pt-0 lg:h-[calc(100vh-7rem)]">
                 <h3 className="font-display text-lg font-bold text-[#1A2B49] mb-5 uppercase tracking-wide">
                   MORE VIDEOS
                 </h3>
-                <div className="space-y-5">
+                <div className="space-y-5 overflow-y-auto pr-1">
                   {relatedVideos.slice(0, 10).map((vid) => (
                     <RelatedVideoCard key={vid.id} video={vid} />
                   ))}
                 </div>
                 <Link
                   href="/videos"
-                  className="mt-6 block text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-[#0078C0] hover:text-[#0068A0]"
+                  className="mt-4 block text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-[#0078C0] hover:text-[#0068A0]"
                 >
                   View All
                 </Link>
-              </>
+              </div>
             )}
           </aside>
         </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useParams, notFound } from "next/navigation";
+import { useParams, notFound, useRouter } from "next/navigation";
 import { Eye } from "lucide-react";
 import { postsApi, Post, contentLinksApi } from "@/lib/api-client";
 import Link from "@/components/ui/animated-link";
@@ -12,6 +12,7 @@ import { ShareButtons } from "@/components/ui/ShareButtons";
 import { prepareContent } from "@/lib/sanitize";
 import { normalizeMediaUrl } from "@/lib/media-url";
 import { NumberTicker } from "@/components/ui/number-ticker";
+import { getPostPublicPath } from "@/lib/post-routes";
 
 function getPublisherName(post: Post): string {
   const enrichedPost = post as Post & {
@@ -80,9 +81,10 @@ function Breadcrumbs({ items }: { items: { label: string; href?: string }[] }) {
 // Related Article Card for Sidebar
 function RelatedArticleCard({ article }: { article: Post }) {
   const coverImage = normalizeMediaUrl(article.cover_image);
+  const articleHref = getPostPublicPath(article);
 
   return (
-    <Link href={`/blogs/${article.slug}`}>
+    <Link href={articleHref}>
       <div className="group cursor-pointer mt-5">
         <div className="rounded-[10px] overflow-hidden aspect-video mb-2 relative">
           {coverImage ? (
@@ -119,11 +121,13 @@ function RelatedArticleCard({ article }: { article: Post }) {
 
 export default function BlogDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const slug = params?.slug as string;
 
   const [post, setPost] = useState<Post | null>(null);
   const [relatedArticles, setRelatedArticles] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
+  const [redirecting, setRedirecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Track the page view once the post is loaded
@@ -136,16 +140,30 @@ export default function BlogDetailPage() {
   }, [slug]);
 
   const fetchPost = async () => {
+    let redirectedToCanonical = false;
+
     try {
       setLoading(true);
+      setRedirecting(false);
       setError(null);
       const data = await postsApi.getBySlug(slug);
+
+      const canonicalPath = getPostPublicPath(data);
+      if (canonicalPath !== `/blogs/${data.slug}`) {
+        redirectedToCanonical = true;
+        setRedirecting(true);
+        router.replace(canonicalPath);
+        return;
+      }
+
       setPost(data);
       await fetchRelatedArticles(data.id, slug);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to load article");
     } finally {
-      setLoading(false);
+      if (!redirectedToCanonical) {
+        setLoading(false);
+      }
     }
   };
 
@@ -163,26 +181,47 @@ export default function BlogDetailPage() {
         });
         const order = new Map(linkedPostIds.map((id, idx) => [id, idx]));
         const linked = response.data
-          .filter((item) => order.has(item.id) && item.slug !== currentSlug)
+          .filter(
+            (item) =>
+              order.has(item.id) &&
+              item.slug !== currentSlug &&
+              item.post_type === "article",
+          )
           .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
         setRelatedArticles(linked.slice(0, 5));
         return;
       }
 
-      const fallback = await postsApi.list({ limit: 5, status: "published" });
-      setRelatedArticles(fallback.data.filter((p) => p.slug !== currentSlug));
+      const fallback = await postsApi.list({
+        limit: 5,
+        status: "published",
+        type: "article",
+      });
+      setRelatedArticles(
+        fallback.data.filter(
+          (p) => p.slug !== currentSlug && p.post_type === "article",
+        ),
+      );
     } catch (err) {
       console.error("Failed to fetch related articles:", err);
       try {
-        const fallback = await postsApi.list({ limit: 5, status: "published" });
-        setRelatedArticles(fallback.data.filter((p) => p.slug !== currentSlug));
+        const fallback = await postsApi.list({
+          limit: 5,
+          status: "published",
+          type: "article",
+        });
+        setRelatedArticles(
+          fallback.data.filter(
+            (p) => p.slug !== currentSlug && p.post_type === "article",
+          ),
+        );
       } catch {
         setRelatedArticles([]);
       }
     }
   };
 
-  if (loading) {
+  if (loading || redirecting) {
     return (
       <div className="bg-[#F8F9FA] min-h-screen pt-20">
         <div className="max-w-[1400px] mx-auto px-6 py-10">
@@ -268,14 +307,12 @@ export default function BlogDetailPage() {
             )}
 
             {/* Content */}
-            <div className="prose prose-lg max-w-none">
-              <div
-                className="text-[#4B5563] leading-relaxed"
-                dangerouslySetInnerHTML={{
-                  __html: prepareContent(post.content),
-                }}
-              />
-            </div>
+            <div
+              className="rich-content max-w-none"
+              dangerouslySetInnerHTML={{
+                __html: prepareContent(post.content),
+              }}
+            />
 
             {/* Tags */}
             {post.tags && post.tags.length > 0 && (
@@ -326,21 +363,23 @@ export default function BlogDetailPage() {
           </div>
 
           {/* Sidebar */}
-          <aside className="lg:col-span-1 p-5 h-fit">
-            <h3 className="font-display text-lg font-bold text-[#1A2B49] mb-5 uppercase tracking-wide">
-              MORE ARTICLES
-            </h3>
-            <div className="space-y-4">
-              {relatedArticles.slice(0, 10).map((article) => (
-                <RelatedArticleCard key={article.id} article={article} />
-              ))}
+          <aside className="lg:sticky lg:top-24 lg:self-start">
+            <div className="flex flex-col p-5 lg:h-[calc(100vh-7rem)]">
+              <h3 className="font-display text-lg font-bold text-[#1A2B49] mb-5 uppercase tracking-wide">
+                MORE ARTICLES
+              </h3>
+              <div className="space-y-4 overflow-y-auto pr-1">
+                {relatedArticles.slice(0, 10).map((article) => (
+                  <RelatedArticleCard key={article.id} article={article} />
+                ))}
+              </div>
+              <Link
+                href="/articles"
+                className="mt-4 block text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-[#0078C0] hover:text-[#0068A0]"
+              >
+                View All
+              </Link>
             </div>
-            <Link
-              href="/articles"
-              className="mt-6 block text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-[#0078C0] hover:text-[#0068A0]"
-            >
-              View All
-            </Link>
           </aside>
         </div>
       </div>

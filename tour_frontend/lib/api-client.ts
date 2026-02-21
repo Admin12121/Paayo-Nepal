@@ -785,6 +785,9 @@ export const commentsApi = {
     return api.get<PaginatedResponse<Comment>>(`/comments?${searchParams}`);
   },
 
+  listReplies: (commentId: string) =>
+    api.get<Comment[]>(`/comments/${commentId}/replies`),
+
   create: (data: {
     target_type: string;
     target_id: string;

@@ -6,6 +6,7 @@ import { postsApi, Post } from "@/lib/api-client";
 import Link from "@/components/ui/animated-link";
 import { normalizeMediaUrl } from "@/lib/media-url";
 import { NumberTicker } from "@/components/ui/number-ticker";
+import { getPostPublicPath } from "@/lib/post-routes";
 
 // Breadcrumbs Component
 function Breadcrumbs({ items }: { items: { label: string; href?: string }[] }) {
@@ -53,9 +54,10 @@ function ArticleCardSkeleton() {
 // Article Card Component
 function ArticleCard({ article }: { article: Post }) {
   const coverImage = normalizeMediaUrl(article.cover_image);
+  const postHref = getPostPublicPath(article);
 
   return (
-    <Link href={`/blogs/${article.slug}`}>
+    <Link href={postHref}>
       <div className="bg-white rounded-3xl overflow-hidden hover:shadow-xl transition-shadow cursor-pointer border border-gray-100 p-6">
         <div className="flex gap-6">
           <div className="overflow-hidden rounded-2xl w-64 h-64 flex-shrink-0 relative">

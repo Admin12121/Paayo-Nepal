@@ -5,7 +5,6 @@ import {
   Menu,
   X,
   ChevronDown,
-  Flag,
   LayoutDashboard,
   LogIn,
   UserPlus,
@@ -14,14 +13,15 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "@/components/ui/animated-link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
+import { useTransitionRouter } from "next-transition-router";
 import { useState } from "react";
 import { useSession, signOut } from "@/lib/auth-client";
 import FlipText from "@/components/ui/flip-text";
 
 export function Header() {
   const pathname = usePathname();
-  const router = useRouter();
+  const router = useTransitionRouter();
   const { data: session } = useSession();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -100,13 +100,7 @@ export function Header() {
             />
           </form>
 
-          <button
-            type="button"
-            aria-label="Nepal Locale"
-            className="hidden items-center justify-center text-xl lg:inline-flex"
-          >
-            <Flag className="h-4 w-4 text-[#DC2626]" />
-          </button>
+          <Image src="/nepal_flag.gif" alt="Nepal Locale" width={24} height={24} />
         </div>
 
         <button

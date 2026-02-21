@@ -2,6 +2,7 @@ import { SectionHeading } from "@/components/atoms/section-heading";
 import { ArticleCard } from "@/components/atoms/article-card";
 import { ViewMoreButton } from "@/components/atoms/view-more-button";
 import { postsApi } from "@/lib/api-client";
+import { getPostPublicPath } from "@/lib/post-routes";
 
 export async function ArticlesSection() {
   let articles: Awaited<ReturnType<typeof postsApi.list>>["data"] = [];
@@ -40,7 +41,7 @@ export async function ArticlesSection() {
                   year: "numeric",
                 })}
                 views={article.views ?? article.view_count ?? 0}
-                href={`/blogs/${article.slug}`}
+                href={getPostPublicPath(article)}
               />
             ))
           )}

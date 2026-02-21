@@ -396,7 +396,7 @@ export default function HotelDetailPage() {
 
             {/* Description */}
             {hotel.description && (
-              <div className="bg-white rounded-2xl p-6 md:p-8 shadow-sm mb-6">
+              <div className="mb-6">
                 <h3 className="font-display text-lg font-bold text-[#1A2B49] mb-3">
                   About this Hotel
                 </h3>
@@ -484,7 +484,7 @@ export default function HotelDetailPage() {
           <div className="lg:col-span-1">
             {/* Contact Info Card */}
             {(hotel.phone || hotel.email || hotel.website) && (
-              <div className="bg-white rounded-xl p-6 shadow-sm mb-6">
+              <div className="mb-6">
                 <h3 className="font-display text-lg font-bold text-[#1A2B49] mb-4">
                   Contact
                 </h3>
@@ -543,7 +543,7 @@ export default function HotelDetailPage() {
             )}
 
             {/* Quick Info Card */}
-            <div className="bg-white rounded-xl p-6 shadow-sm mb-6">
+            <div className="p-6 mb-6">
               <h3 className="font-display text-lg font-bold text-[#1A2B49] mb-4">
                 Quick Info
               </h3>
@@ -583,17 +583,6 @@ export default function HotelDetailPage() {
                   </div>
                 )}
               </div>
-            </div>
-
-            {/* Share card */}
-            <div className="bg-white rounded-xl p-6 shadow-sm mb-6">
-              <h3 className="font-display text-lg font-bold text-[#1A2B49] mb-4">
-                Share this hotel
-              </h3>
-              <ShareButtons
-                title={hotel.name}
-                description={hotel.description || undefined}
-              />
             </div>
 
             {/* Related Hotels */}

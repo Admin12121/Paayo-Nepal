@@ -135,6 +135,7 @@ pub fn api_routes(
     // Public read-only routes — no extra rate limiter beyond the blanket
     // -----------------------------------------------------------------
     let public_read = Router::new()
+        .route("/live", get(health::live_check))
         .route("/health", get(health::health_check))
         .nest("/search", search::routes());
 

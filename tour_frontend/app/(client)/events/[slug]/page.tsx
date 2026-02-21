@@ -302,7 +302,7 @@ export default function EventDetailPage() {
                   Event Details
                 </h2>
                 <div
-                  className="prose prose-lg max-w-none"
+                  className="rich-content max-w-none"
                   dangerouslySetInnerHTML={{
                     __html: prepareContent(event.content),
                   }}
@@ -315,13 +315,13 @@ export default function EventDetailPage() {
           </div>
 
           {/* Sidebar */}
-          <aside className="lg:col-span-1 rounded-xl bg-white p-5 shadow-sm h-fit">
+          <aside className="lg:sticky lg:top-24 lg:self-start">
             {relatedEvents.length > 0 && (
-              <>
+              <div className="flex flex-col rounded-xl bg-white p-5 shadow-sm lg:h-[calc(100vh-7rem)]">
                 <h3 className="font-display text-lg font-bold text-[#1A2B49] mb-5 uppercase tracking-wide">
                   Related Events
                 </h3>
-                <div className="space-y-4">
+                <div className="space-y-4 overflow-y-auto pr-1">
                   {relatedEvents.slice(0, 10).map((relatedEvent) => (
                     <RelatedEventCard
                       key={relatedEvent.id}
@@ -331,11 +331,11 @@ export default function EventDetailPage() {
                 </div>
                 <Link
                   href="/events"
-                  className="mt-6 block text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-[#0078C0] hover:text-[#0068A0]"
+                  className="mt-4 block text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-[#0078C0] hover:text-[#0068A0]"
                 >
                   View All
                 </Link>
-              </>
+              </div>
             )}
           </aside>
         </div>

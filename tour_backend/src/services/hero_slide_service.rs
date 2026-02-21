@@ -81,9 +81,9 @@ impl HeroSlideService {
 
         match slide.content_type {
             HeroContentType::Post => {
-                let row: Option<(String, Option<String>, Option<String>, String)> = sqlx::query_as(
+                let row: Option<(String, Option<String>, Option<String>, String, String)> = sqlx::query_as(
                     r#"
-                        SELECT title, short_description, cover_image, slug
+                        SELECT title, short_description, cover_image, slug, type::text
                         FROM posts
                         WHERE id = $1 AND deleted_at IS NULL AND status = 'published'
                         "#,
@@ -93,13 +93,16 @@ impl HeroSlideService {
                 .await?;
 
                 match row {
-                    Some((title, desc, image, slug)) => Ok(HeroSlideResolved::from_content(
-                        slide,
-                        Some(title),
-                        desc,
-                        image,
-                        Some(format!("/posts/{}", slug)),
-                    )),
+                    Some((title, desc, image, slug, post_type)) => {
+                        let link = Self::public_post_path(&post_type, &slug);
+                        Ok(HeroSlideResolved::from_content(
+                            slide,
+                            Some(title),
+                            desc,
+                            image,
+                            Some(link),
+                        ))
+                    }
                     None => Ok(HeroSlideResolved::from_custom(slide)),
                 }
             }
@@ -165,6 +168,15 @@ impl HeroSlideService {
                 }
             }
             HeroContentType::Custom => Ok(HeroSlideResolved::from_custom(slide)),
+        }
+    }
+
+    fn public_post_path(post_type: &str, slug: &str) -> String {
+        match post_type {
+            "event" => format!("/events/{}", slug),
+            "activity" => format!("/activities/{}", slug),
+            "explore" | "attraction" => format!("/attractions/{}", slug),
+            _ => format!("/blogs/{}", slug),
         }
     }
 

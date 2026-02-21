@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import type maplibregl from "maplibre-gl";
 import Link from "@/components/ui/animated-link";
 import { useParams, useRouter } from "next/navigation";
 import {
@@ -34,9 +35,19 @@ import Input from "@/components/ui/input";
 import Textarea from "@/components/ui/Textarea";
 import Checkbox from "@/components/ui/checkbox";
 import ImageUpload from "@/components/ui/ImageUpload";
+import {
+  Map,
+  MapControls,
+  MapMarker,
+  MarkerContent,
+  useMap,
+} from "@/components/ui/map";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/lib/utils/toast";
+
+type MapInputMode = "url" | "pin";
+type LngLatTuple = [number, number];
 
 interface BranchFormData {
   id?: string;
@@ -45,6 +56,7 @@ interface BranchFormData {
   address: string;
   phone: string;
   email: string;
+  map_mode: MapInputMode;
   map_latitude: string;
   map_longitude: string;
   map_url: string;
@@ -65,9 +77,119 @@ interface HotelFormData {
   is_featured: boolean;
   phone_numbers: string[];
   gallery_images: string[];
+  map_mode: MapInputMode;
   map_latitude: string;
   map_longitude: string;
   map_url: string;
+}
+
+const NEPAL_DEFAULT_CENTER: LngLatTuple = [84.124, 28.3949];
+const OSM_MAP_STYLE: maplibregl.StyleSpecification = {
+  version: 8,
+  sources: {
+    "osm-tiles": {
+      type: "raster",
+      tiles: [
+        "https://a.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        "https://b.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        "https://c.tile.openstreetmap.org/{z}/{x}/{y}.png",
+      ],
+      tileSize: 256,
+      attribution: "(c) OpenStreetMap contributors",
+    },
+  },
+  layers: [
+    {
+      id: "osm-tiles",
+      type: "raster",
+      source: "osm-tiles",
+      minzoom: 0,
+      maxzoom: 19,
+    },
+  ],
+};
+
+function MapClickCapture({
+  onMapClick,
+}: {
+  onMapClick: (point: LngLatTuple) => void;
+}) {
+  const { map, isLoaded } = useMap();
+
+  useEffect(() => {
+    if (!map || !isLoaded) return;
+    const handler = (event: maplibregl.MapMouseEvent) => {
+      onMapClick([event.lngLat.lng, event.lngLat.lat]);
+    };
+
+    map.on("click", handler);
+    return () => {
+      map.off("click", handler);
+    };
+  }, [map, isLoaded, onMapClick]);
+
+  return null;
+}
+
+function CoordinateMapPicker({
+  latitude,
+  longitude,
+  onChange,
+}: {
+  latitude: string;
+  longitude: string;
+  onChange: (coords: { latitude: string; longitude: string }) => void;
+}) {
+  const parsedLat = Number.parseFloat(latitude.trim());
+  const parsedLng = Number.parseFloat(longitude.trim());
+  const hasCoords = Number.isFinite(parsedLat) && Number.isFinite(parsedLng);
+  const center: LngLatTuple = hasCoords
+    ? [parsedLng, parsedLat]
+    : NEPAL_DEFAULT_CENTER;
+
+  return (
+    <div className="h-48 overflow-hidden rounded-md border border-gray-200">
+      <Map
+        theme="light"
+        styles={{ light: OSM_MAP_STYLE, dark: OSM_MAP_STYLE }}
+        center={center}
+        zoom={hasCoords ? 12 : 6.5}
+        pitch={0}
+        bearing={0}
+      >
+        <MapControls
+          position="bottom-right"
+          showZoom
+          showCompass
+          showLocate
+          showFullscreen={false}
+          onLocate={({ longitude: lng, latitude: lat }) =>
+            onChange({
+              latitude: lat.toFixed(6),
+              longitude: lng.toFixed(6),
+            })
+          }
+        />
+        <MapClickCapture
+          onMapClick={([lng, lat]) =>
+            onChange({
+              latitude: lat.toFixed(6),
+              longitude: lng.toFixed(6),
+            })
+          }
+        />
+        {hasCoords ? (
+          <MapMarker longitude={parsedLng} latitude={parsedLat}>
+            <MarkerContent>
+              <div className="flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-blue-600 shadow">
+                <div className="h-1.5 w-1.5 rounded-full bg-white" />
+              </div>
+            </MarkerContent>
+          </MapMarker>
+        ) : null}
+      </Map>
+    </div>
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -107,13 +229,14 @@ function extractHotelMapFields(amenities: unknown): {
 
 function buildHotelAmenitiesPayload(
   existingAmenities: unknown,
+  mapMode: MapInputMode,
   mapLatitude: string,
   mapLongitude: string,
   mapUrl: string,
 ): unknown | undefined {
-  const latValue = mapLatitude.trim();
-  const lngValue = mapLongitude.trim();
-  const mapUrlValue = mapUrl.trim();
+  const latValue = mapMode === "pin" ? mapLatitude.trim() : "";
+  const lngValue = mapMode === "pin" ? mapLongitude.trim() : "";
+  const mapUrlValue = mapMode === "url" ? mapUrl.trim() : "";
   const hasMapValues = Boolean(latValue || lngValue || mapUrlValue);
 
   const parsedLat = Number.parseFloat(latValue);
@@ -195,9 +318,9 @@ function extractBranchCoordinatesFields(coordinates: unknown): {
 function buildBranchCoordinatesPayload(
   branch: BranchFormData,
 ): Record<string, unknown> | undefined {
-  const latValue = branch.map_latitude.trim();
-  const lngValue = branch.map_longitude.trim();
-  const mapUrlValue = branch.map_url.trim();
+  const latValue = branch.map_mode === "pin" ? branch.map_latitude.trim() : "";
+  const lngValue = branch.map_mode === "pin" ? branch.map_longitude.trim() : "";
+  const mapUrlValue = branch.map_mode === "url" ? branch.map_url.trim() : "";
   const imageUrlValue = branch.image_url.trim();
   const galleryImages = branch.gallery_urls_text
     .split(/\r?\n|,/)
@@ -238,6 +361,7 @@ const EMPTY_BRANCH: BranchFormData = {
   address: "",
   phone: "",
   email: "",
+  map_mode: "url",
   map_latitude: "",
   map_longitude: "",
   map_url: "",
@@ -258,6 +382,7 @@ const EMPTY_HOTEL_FORM: HotelFormData = {
   is_featured: false,
   phone_numbers: [""],
   gallery_images: [],
+  map_mode: "url",
   map_latitude: "",
   map_longitude: "",
   map_url: "",
@@ -279,6 +404,15 @@ function parseGalleryImages(rawGallery: unknown): string[] {
     .filter(Boolean);
 }
 
+function parseBranchGalleryImages(
+  rawText: string,
+  preserveEmpty = false,
+): string[] {
+  const items = rawText.split(/\r?\n|,/).map((value) => value.trim());
+  if (preserveEmpty) return items;
+  return items.filter(Boolean);
+}
+
 function buildHotelPayload(
   data: HotelFormData,
   existingAmenities: unknown,
@@ -291,6 +425,7 @@ function buildHotelPayload(
     .filter(Boolean);
   const amenitiesPayload = buildHotelAmenitiesPayload(
     existingAmenities,
+    data.map_mode,
     data.map_latitude,
     data.map_longitude,
     data.map_url,
@@ -339,6 +474,9 @@ function normalizeBranches(rows: BranchFormData[]): BranchFormData[] {
 
 function toBranchFormData(branch: HotelBranch): BranchFormData {
   const coordinateFields = extractBranchCoordinatesFields(branch.coordinates);
+  const hasCoordinatePair = Boolean(
+    coordinateFields.map_latitude.trim() && coordinateFields.map_longitude.trim(),
+  );
   return {
     id: branch.id,
     region_id: branch.region_id || "",
@@ -346,6 +484,7 @@ function toBranchFormData(branch: HotelBranch): BranchFormData {
     address: branch.address || "",
     phone: branch.phone || "",
     email: branch.email || "",
+    map_mode: coordinateFields.map_url ? "url" : hasCoordinatePair ? "pin" : "url",
     map_latitude: coordinateFields.map_latitude,
     map_longitude: coordinateFields.map_longitude,
     map_url: coordinateFields.map_url,
@@ -435,6 +574,9 @@ export default function DashboardHotelDetailPage() {
     if (initializedMetaHotelId === hotel.id) return;
 
     const mapFields = extractHotelMapFields(hotel.amenities);
+    const hasCoordinatePair = Boolean(
+      mapFields.map_latitude.trim() && mapFields.map_longitude.trim(),
+    );
 
     setFormData({
       name: hotel.name,
@@ -448,6 +590,7 @@ export default function DashboardHotelDetailPage() {
       is_featured: hotel.is_featured,
       phone_numbers: parsePhoneNumbers(hotel.phone),
       gallery_images: parseGalleryImages(hotel.gallery),
+      map_mode: mapFields.map_url ? "url" : hasCoordinatePair ? "pin" : "url",
       map_latitude: mapFields.map_latitude,
       map_longitude: mapFields.map_longitude,
       map_url: mapFields.map_url,
@@ -579,6 +722,24 @@ export default function DashboardHotelDetailPage() {
     ]);
   };
 
+  const setHotelMapMode = (mode: MapInputMode) => {
+    if (mode === "url") {
+      setFormData((prev) => ({
+        ...prev,
+        map_mode: mode,
+        map_latitude: "",
+        map_longitude: "",
+      }));
+      return;
+    }
+
+    setFormData((prev) => ({
+      ...prev,
+      map_mode: mode,
+      map_url: "",
+    }));
+  };
+
   const updateBranchField = (
     index: number,
     field: keyof Omit<BranchFormData, "id">,
@@ -588,6 +749,66 @@ export default function DashboardHotelDetailPage() {
       prev.map((branch, idx) =>
         idx === index ? { ...branch, [field]: value } : branch,
       ),
+    );
+  };
+
+  const setBranchMapMode = (index: number, mode: MapInputMode) => {
+    setBranches((prev) =>
+      prev.map((branch, idx) => {
+        if (idx !== index) return branch;
+        if (mode === "url") {
+          return {
+            ...branch,
+            map_mode: mode,
+            map_latitude: "",
+            map_longitude: "",
+          };
+        }
+
+        return {
+          ...branch,
+          map_mode: mode,
+          map_url: "",
+        };
+      }),
+    );
+  };
+
+  const setBranchGalleryImages = (index: number, images: string[]) => {
+    const normalized = images.map((value) => value.trim());
+    updateBranchField(index, "gallery_urls_text", normalized.join("\n"));
+  };
+
+  const addBranchGalleryImage = (index: number) => {
+    const images = parseBranchGalleryImages(
+      branches[index]?.gallery_urls_text || "",
+      true,
+    );
+    setBranchGalleryImages(index, [...images, ""]);
+  };
+
+  const updateBranchGalleryImage = (
+    index: number,
+    imageIndex: number,
+    value: string,
+  ) => {
+    const images = parseBranchGalleryImages(
+      branches[index]?.gallery_urls_text || "",
+      true,
+    );
+    const next = [...images];
+    next[imageIndex] = value;
+    setBranchGalleryImages(index, next);
+  };
+
+  const removeBranchGalleryImage = (index: number, imageIndex: number) => {
+    const images = parseBranchGalleryImages(
+      branches[index]?.gallery_urls_text || "",
+      true,
+    );
+    setBranchGalleryImages(
+      index,
+      images.filter((_, idx) => idx !== imageIndex),
     );
   };
 
@@ -738,7 +959,7 @@ export default function DashboardHotelDetailPage() {
         </div>
       )}
 
-      <section className="rounded-2xl border bg-white">
+      <section className="">
         <div className="flex flex-wrap items-start justify-between gap-3 border-b p-4 sm:p-5">
           <div className="min-w-0">
             <Link
@@ -896,7 +1117,7 @@ export default function DashboardHotelDetailPage() {
               </div>
             </div>
 
-            <div className="space-y-2 rounded-lg border border-gray-200 bg-gray-50/30 p-3">
+            <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-sm font-medium text-gray-700">
                   Phone Numbers
@@ -929,7 +1150,7 @@ export default function DashboardHotelDetailPage() {
               </div>
             </div>
 
-            <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50/30 p-3">
+            <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <label className="text-sm font-medium text-gray-700">
                   Branches & Locations
@@ -1011,38 +1232,97 @@ export default function DashboardHotelDetailPage() {
                           placeholder="Email"
                         />
                       </div>
-                      <div className="mt-2 grid gap-2 md:grid-cols-2">
-                        <Input
-                          value={branch.map_latitude}
-                          onChange={(e) =>
-                            updateBranchField(
-                              index,
-                              "map_latitude",
-                              e.target.value,
-                            )
-                          }
-                          placeholder="Latitude (optional)"
-                        />
-                        <Input
-                          value={branch.map_longitude}
-                          onChange={(e) =>
-                            updateBranchField(
-                              index,
-                              "map_longitude",
-                              e.target.value,
-                            )
-                          }
-                          placeholder="Longitude (optional)"
-                        />
+                      <div className="mt-2 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-medium text-gray-600">
+                            Branch Location
+                          </label>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              type="button"
+                              variant={branch.map_mode === "url" ? "default" : "outline"}
+                              size="sm"
+                              className="h-7 px-2 text-[11px]"
+                              onClick={() => setBranchMapMode(index, "url")}
+                            >
+                              Map URL
+                            </Button>
+                            <Button
+                              type="button"
+                              variant={branch.map_mode === "pin" ? "default" : "outline"}
+                              size="sm"
+                              className="h-7 px-2 text-[11px]"
+                              onClick={() => setBranchMapMode(index, "pin")}
+                            >
+                              Pin on Map
+                            </Button>
+                          </div>
+                        </div>
+                        {branch.map_mode === "url" ? (
+                          <Input
+                            value={branch.map_url}
+                            onChange={(e) =>
+                              updateBranchField(index, "map_url", e.target.value)
+                            }
+                            placeholder="Google Maps URL (optional)"
+                          />
+                        ) : (
+                          <div className="space-y-2">
+                            <CoordinateMapPicker
+                              latitude={branch.map_latitude}
+                              longitude={branch.map_longitude}
+                              onChange={({ latitude, longitude }) => {
+                                updateBranchField(index, "map_latitude", latitude);
+                                updateBranchField(index, "map_longitude", longitude);
+                              }}
+                            />
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-xs text-gray-500">
+                                {branch.map_latitude.trim() && branch.map_longitude.trim()
+                                  ? `${branch.map_latitude.trim()}, ${branch.map_longitude.trim()}`
+                                  : "Click on map to drop branch location pin."}
+                              </p>
+                              {branch.map_latitude.trim() &&
+                                branch.map_longitude.trim() && (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 px-2 text-xs"
+                                    onClick={() => {
+                                      updateBranchField(index, "map_latitude", "");
+                                      updateBranchField(index, "map_longitude", "");
+                                    }}
+                                  >
+                                    Clear Pin
+                                  </Button>
+                                )}
+                            </div>
+                          </div>
+                        )}
+                        {branch.map_mode === "url" && branch.map_url.trim() && (
+                          <a
+                            href={branch.map_url.trim()}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex text-xs text-blue-600 hover:underline"
+                          >
+                            Open branch map URL
+                          </a>
+                        )}
+                        {branch.map_mode === "pin" &&
+                          branch.map_latitude.trim() &&
+                          branch.map_longitude.trim() && (
+                            <a
+                              href={`https://www.google.com/maps?q=${encodeURIComponent(`${branch.map_latitude.trim()},${branch.map_longitude.trim()}`)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex text-xs text-blue-600 hover:underline"
+                            >
+                              Preview branch map
+                            </a>
+                          )}
                       </div>
-                      <Input
-                        className="mt-2"
-                        value={branch.map_url}
-                        onChange={(e) =>
-                          updateBranchField(index, "map_url", e.target.value)
-                        }
-                        placeholder="Map URL (optional)"
-                      />
                       <div className="mt-2">
                         <label className="mb-1 block text-xs font-medium text-gray-600">
                           Branch Image
@@ -1058,8 +1338,65 @@ export default function DashboardHotelDetailPage() {
                         />
                       </div>
                       <div className="mt-2">
-                        <label className="mb-1 block text-xs font-medium text-gray-600">
-                          Branch Gallery URLs
+                        <div className="mb-1 flex items-center justify-between">
+                          <label className="text-xs font-medium text-gray-600">
+                            Branch Gallery Images
+                          </label>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2 text-[11px]"
+                            onClick={() => addBranchGalleryImage(index)}
+                          >
+                            <Plus className="mr-1 h-3.5 w-3.5" />
+                            Add Image
+                          </Button>
+                        </div>
+                        {parseBranchGalleryImages(branch.gallery_urls_text, true).length ===
+                        0 ? (
+                          <p className="text-xs text-gray-500">
+                            Add optional branch gallery images.
+                          </p>
+                        ) : (
+                          <div className="space-y-2">
+                            {parseBranchGalleryImages(branch.gallery_urls_text, true).map(
+                              (imageUrl, imageIndex) => (
+                                <div
+                                  key={`branch-${index}-gallery-${imageIndex}`}
+                                  className="rounded-md border border-gray-200 bg-white p-2"
+                                >
+                                  <div className="mb-2 flex items-center justify-between text-xs text-gray-600">
+                                    <span>Image {imageIndex + 1}</span>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() =>
+                                        removeBranchGalleryImage(index, imageIndex)
+                                      }
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                                    </Button>
+                                  </div>
+                                  <ImageUpload
+                                    label=""
+                                    value={imageUrl}
+                                    onChange={(url) =>
+                                      updateBranchGalleryImage(index, imageIndex, url)
+                                    }
+                                    onRemove={() =>
+                                      removeBranchGalleryImage(index, imageIndex)
+                                    }
+                                    previewHeightClass="h-28"
+                                  />
+                                </div>
+                              ),
+                            )}
+                          </div>
+                        )}
+                        <label className="mt-2 block text-xs font-medium text-gray-600">
+                          Quick paste URLs (optional)
                         </label>
                         <Textarea
                           rows={2}
@@ -1071,19 +1408,9 @@ export default function DashboardHotelDetailPage() {
                               e.target.value,
                             )
                           }
-                          placeholder="One image URL per line (optional)"
+                          placeholder="One image URL per line (or comma separated)"
                         />
                       </div>
-                      {branch.map_latitude.trim() && branch.map_longitude.trim() && (
-                        <a
-                          href={`https://www.google.com/maps?q=${encodeURIComponent(`${branch.map_latitude.trim()},${branch.map_longitude.trim()}`)}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="mt-2 inline-flex text-xs text-blue-600 hover:underline"
-                        >
-                          Preview branch map
-                        </a>
-                      )}
                       <label className="mt-2 inline-flex items-center gap-2 text-xs text-gray-600">
                         <input
                           type="checkbox"
@@ -1113,51 +1440,107 @@ export default function DashboardHotelDetailPage() {
               />
             </div>
 
-            <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50/30 p-3">
+            <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <label className="text-sm font-medium text-gray-700">
                   Hotel Map Location
                 </label>
-                {formData.map_latitude.trim() && formData.map_longitude.trim() && (
-                  <a
-                    href={`https://www.google.com/maps?q=${encodeURIComponent(`${formData.map_latitude.trim()},${formData.map_longitude.trim()}`)}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-blue-600 hover:underline"
+                <div className="flex items-center gap-1">
+                  <Button
+                    type="button"
+                    variant={formData.map_mode === "url" ? "default" : "outline"}
+                    size="sm"
+                    className="h-7 px-2 text-[11px]"
+                    onClick={() => setHotelMapMode("url")}
                   >
-                    Preview map
-                  </a>
-                )}
+                    Map URL
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={formData.map_mode === "pin" ? "default" : "outline"}
+                    size="sm"
+                    className="h-7 px-2 text-[11px]"
+                    onClick={() => setHotelMapMode("pin")}
+                  >
+                    Pin on Map
+                  </Button>
+                </div>
               </div>
-              <div className="grid gap-2 md:grid-cols-2">
-                <Input
-                  value={formData.map_latitude}
-                  onChange={(e) =>
-                    setFormData({ ...formData, map_latitude: e.target.value })
-                  }
-                  placeholder="Latitude (optional)"
-                />
-                <Input
-                  value={formData.map_longitude}
-                  onChange={(e) =>
-                    setFormData({ ...formData, map_longitude: e.target.value })
-                  }
-                  placeholder="Longitude (optional)"
-                />
-              </div>
-              <Input
-                value={formData.map_url}
-                onChange={(e) =>
-                  setFormData({ ...formData, map_url: e.target.value })
-                }
-                placeholder="Map URL (optional)"
-              />
+              {formData.map_mode === "url" ? (
+                <>
+                  <Input
+                    value={formData.map_url}
+                    onChange={(e) =>
+                      setFormData({ ...formData, map_url: e.target.value })
+                    }
+                    placeholder="Google Maps URL (optional)"
+                  />
+                  {formData.map_url.trim() && (
+                    <a
+                      href={formData.map_url.trim()}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex text-xs text-blue-600 hover:underline"
+                    >
+                      Open map URL
+                    </a>
+                  )}
+                </>
+              ) : (
+                <>
+                  <CoordinateMapPicker
+                    latitude={formData.map_latitude}
+                    longitude={formData.map_longitude}
+                    onChange={({ latitude, longitude }) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        map_latitude: latitude,
+                        map_longitude: longitude,
+                      }))
+                    }
+                  />
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs text-gray-500">
+                      {formData.map_latitude.trim() && formData.map_longitude.trim()
+                        ? `${formData.map_latitude.trim()}, ${formData.map_longitude.trim()}`
+                        : "Click on map to drop hotel location pin."}
+                    </p>
+                    {formData.map_latitude.trim() && formData.map_longitude.trim() && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        onClick={() =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            map_latitude: "",
+                            map_longitude: "",
+                          }))
+                        }
+                      >
+                        Clear Pin
+                      </Button>
+                    )}
+                  </div>
+                  {formData.map_latitude.trim() && formData.map_longitude.trim() && (
+                    <a
+                      href={`https://www.google.com/maps?q=${encodeURIComponent(`${formData.map_latitude.trim()},${formData.map_longitude.trim()}`)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex text-xs text-blue-600 hover:underline"
+                    >
+                      Preview map
+                    </a>
+                  )}
+                </>
+              )}
               <p className="text-xs text-gray-500">
-                Set exact hotel location to use in frontend map sections.
+                Use either map URL or map pin at one time.
               </p>
             </div>
 
-            <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50/30 p-3">
+            <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <label className="text-sm font-medium text-gray-700">
                   Gallery Images

@@ -128,7 +128,9 @@ x-backend-common: &backend-common
         - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin@#12}
         - ADMIN_NAME=${ADMIN_NAME:-Admin}
         - VIEWER_HASH_SALT=${VIEWER_HASH_SALT:-change-this-in-production}
-        - RUST_LOG=${RUST_LOG:-tour_backend=info,tower_http=info}
+        # Use a backend-specific log filter so host/global RUST_LOG does not
+        # accidentally flood dev logs with trace/debug noise.
+        - RUST_LOG=${BACKEND_LOG_FILTER:-tour_backend=info,tower_http=warn,sqlx=warn}
     volumes:
         - upload_data:/app/uploads
     expose:
@@ -136,8 +138,8 @@ x-backend-common: &backend-common
     networks:
         - paayo_net
     healthcheck:
-        test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
-        interval: 15s
+        test: ["CMD", "curl", "-f", "http://localhost:8080/api/live"]
+        interval: 60s
         timeout: 5s
         retries: 5
         start_period: 10s

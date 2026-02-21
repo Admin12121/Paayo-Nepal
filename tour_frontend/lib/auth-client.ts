@@ -129,8 +129,8 @@ export async function signOutAndClear() {
 // TOTP / 2FA functions
 // ---------------------------------------------------------------------------
 
-export async function enableTwoFactor(password?: string) {
-  return twoFactor.enable({ password: password || "" });
+export async function enableTwoFactor(password: string) {
+  return twoFactor.enable({ password });
 }
 
 export async function verifyTwoFactor(code: string) {

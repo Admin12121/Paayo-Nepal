@@ -9,6 +9,7 @@ import { ActivitiesSection } from "@/components/sections/Activities";
 import { InfoUpdatesSection } from "@/components/sections/InfoUpdates";
 import { heroSlidesApi, postsApi } from "@/lib/api-client";
 import type { ResolvedHeroSlide, Post } from "@/lib/api-client";
+import { getPostPublicPath } from "@/lib/post-routes";
 
 export default async function Home() {
   // Try fetching hero slides first (admin-managed hero content)
@@ -56,7 +57,7 @@ export default async function Home() {
       : fallbackPosts.map((post) => ({
           id: post.id,
           title: post.title,
-          slug: `/blogs/${post.slug}`,
+          slug: getPostPublicPath(post),
           cover_image: post.cover_image || null,
           subtitle: null,
           published_at: post.published_at || post.created_at,

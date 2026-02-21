@@ -2,8 +2,9 @@
 
 import { motion } from "framer-motion";
 
-const DURATION = 0.25;
-const STAGGER = 0.025;
+const DURATION = 0.22;
+const BASE_STAGGER = 0.02;
+const MAX_TOTAL_STAGGER = 0.18;
 
 interface FlipTextProps {
   children: string;
@@ -19,6 +20,11 @@ export default function FlipText({
   href,
 }: FlipTextProps) {
   const Tag = as === "a" ? motion.a : motion[as];
+  const letters = Array.from(children);
+  const stagger =
+    letters.length > 0
+      ? Math.min(BASE_STAGGER, MAX_TOTAL_STAGGER / letters.length)
+      : BASE_STAGGER;
 
   return (
     <Tag
@@ -28,7 +34,7 @@ export default function FlipText({
       className={`relative inline-block overflow-hidden whitespace-nowrap align-middle cursor-pointer ${className}`}
     >
       <div aria-hidden="false">
-        {children.split("").map((l, i) => (
+        {letters.map((l, i) => (
           <motion.span
             variants={{
               initial: { y: 0 },
@@ -37,7 +43,7 @@ export default function FlipText({
             transition={{
               duration: DURATION,
               ease: "easeInOut",
-              delay: STAGGER * i,
+              delay: stagger * i,
             }}
             className="inline-block"
             key={i}
@@ -47,7 +53,7 @@ export default function FlipText({
         ))}
       </div>
       <div className="absolute inset-0" aria-hidden="true">
-        {children.split("").map((l, i) => (
+        {letters.map((l, i) => (
           <motion.span
             variants={{
               initial: { y: "100%" },
@@ -56,7 +62,7 @@ export default function FlipText({
             transition={{
               duration: DURATION,
               ease: "easeInOut",
-              delay: STAGGER * i,
+              delay: stagger * i,
             }}
             className="inline-block"
             key={i}

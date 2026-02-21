@@ -57,7 +57,7 @@ impl SearchService {
                     &ilike_pattern,
                     "article",
                     "post",
-                    "/articles/",
+                    "/blogs/",
                     limit,
                 )
                 .await?;

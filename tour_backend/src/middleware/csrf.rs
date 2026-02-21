@@ -14,7 +14,7 @@
 //!
 //! Exemptions:
 //!   - Safe/idempotent methods: GET, HEAD, OPTIONS
-//!   - Health check endpoint: `/api/health`
+//!   - Health check endpoints: `/api/health`, `/api/live`
 //!   - SSE stream: `/api/notifications/stream` (GET-only, but listed for clarity)
 //!   - Multipart uploads still need the header — the frontend reads the cookie
 //!     and attaches the header before uploading.
@@ -45,7 +45,12 @@ const TOKEN_BYTES: usize = 32;
 ///   - Inherently safe (health check)
 ///   - Only accept GET (SSE stream)
 ///   - Auth endpoints handled by Next.js (BetterAuth has its own CSRF)
-const EXEMPT_PREFIXES: &[&str] = &["/api/health", "/api/notifications/stream", "/api/auth/"];
+const EXEMPT_PREFIXES: &[&str] = &[
+    "/api/health",
+    "/api/live",
+    "/api/notifications/stream",
+    "/api/auth/",
+];
 
 // ---------------------------------------------------------------------------
 // Public middleware function

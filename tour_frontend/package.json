@@ -47,6 +47,7 @@
     "motion": "^12.34.3",
     "next": "16.1.4",
     "next-themes": "^0.4.6",
+    "next-transition-router": "^0.2.11",
     "pg": "^8.13.1",
     "plaiceholder": "^3.0.0",
     "radix-ui": "^1.4.3",

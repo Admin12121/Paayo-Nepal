@@ -144,7 +144,7 @@ impl CommentService {
     }
 
     /// Create a new guest comment.
-    /// Comments start with status = 'pending' and must be approved by an admin.
+    /// Comments are published immediately with status = 'approved'.
     ///
     /// Validates that the target content actually exists before inserting.
     /// This prevents bots from creating orphan comment records for random
@@ -200,7 +200,7 @@ impl CommentService {
             VALUES (
                 $1, $2, $3::comment_target_type, $4,
                 $5, $6, $7,
-                'pending', $8, $9,
+                'approved', $8, $9,
                 NOW(), NOW()
             )
             "#,

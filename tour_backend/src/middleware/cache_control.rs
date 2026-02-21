@@ -122,7 +122,7 @@ pub async fn private_cache_middleware(request: Request, next: Next) -> Response 
 /// This can be applied as a blanket layer on the entire API router. It inspects the
 /// URI path to decide which caching policy to use:
 ///
-/// - `/api/health` → long
+/// - `/api/health`, `/api/live` → long
 /// - `/api/hero-slides` → long (GET only)
 /// - `/api/regions`, `/api/tags` → medium (GET only)
 /// - `/api/posts`, `/api/videos`, `/api/photos`, `/api/hotels` → short (GET only)
@@ -145,7 +145,7 @@ pub async fn auto_cache_middleware(request: Request, next: Next) -> Response {
     // Match path patterns to cache tiers.
     let directive = if path.starts_with("/uploads/") {
         durations::IMMUTABLE
-    } else if path == "/api/health" {
+    } else if path == "/api/health" || path == "/api/live" {
         durations::LONG
     } else if path.starts_with("/api/hero-slides") || path.starts_with("/api/hero_slides") {
         durations::LONG

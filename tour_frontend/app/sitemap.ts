@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { getPostPublicPathByType } from "@/lib/post-routes";
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://paayonepal.com";
 const API_URL =
@@ -8,6 +9,7 @@ const API_URL =
 
 interface SitemapItem {
   slug: string;
+  type?: string | null;
   updated_at?: string;
   created_at?: string;
 }
@@ -145,12 +147,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.7,
   }));
 
-  const articlePages: MetadataRoute.Sitemap = articles.map((item) => ({
-    url: `${BASE_URL}/blogs/${item.slug}`,
-    lastModified: new Date(item.updated_at || item.created_at || Date.now()),
-    changeFrequency: "weekly" as const,
-    priority: 0.7,
-  }));
+  const articlePages: MetadataRoute.Sitemap = articles
+    .filter((item) => (item.type || "article").toLowerCase() === "article")
+    .map((item) => ({
+      url: `${BASE_URL}${getPostPublicPathByType(item.type, item.slug)}`,
+      lastModified: new Date(item.updated_at || item.created_at || Date.now()),
+      changeFrequency: "weekly" as const,
+      priority: 0.7,
+    }));
 
   const regionPages: MetadataRoute.Sitemap = regions.map((item) => ({
     url: `${BASE_URL}/regions/${item.slug}`,

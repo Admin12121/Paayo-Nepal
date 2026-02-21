@@ -29,6 +29,7 @@ import {
   generateBreadcrumbJsonLd,
   jsonLdScriptProps,
 } from "@/lib/seo";
+import { getPostPublicPath } from "@/lib/post-routes";
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://paayonepal.com";
 
@@ -117,6 +118,44 @@ function resolvePhotoCover(photo: PhotoFeature) {
     return normalizeMediaUrl(photo.images[0]?.image_url);
   }
   return null;
+}
+
+type GalleryPhotoItem = {
+  id: string;
+  title: string;
+  image: string | null;
+};
+
+function buildPhotoGalleryItems(photoFeatures: PhotoFeature[]): GalleryPhotoItem[] {
+  const gallery: GalleryPhotoItem[] = [];
+
+  for (const feature of photoFeatures) {
+    const images = Array.isArray(feature.images) ? feature.images : [];
+
+    if (images.length > 0) {
+      for (let i = 0; i < images.length; i += 1) {
+        const image = normalizeMediaUrl(images[i]?.image_url);
+        if (!image) continue;
+        gallery.push({
+          id: `${feature.id}-${images[i]?.id || i}`,
+          title: feature.title,
+          image,
+        });
+      }
+      continue;
+    }
+
+    const cover = resolvePhotoCover(feature);
+    if (cover) {
+      gallery.push({
+        id: feature.id,
+        title: feature.title,
+        image: cover,
+      });
+    }
+  }
+
+  return gallery;
 }
 
 type RecommendationItem = ActivityAccordionItem;
@@ -335,7 +374,7 @@ export default async function AttractionDetailPage({
       recommendations = linkedPosts.map((item) => ({
         id: item.id,
         title: item.title,
-        href: item.post_type === "explore" ? `/attractions/${item.slug}` : `/blogs/${item.slug}`,
+        href: getPostPublicPath(item),
         image: normalizeMediaUrl(item.cover_image),
         subtitle: item.short_description || null,
       }));
@@ -369,15 +408,10 @@ export default async function AttractionDetailPage({
   const publisherName = resolvePublisherName(attraction);
   const publishedDate = formatDate(attraction.published_at || attraction.created_at);
   const overviewHtml = attraction.content ? prepareContent(attraction.content) : "";
-  const leadPhoto = regionPhotos.length > 0 ? resolvePhotoCover(regionPhotos[0]) : null;
-  const gridPhotos = regionPhotos
-    .slice(1, 10)
-    .map((item) => ({
-      id: item.id,
-      title: item.title,
-      image: resolvePhotoCover(item),
-    }))
-    .filter((item) => item.image);
+  const galleryPhotos = buildPhotoGalleryItems(regionPhotos);
+  const leadPhoto = galleryPhotos[0]?.image || null;
+  const leadPhotoTitle = galleryPhotos[0]?.title || `${attraction.title} photo`;
+  const gridPhotos = galleryPhotos.slice(1, 10);
   const leadVideo = regionVideos[0] || null;
   const sideVideos = regionVideos.slice(1, 9);
   const aroundAttractions = sameRegionAttractions.slice(0, 6);
@@ -462,7 +496,7 @@ export default async function AttractionDetailPage({
               </h2>
               {overviewHtml ? (
                 <div
-                  className="prose prose-sm mt-5 max-w-none leading-relaxed text-[#4B5563] md:prose-base [&_figure]:my-4 [&_figure]:w-full [&_figure]:max-w-none [&_img]:my-4 [&_img]:h-auto [&_img]:w-full [&_img]:max-w-none [&_img]:rounded-md [&_img]:object-cover [&_table]:my-4 [&_table]:w-full [&_table]:table-fixed [&_table]:border-collapse [&_table]:border [&_table]:border-[#D1D5DB] [&_th]:border [&_th]:border-[#D1D5DB] [&_th]:bg-[#F8FAFC] [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_td]:border [&_td]:border-[#D1D5DB] [&_td]:px-3 [&_td]:py-2"
+                  className="rich-content mt-5 max-w-none"
                   dangerouslySetInnerHTML={{ __html: overviewHtml }}
                 />
               ) : (
@@ -483,11 +517,11 @@ export default async function AttractionDetailPage({
                 <div className="mt-5 overflow-hidden rounded-lg border border-[#E5E7EB] bg-white">
                   <img
                     src={leadPhoto}
-                    alt={regionPhotos[0]?.title || `${attraction.title} photo`}
+                    alt={leadPhotoTitle}
                     className="h-[360px] w-full object-cover"
                   />
                   <div className="p-3 text-sm text-[#1A2B49]">
-                    {(region?.name || "Nepal").trim()} photo feature
+                    {(region?.name || "Nepal").trim()} photo gallery
                   </div>
                 </div>
               ) : (

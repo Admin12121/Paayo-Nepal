@@ -29,6 +29,7 @@ import {
   useSession,
   enableTwoFactor,
   disableTwoFactor,
+  verifyTwoFactor,
   registerPasskey,
   listPasskeys,
   deletePasskey,
@@ -65,10 +66,13 @@ export default function SettingsPage() {
   // 2FA state
   const [is2FAEnabled, setIs2FAEnabled] = useState(false);
   const [totpSecret, setTotpSecret] = useState("");
+  const [totpUri, setTotpUri] = useState("");
   const [totpQrCode, setTotpQrCode] = useState("");
+  const [isQrCodeBroken, setIsQrCodeBroken] = useState(false);
   const [totpVerificationCode, setTotpVerificationCode] = useState("");
   const [is2FALoading, setIs2FALoading] = useState(false);
   const [showTotpSetup, setShowTotpSetup] = useState(false);
+  const [enablePassword, setEnablePassword] = useState("");
   const [disablePassword, setDisablePassword] = useState("");
   const [showDisable2FA, setShowDisable2FA] = useState(false);
 
@@ -82,7 +86,9 @@ export default function SettingsPage() {
 
   // Check if passkeys are supported
   const isPasskeySupported =
-    typeof window !== "undefined" && window.PublicKeyCredential !== undefined;
+    typeof window !== "undefined" &&
+    window.isSecureContext &&
+    window.PublicKeyCredential !== undefined;
 
   // Load user data
   useEffect(() => {
@@ -121,19 +127,87 @@ export default function SettingsPage() {
     setIsProfileLoading(true);
 
     try {
-      const response = await fetch("/api/auth/update-profile", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email }),
-      });
+      const currentName = session?.user?.name || "";
+      const currentEmail = session?.user?.email || "";
+      const nextName = name.trim();
+      const nextEmail = email.trim();
 
-      if (!response.ok) {
-        throw new Error("Failed to update profile");
+      if (!nextName) {
+        toast.error("Name is required");
+        return;
       }
 
-      toast.success("Profile updated successfully");
+      if (!nextEmail) {
+        toast.error("Email is required");
+        return;
+      }
+
+      const hasNameChange = nextName !== currentName;
+      const hasEmailChange = nextEmail !== currentEmail;
+
+      if (!hasNameChange && !hasEmailChange) {
+        toast.info("No profile changes detected");
+        return;
+      }
+
+      if (hasNameChange) {
+        const updateUserResponse = await fetch("/api/auth/update-user", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: nextName }),
+        });
+
+        if (!updateUserResponse.ok) {
+          let message = "Failed to update profile";
+          try {
+            const data = (await updateUserResponse.json()) as {
+              message?: string;
+            };
+            if (data?.message) message = data.message;
+          } catch {
+            // Ignore JSON parse errors for non-JSON responses
+          }
+          throw new Error(message);
+        }
+      }
+
+      if (hasEmailChange) {
+        const changeEmailResponse = await fetch("/api/auth/change-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            newEmail: nextEmail,
+            callbackURL:
+              typeof window !== "undefined"
+                ? `${window.location.origin}/dashboard/settings`
+                : undefined,
+          }),
+        });
+
+        if (!changeEmailResponse.ok) {
+          let message = "Failed to update email";
+          try {
+            const data = (await changeEmailResponse.json()) as {
+              message?: string;
+            };
+            if (data?.message) message = data.message;
+          } catch {
+            // Ignore JSON parse errors for non-JSON responses
+          }
+          throw new Error(message);
+        }
+      }
+
+      toast.success(
+        hasEmailChange
+          ? "Profile updated. Check your email inbox to confirm new address."
+          : "Profile updated successfully",
+      );
+      router.refresh();
     } catch (error) {
-      toast.error("Failed to update profile");
+      toast.error(
+        error instanceof Error ? error.message : "Failed to update profile",
+      );
       console.error("Profile update error:", error);
     } finally {
       setIsProfileLoading(false);
@@ -157,7 +231,7 @@ export default function SettingsPage() {
 
     try {
       const response = await fetch("/api/auth/change-password", {
-        method: "PUT",
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           currentPassword,
@@ -166,7 +240,14 @@ export default function SettingsPage() {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to change password");
+        let message = "Failed to change password";
+        try {
+          const data = (await response.json()) as { message?: string };
+          if (data?.message) message = data.message;
+        } catch {
+          // Ignore JSON parse errors for non-JSON responses
+        }
+        throw new Error(message);
       }
 
       toast.success("Password changed successfully");
@@ -182,19 +263,43 @@ export default function SettingsPage() {
   };
 
   const handleEnable2FA = async () => {
+    if (!enablePassword.trim()) {
+      toast.error("Please enter your password");
+      return;
+    }
+
     setIs2FALoading(true);
     try {
-      const result = await enableTwoFactor();
+      const result = await enableTwoFactor(enablePassword);
 
       if (result.error) {
-        toast.error("Failed to enable 2FA");
+        toast.error(result.error.message || "Failed to enable 2FA");
         return;
       }
 
-      // The result should contain the secret and QR code
+      const totpUri = (result.data as { totpURI?: string; totpUri?: string })
+        ?.totpURI
+        ? ((result.data as { totpURI?: string }).totpURI as string)
+        : ((result.data as { totpUri?: string })?.totpUri ?? "");
+
+      if (!totpUri) {
+        toast.error("Failed to initialize 2FA setup");
+        return;
+      }
+
+      let secret = "";
+      try {
+        const parsed = new URL(totpUri);
+        secret = parsed.searchParams.get("secret") || "";
+      } catch {
+        secret = "";
+      }
+
       if (result.data) {
-        setTotpSecret((result.data as any).secret);
-        setTotpQrCode((result.data as any).qrCode);
+        setTotpUri(totpUri);
+        setTotpSecret(secret);
+        setTotpQrCode(`/api/auth/qr?data=${encodeURIComponent(totpUri)}`);
+        setIsQrCodeBroken(false);
         setShowTotpSetup(true);
       }
     } catch (error) {
@@ -215,20 +320,21 @@ export default function SettingsPage() {
 
     setIs2FALoading(true);
     try {
-      const response = await fetch("/api/auth/verify-2fa", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: totpVerificationCode }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Invalid verification code");
+      const result = await verifyTwoFactor(totpVerificationCode);
+      if (result.error) {
+        toast.error(result.error.message || "Invalid verification code");
+        return;
       }
 
       toast.success("2FA enabled successfully");
       setIs2FAEnabled(true);
       setShowTotpSetup(false);
       setTotpVerificationCode("");
+      setEnablePassword("");
+      setTotpSecret("");
+      setTotpUri("");
+      setTotpQrCode("");
+      setIsQrCodeBroken(false);
     } catch (error) {
       toast.error("Invalid verification code");
       console.error("Verify 2FA error:", error);
@@ -240,12 +346,17 @@ export default function SettingsPage() {
   const handleDisable2FA = async (e: FormEvent) => {
     e.preventDefault();
 
+    if (!disablePassword.trim()) {
+      toast.error("Please enter your password");
+      return;
+    }
+
     setIs2FALoading(true);
     try {
       const result = await disableTwoFactor(disablePassword);
 
       if (result.error) {
-        toast.error("Failed to disable 2FA. Check your password.");
+        toast.error(result.error.message || "Failed to disable 2FA");
         return;
       }
 
@@ -262,12 +373,22 @@ export default function SettingsPage() {
   };
 
   const handleAddPasskey = async () => {
+    if (typeof window !== "undefined" && !window.isSecureContext) {
+      toast.error("Passkeys require HTTPS (or localhost) in a secure context");
+      return;
+    }
+
     setIsPasskeysLoading(true);
     try {
       const result = await registerPasskey();
 
       if (result.error) {
-        toast.error("Failed to register passkey");
+        const errorCode =
+          "code" in result.error ? (result.error.code as string) : undefined;
+        const details = [errorCode, result.error.message]
+          .filter(Boolean)
+          .join(": ");
+        toast.error(details || "Failed to register passkey");
         return;
       }
 
@@ -561,6 +682,23 @@ export default function SettingsPage() {
                   </div>
                 </div>
               </div>
+              <div className="mb-4">
+                <Label htmlFor="enable2faPassword" required>
+                  Password
+                </Label>
+                <div className="relative">
+                  <Input
+                    id="enable2faPassword"
+                    type="password"
+                    placeholder="Enter your password"
+                    value={enablePassword}
+                    onChange={(e) => setEnablePassword(e.target.value)}
+                    className="pl-10"
+                    disabled={is2FALoading}
+                  />
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                </div>
+              </div>
               <Button onClick={handleEnable2FA} isLoading={is2FALoading}>
                 <Shield className="w-4 h-4 mr-2" />
                 Enable 2FA
@@ -580,13 +718,27 @@ export default function SettingsPage() {
                 </p>
                 {totpQrCode && (
                   <div className="flex justify-center mb-4">
-                    <img
-                      src={totpQrCode}
-                      alt="2FA QR Code"
-                      className="border-2 border-gray-200 rounded-lg"
-                    />
+                    {!isQrCodeBroken ? (
+                      <img
+                        src={totpQrCode}
+                        alt="2FA QR Code"
+                        className="border-2 border-gray-200 rounded-lg"
+                        onError={() => setIsQrCodeBroken(true)}
+                        onLoad={() => setIsQrCodeBroken(false)}
+                      />
+                    ) : (
+                      <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                        QR code could not load. Use the secret key below for
+                        manual setup.
+                      </div>
+                    )}
                   </div>
                 )}
+                {totpUri ? (
+                  <p className="mb-4 break-all text-xs text-gray-500">
+                    TOTP URI: {totpUri}
+                  </p>
+                ) : null}
                 <div className="bg-gray-50 rounded-lg p-4 mb-4">
                   <div className="flex items-center justify-between">
                     <div>
@@ -644,6 +796,10 @@ export default function SettingsPage() {
                     onClick={() => {
                       setShowTotpSetup(false);
                       setTotpVerificationCode("");
+                      setTotpSecret("");
+                      setTotpUri("");
+                      setTotpQrCode("");
+                      setIsQrCodeBroken(false);
                     }}
                     disabled={is2FALoading}
                   >

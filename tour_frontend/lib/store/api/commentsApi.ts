@@ -40,8 +40,8 @@ export interface CreateCommentInput {
 // content items via `target_type` + `target_id`. They support a simple
 // parent/child threading model via `parent_id`.
 //
-// Comments go through a moderation workflow:
-//   pending → approved | rejected | spam
+// Comments are published immediately (status = approved), but moderation
+// endpoints are still available for admin cleanup/spam handling.
 //
 // Admin/editor endpoints for moderation are under `/comments/moderation/*`.
 // Batch operations allow approving or deleting multiple comments at once.
@@ -49,7 +49,7 @@ export interface CreateCommentInput {
 // Public endpoints:
 //   - GET  /comments/post/:postId     — list approved comments for a post
 //   - GET  /comments?target_type=&target_id= — list approved comments for any content
-//   - POST /comments                  — create a new comment (starts as pending)
+//   - POST /comments                  — create a new comment (published immediately)
 //
 // Admin endpoints:
 //   - GET  /comments/moderation       — list comments by status (pending/approved/rejected/spam)
@@ -194,13 +194,8 @@ export const commentsApi = baseApi.injectEndpoints({
     /**
      * Create a new comment.
      *
-     * Guest-submitted (no auth required). The comment starts in `pending`
-     * status and must be approved by a moderator before it appears
-     * publicly.
-     *
-     * Invalidates the pending count and moderation list so admins see
-     * new comments immediately. Does NOT invalidate public comment lists
-     * because the new comment is pending (not yet visible).
+     * Guest-submitted (no auth required). The comment is published
+     * immediately and appears in public lists without approval.
      *
      * Usage:
      *   const [createComment, { isLoading }] = useCreateCommentMutation();
@@ -218,10 +213,26 @@ export const commentsApi = baseApi.injectEndpoints({
         method: "POST",
         body: data,
       }),
-      invalidatesTags: [
-        { type: "Comment", id: "PENDING_COUNT" },
-        { type: "Comment", id: "MODERATION" },
-      ],
+      invalidatesTags: (result) => {
+        const tags: Array<{ type: "Comment"; id: string }> = [
+          { type: "Comment", id: "PENDING_COUNT" },
+          { type: "Comment", id: "MODERATION" },
+        ];
+        if (result) {
+          tags.push({
+            type: "Comment",
+            id: `CONTENT-${result.target_type}-${result.target_id}`,
+          });
+          tags.push({
+            type: "Comment",
+            id: `POST-${result.target_id}`,
+          });
+          if (result.parent_id) {
+            tags.push({ type: "Comment", id: result.parent_id });
+          }
+        }
+        return tags;
+      },
     }),
 
     /**

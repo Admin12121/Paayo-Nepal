@@ -640,7 +640,7 @@ export default function PhotosPage() {
         <section className="mb-8 grid gap-4 lg:grid-cols-[1fr_240px]">
           <div>
             <h1 className="max-w-[720px] text-4xl font-semibold leading-[1.05] text-[#111111] md:text-5xl">
-              The best free stock photos, royalty-free images shared by creators.
+              The best stock photos, royalty images shared by creators.
             </h1>
 
             <form
@@ -929,7 +929,7 @@ export default function PhotosPage() {
                 <ChevronRight className="h-5 w-5" />
               </button>
 
-              <div className="flex min-h-0 items-center justify-center overflow-auto rounded-xl border border-gray-200 bg-white">
+              <div className="flex min-h-0 items-center justify-center overflow-auto">
                 <img
                   src={selectedPhoto.imageUrl}
                   alt={selectedPhoto.title}
@@ -937,7 +937,7 @@ export default function PhotosPage() {
                 />
               </div>
 
-              <aside className="flex min-h-0 flex-col overflow-auto rounded-xl border border-gray-200 bg-white p-4 text-[#111827]">
+              <aside className="flex min-h-0 flex-col overflow-auto p-4 text-[#111827]">
                 <h3 className="line-clamp-2 text-lg font-semibold">
                   {selectedPhoto.title}
                 </h3>

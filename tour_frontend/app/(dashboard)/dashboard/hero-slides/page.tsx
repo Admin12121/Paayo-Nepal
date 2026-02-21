@@ -68,6 +68,20 @@ function getSlideDescription(slide: HeroSlide): string | null {
   return withCompat.custom_description ?? withCompat.custom_subtitle ?? null;
 }
 
+function formatPostType(type: string | null | undefined): string {
+  switch ((type || "").toLowerCase()) {
+    case "event":
+      return "Event";
+    case "activity":
+      return "Activity";
+    case "explore":
+    case "attraction":
+      return "Attraction";
+    default:
+      return "Article";
+  }
+}
+
 export default function HeroSlidesPage() {
   const [deleteDialog, setDeleteDialog] = useState<{
     open: boolean;
@@ -137,18 +151,14 @@ export default function HeroSlidesPage() {
         setOptionsLoading(true);
         const [postsRes, photosRes, videosRes] = await Promise.all([
           postsApi.list({ limit: 200, status: "published" }),
-          photoFeaturesApi.list({
-            limit: 200,
-            status: "published",
-            is_featured: true,
-          }),
+          photoFeaturesApi.list({ limit: 200, status: "published" }),
           videosApi.list({ limit: 200, status: "published" }),
         ]);
 
         setContentOptions({
           post: postsRes.data.map((item) => ({
             id: item.id,
-            title: item.title,
+            title: `[${formatPostType(item.post_type)}] ${item.title}`,
           })),
           photo: photosRes.data.map((item) => ({
             id: item.id,
@@ -354,9 +364,9 @@ export default function HeroSlidesPage() {
           }
           options={[
             { value: "custom", label: "Custom (manual title/image)" },
-            { value: "post", label: "Link to Post" },
+            { value: "post", label: "Link to Post/Event/Activity/Attraction" },
             { value: "video", label: "Link to Video" },
-            { value: "photo", label: "Link to Featured Photo" },
+            { value: "photo", label: "Link to Photo Story" },
           ]}
         />
       </div>
@@ -388,7 +398,7 @@ export default function HeroSlidesPage() {
             ]}
           />
           <p className="mt-1 text-xs text-gray-500">
-            For photos, only featured photo collections are shown.
+            Choose from published content. You can mix types in any order.
           </p>
         </div>
       )}
