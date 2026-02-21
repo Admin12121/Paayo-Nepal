@@ -29,7 +29,7 @@ export function ImageCard({
       <Link
         href={href}
         className={cn(
-          "group block overflow-hidden rounded-xl border border-[#E7ECF4] bg-white shadow-[0_6px_16px_rgba(16,33,58,0.08)] transition-all duration-300 hover:shadow-[0_10px_22px_rgba(16,33,58,0.14)]",
+          "group block overflow-hidden rounded-xl border border-[#E7ECF4] bg-white transition-all duration-300 hover:shadow-[0_10px_22px_rgba(16,33,58,0.14)]",
           className,
         )}
       >
@@ -55,7 +55,7 @@ export function ImageCard({
       <Link
         href={href}
         className={cn(
-          "group block transition-all duration-300 hover:shadow-[0_10px_22px_rgba(16,33,58,0.14)]",
+          "group block transition-all duration-300",
           className,
         )}
       >

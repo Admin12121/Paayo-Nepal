@@ -2,6 +2,7 @@ import { SectionHeading } from "@/components/atoms/section-heading";
 import { ImageCard } from "@/components/atoms/image-card";
 import { ViewMoreButton } from "@/components/atoms/view-more-button";
 import { attractionsApi } from "@/lib/api-client";
+import { cn } from "@/lib/utils";
 
 export async function AttractionsSection() {
   let attractions: Awaited<ReturnType<typeof attractionsApi.list>>["data"] = [];
@@ -26,6 +27,7 @@ export async function AttractionsSection() {
 
   const featured = attractions[0];
   const sideItems = attractions.slice(1, 5);
+  const hasSideItems = sideItems.length > 0;
 
   return (
     <section className="py-10 px-6 bg-white">
@@ -37,7 +39,14 @@ export async function AttractionsSection() {
             NO content available
           </h1>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
+          <div
+            className={cn(
+              "mb-5 grid grid-cols-1 gap-5",
+              hasSideItems
+                ? "lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]"
+                : "lg:grid-cols-1",
+            )}
+          >
             {featured ? (
               <ImageCard
                 key={featured.id}
@@ -45,21 +54,23 @@ export async function AttractionsSection() {
                 alt={featured.title}
                 title={featured.title}
                 href={`/attractions/${featured.slug}`}
-                className="h-[320px] lg:col-span-2 lg:h-[420px]"
+                className=""
               />
             ) : null}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-              {sideItems.map((attraction) => (
-                <ImageCard
-                  key={attraction.id}
-                  src={attraction.cover_image || ""}
-                  alt={attraction.title}
-                  title={attraction.title}
-                  href={`/attractions/${attraction.slug}`}
-                  className="h-[150px] lg:h-[200px]"
-                />
-              ))}
-            </div>
+            {hasSideItems ? (
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                {sideItems.map((attraction) => (
+                  <ImageCard
+                    key={attraction.id}
+                    src={attraction.cover_image || ""}
+                    alt={attraction.title}
+                    title={attraction.title}
+                    href={`/attractions/${attraction.slug}`}
+                    className=""
+                  />
+                ))}
+              </div>
+            ) : null}
           </div>
         )}
 

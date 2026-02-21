@@ -27,8 +27,9 @@ import {
   jsonLdScriptProps,
 } from "@/lib/seo";
 import { getPostPublicPath } from "@/lib/post-routes";
+import { PUBLIC_APP_URL } from "@/lib/app-url";
 
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://paayonepal.com";
+const BASE_URL = PUBLIC_APP_URL;
 
 function formatDate(value: string | null) {
   if (!value) return "";
@@ -123,7 +124,9 @@ type GalleryPhotoItem = {
   image: string | null;
 };
 
-function buildPhotoGalleryItems(photoFeatures: PhotoFeature[]): GalleryPhotoItem[] {
+function buildPhotoGalleryItems(
+  photoFeatures: PhotoFeature[],
+): GalleryPhotoItem[] {
   const gallery: GalleryPhotoItem[] = [];
 
   for (const feature of photoFeatures) {
@@ -167,7 +170,10 @@ function AnchorTabs() {
   return (
     <nav className="mt-6 overflow-x-auto border-b border-[#E5E7EB]">
       <div className="flex min-w-max items-center gap-8 px-1">
-        <a href="#overview" className="py-3 text-sm font-medium text-[#1A2B49] hover:text-[#0078C0]">
+        <a
+          href="#overview"
+          className="py-3 text-sm font-medium text-[#1A2B49] hover:text-[#0078C0]"
+        >
           Overview
         </a>
         <a
@@ -176,13 +182,22 @@ function AnchorTabs() {
         >
           Top Recommendation
         </a>
-        <a href="#photos" className="py-3 text-sm font-medium text-[#1A2B49] hover:text-[#0078C0]">
+        <a
+          href="#photos"
+          className="py-3 text-sm font-medium text-[#1A2B49] hover:text-[#0078C0]"
+        >
           Photos
         </a>
-        <a href="#videos" className="py-3 text-sm font-medium text-[#1A2B49] hover:text-[#0078C0]">
+        <a
+          href="#videos"
+          className="py-3 text-sm font-medium text-[#1A2B49] hover:text-[#0078C0]"
+        >
           Videos
         </a>
-        <a href="#map" className="py-3 text-sm font-medium text-[#1A2B49] hover:text-[#0078C0]">
+        <a
+          href="#map"
+          className="py-3 text-sm font-medium text-[#1A2B49] hover:text-[#0078C0]"
+        >
           Map
         </a>
       </div>
@@ -245,14 +260,23 @@ export default async function ActivityDetailPage({
     notFound();
   }
 
-  const [linksResult, activitiesResult, regionsResult, photosResult, videosResult] =
-    await Promise.allSettled([
-      contentLinksApi.listForSource("post", activity.id),
-      activitiesApi.list({ limit: 40, is_active: true }),
-      regionsApi.list({ limit: 250, status: "published" }),
-      photoFeaturesApi.list({ limit: 30, status: "published" }),
-      videosApi.list({ limit: 30, status: "published", region_id: activity.region_id || undefined }),
-    ]);
+  const [
+    linksResult,
+    activitiesResult,
+    regionsResult,
+    photosResult,
+    videosResult,
+  ] = await Promise.allSettled([
+    contentLinksApi.listForSource("post", activity.id),
+    activitiesApi.list({ limit: 40, is_active: true }),
+    regionsApi.list({ limit: 250, status: "published" }),
+    photoFeaturesApi.list({ limit: 30, status: "published" }),
+    videosApi.list({
+      limit: 30,
+      status: "published",
+      region_id: activity.region_id || undefined,
+    }),
+  ]);
 
   const linkedIds = {
     posts: [] as string[],
@@ -274,7 +298,9 @@ export default async function ActivityDetailPage({
 
   const region: Region | null =
     regionsResult.status === "fulfilled"
-      ? regionsResult.value.data.find((item) => item.id === activity.region_id) || null
+      ? regionsResult.value.data.find(
+          (item) => item.id === activity.region_id,
+        ) || null
       : null;
 
   const publishedActivities =
@@ -290,10 +316,16 @@ export default async function ActivityDetailPage({
       item.id !== activity.id &&
       (!activity.region_id || item.region_id !== activity.region_id),
   );
-  const moreActivities = [...sameRegionActivities, ...otherActivities].slice(0, 12);
+  const moreActivities = [...sameRegionActivities, ...otherActivities].slice(
+    0,
+    12,
+  );
 
-  const videosPool = videosResult.status === "fulfilled" ? videosResult.value.data : [];
-  let regionVideos: Video[] = videosPool.filter((item) => item.id !== activity.id);
+  const videosPool =
+    videosResult.status === "fulfilled" ? videosResult.value.data : [];
+  let regionVideos: Video[] = videosPool.filter(
+    (item) => item.id !== activity.id,
+  );
 
   if (linkedIds.videos.length > 0) {
     const linkedVideoResult = await Promise.allSettled(
@@ -302,7 +334,8 @@ export default async function ActivityDetailPage({
     const order = new Map(linkedIds.videos.map((id, index) => [id, index]));
     const linkedVideos = linkedVideoResult
       .filter(
-        (entry): entry is PromiseFulfilledResult<Video> => entry.status === "fulfilled",
+        (entry): entry is PromiseFulfilledResult<Video> =>
+          entry.status === "fulfilled",
       )
       .map((entry) => entry.value)
       .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
@@ -312,7 +345,8 @@ export default async function ActivityDetailPage({
     }
   }
 
-  const photosPool = photosResult.status === "fulfilled" ? photosResult.value.data : [];
+  const photosPool =
+    photosResult.status === "fulfilled" ? photosResult.value.data : [];
   let regionPhotos = activity.region_id
     ? photosPool.filter((item) => item.region_id === activity.region_id)
     : photosPool;
@@ -339,7 +373,10 @@ export default async function ActivityDetailPage({
 
   if (linkedIds.posts.length > 0) {
     try {
-      const linkedPostsResult = await postsApi.list({ limit: 120, status: "published" });
+      const linkedPostsResult = await postsApi.list({
+        limit: 120,
+        status: "published",
+      });
       const order = new Map(linkedIds.posts.map((id, index) => [id, index]));
       const linkedPosts = linkedPostsResult.data
         .filter((item) => item.id !== activity.id && order.has(item.id))
@@ -378,7 +415,9 @@ export default async function ActivityDetailPage({
 
   const coverImage = normalizeMediaUrl(activity.cover_image);
   const publisherName = resolvePublisherName(activity);
-  const publishedDate = formatDate(activity.published_at || activity.created_at);
+  const publishedDate = formatDate(
+    activity.published_at || activity.created_at,
+  );
   const overviewHtml = activity.content ? prepareContent(activity.content) : "";
   const galleryPhotos = buildPhotoGalleryItems(regionPhotos);
   const leadPhoto = galleryPhotos[0]?.image || null;
@@ -463,7 +502,8 @@ export default async function ActivityDetailPage({
                 />
               ) : (
                 <p className="mt-5 leading-relaxed text-[#4B5563]">
-                  {activity.short_description || "No overview content available."}
+                  {activity.short_description ||
+                    "No overview content available."}
                 </p>
               )}
             </section>
@@ -481,14 +521,14 @@ export default async function ActivityDetailPage({
                     <Link
                       key={item.id}
                       href={item.href}
-                      className="group overflow-hidden rounded-lg border border-[#E5E7EB] bg-white"
+                      className="group"
                     >
-                      <div className="h-44 w-full bg-[#E5E7EB]">
+                      <div className="h-[350px] w-full bg-[#E5E7EB]">
                         {item.image ? (
                           <img
                             src={item.image}
                             alt={item.title}
-                            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                            className="h-full w-full object-cover rounded-xl"
                           />
                         ) : (
                           <div className="flex h-full w-full items-center justify-center text-sm text-[#6B7280]">
@@ -510,7 +550,9 @@ export default async function ActivityDetailPage({
                   ))}
                 </div>
               ) : (
-                <p className="mt-5 text-sm text-[#6B7280]">No recommendations available.</p>
+                <p className="mt-5 text-sm text-[#6B7280]">
+                  No recommendations available.
+                </p>
               )}
             </section>
 
@@ -530,7 +572,9 @@ export default async function ActivityDetailPage({
                   </div>
                 </div>
               ) : (
-                <p className="mt-5 text-sm text-[#6B7280]">No photos available.</p>
+                <p className="mt-5 text-sm text-[#6B7280]">
+                  No photos available.
+                </p>
               )}
 
               {gridPhotos.length > 0 ? (
@@ -597,7 +641,9 @@ export default async function ActivityDetailPage({
                   </div>
                 </Link>
               ) : (
-                <p className="mt-5 text-sm text-[#6B7280]">No videos available.</p>
+                <p className="mt-5 text-sm text-[#6B7280]">
+                  No videos available.
+                </p>
               )}
 
               {sideVideos.length > 0 ? (
@@ -658,33 +704,43 @@ export default async function ActivityDetailPage({
               <div className="mt-4 space-y-4 overflow-y-auto pr-1">
                 {moreActivities.length > 0 ? (
                   moreActivities.map((item) => (
-                    <Link
-                      key={item.id}
-                      href={`/activities/${item.slug}`}
-                      className="group block overflow-hidden rounded-lg border border-[#E5E7EB]"
-                    >
-                      <div className="h-28 w-full bg-[#E5E7EB]">
-                        {normalizeMediaUrl(item.cover_image) ? (
-                          <img
-                            src={normalizeMediaUrl(item.cover_image) || ""}
-                            alt={item.title}
-                            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                          />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center text-sm text-[#6B7280]">
-                            No image
-                          </div>
-                        )}
-                      </div>
-                      <div className="p-2.5">
-                        <p className="line-clamp-2 text-sm font-medium text-[#1A2B49]">
+                    <Link key={item.id} href={`/activities/${item.slug}`}>
+                      <div className="group cursor-pointer mt-5">
+                        <div className="rounded-[10px] overflow-hidden aspect-video mb-2 relative">
+                          {normalizeMediaUrl(item.cover_image) ? (
+                            <img
+                              src={normalizeMediaUrl(item.cover_image) || ""}
+                              alt={item.title}
+                              className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            />
+                          ) : (
+                            <div className="w-full h-full bg-gray-200" />
+                          )}
+                        </div>
+                        <div className="flex items-center justify-between text-xs text-[#868383] mb-1">
+                          <span>
+                            {new Date(
+                              item.published_at || item.created_at,
+                            ).toLocaleDateString()}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Eye className="w-3 h-3" />
+                            <NumberTicker
+                              value={item.views || 0}
+                              className="tracking-normal text-current dark:text-current"
+                            />
+                          </span>
+                        </div>
+                        <h4 className="font-display text-sm font-semibold text-[#F29C72] leading-snug uppercase tracking-wide line-clamp-2">
                           {item.title}
-                        </p>
+                        </h4>
                       </div>
                     </Link>
                   ))
                 ) : (
-                  <p className="text-sm text-[#6B7280]">No related activities found.</p>
+                  <p className="text-sm text-[#6B7280]">
+                    No related activities found.
+                  </p>
                 )}
               </div>
 

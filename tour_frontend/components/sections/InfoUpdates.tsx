@@ -4,15 +4,6 @@ import { ViewMoreButton } from "@/components/atoms/view-more-button";
 import { hotelsApi, type Hotel, type HotelBranch } from "@/lib/api-client";
 import { normalizeMediaUrl } from "@/lib/media-url";
 
-const QUICK_LINKS = [
-  { label: "Stays", href: "/search?q=stays" },
-  { label: "Flights", href: "/search?q=flights" },
-  { label: "Vehicle Rental", href: "/search?q=vehicle-rental" },
-  { label: "Handicrafts", href: "/search?q=handicrafts" },
-  { label: "Shopping", href: "/search?q=shopping" },
-  { label: "Organic Products", href: "/search?q=organic-products" },
-] as const;
-
 const ICON_CLASS = "h-3.5 w-3.5 shrink-0 text-[#637396]";
 
 function parseGalleryImages(gallery: unknown): string[] {
@@ -73,18 +64,15 @@ export async function InfoUpdatesSection() {
   );
 
   return (
-    <section className="bg-[#F3F6FA] px-6 py-10">
+    <section className="px-6 py-10">
       <div className="mx-auto max-w-[1400px]">
-        <div className="mb-8 flex flex-wrap items-center gap-2">
-          {QUICK_LINKS.map((link) => (
-            <Link
-              key={link.label}
-              href={link.href}
-              className="rounded-full border border-[#D5D8E1] px-4 py-2 text-[11px] font-semibold tracking-[0.04em] text-[#4A5876] transition-colors hover:border-[#0078C0] hover:text-[#0078C0]"
-            >
-              {link.label}
-            </Link>
-          ))}
+        <div className="mb-4">
+          <h2 className="font-display text-2xl font-bold uppercase tracking-wide text-[#1A2B49] md:text-3xl">
+            EXPLORE ESSENTIALS
+          </h2>
+          <p className="mt-2 text-sm text-[#4A5876]">
+            Jump to popular travel categories across Nepal.
+          </p>
         </div>
 
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-4">
@@ -163,12 +151,8 @@ export async function InfoUpdatesSection() {
                   href={`/hotels/${hotel.slug}`}
                   className="mt-2 inline-flex h-7 w-full items-center justify-center rounded bg-[#0A79C1] px-3 text-xs font-semibold text-white transition-colors hover:bg-[#0969A8]"
                 >
-                  Branch Network
+                  Explore
                 </Link>
-
-                <p className="text-center text-[11px] font-medium text-[#6B7897]">
-                  {branches.length} {branches.length === 1 ? "branch" : "branches"}
-                </p>
               </div>
             </article>
           ))}

@@ -1,7 +1,8 @@
 import type { MetadataRoute } from "next";
 import { getPostPublicPathByType } from "@/lib/post-routes";
+import { PUBLIC_APP_URL } from "@/lib/app-url";
 
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://paayonepal.com";
+const BASE_URL = PUBLIC_APP_URL;
 const API_URL =
   process.env.BACKEND_API_URL ||
   process.env.INTERNAL_API_URL ||

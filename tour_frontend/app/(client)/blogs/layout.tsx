@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
+import { PUBLIC_APP_URL } from "@/lib/app-url";
 
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://paayonepal.com";
+const BASE_URL = PUBLIC_APP_URL;
 
 export const metadata: Metadata = {
   title: "Blogs & Stories",

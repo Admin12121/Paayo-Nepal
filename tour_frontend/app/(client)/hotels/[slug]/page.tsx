@@ -11,8 +11,6 @@ import {
   Globe,
   Calendar,
   IndianRupee,
-  Building2,
-  ChevronRight,
 } from "lucide-react";
 import { hotelsApi, Hotel, HotelBranch } from "@/lib/api-client";
 import Link from "@/components/ui/animated-link";
@@ -44,58 +42,61 @@ function Breadcrumbs({ items }: { items: { label: string; href?: string }[] }) {
   );
 }
 
-function RelatedHotelCard({ hotel }: { hotel: Hotel }) {
-  const normalizedCoverImage = normalizeMediaUrl(hotel.cover_image);
-
-  const getPriceSymbol = (range: string | null) => {
-    switch (range) {
-      case "budget":
-        return "रु";
-      case "mid":
-        return "रु रु";
-      case "luxury":
-        return "रु रु रु";
-      default:
-        return "—";
-    }
-  };
+function ExploreHotelCard({ hotel }: { hotel: Hotel }) {
+  const coverImage = normalizeMediaUrl(hotel.cover_image);
+  const priceLabel =
+    hotel.price_range === "budget"
+      ? "Budget"
+      : hotel.price_range === "mid"
+        ? "Mid-range"
+        : hotel.price_range === "luxury"
+          ? "Luxury"
+          : "N/A";
 
   return (
-    <Link href={`/hotels/${hotel.slug}`}>
-      <div className="group cursor-pointer">
-        <div className="rounded-[10px] overflow-hidden aspect-[4/3] mb-2 relative bg-gray-200">
-          {normalizedCoverImage ? (
-            <img
-              src={normalizedCoverImage}
-              alt={hotel.name}
-              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200">
-              <Building2 className="w-8 h-8 text-gray-300" />
-            </div>
-          )}
-          <div className="absolute top-2 right-2 bg-white/90 px-2 py-0.5 rounded text-xs font-bold text-green-700">
-            {getPriceSymbol(hotel.price_range)}
+    <article className="overflow-hidden rounded-xl border border-[#E7ECF4] bg-white">
+      <Link href={`/hotels/${hotel.slug}`} className="block h-[220px] w-full bg-[#EEF2F8]">
+        {coverImage ? (
+          <img
+            src={coverImage}
+            alt={hotel.name}
+            className="h-full w-full object-cover transition-transform duration-300 hover:scale-105"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-[#E6EEF8] to-[#CCDDF1]">
+            <span className="text-sm font-semibold text-[#48638D]">No image</span>
           </div>
-        </div>
-        <div className="flex items-center justify-between text-xs text-[#868383] mb-1">
-          <span>
-            {hotel.star_rating ? "★".repeat(hotel.star_rating) : "No rating"}
-          </span>
+        )}
+      </Link>
+
+      <div className="space-y-2 px-3 pb-3 pt-3">
+        <h3 className="line-clamp-2 text-base font-semibold leading-snug text-[#1A2B49]">
+          {hotel.name}
+        </h3>
+
+        <div className="flex items-center justify-between text-xs text-[#6B7897]">
+          <span>{priceLabel}</span>
           <span className="flex items-center gap-1">
-            <Eye className="w-3 h-3" />
+            <Eye className="h-3.5 w-3.5" />
             <NumberTicker
               value={hotel.view_count ?? 0}
               className="tracking-normal text-current dark:text-current"
             />
           </span>
         </div>
-        <h4 className="font-display text-sm font-semibold text-[#1A2B49] leading-snug line-clamp-2 group-hover:text-[#0078C0] transition-colors">
-          {hotel.name}
-        </h4>
+
+        {hotel.star_rating ? (
+          <p className="text-xs text-[#384B72]">{hotel.star_rating}/5 rating</p>
+        ) : null}
+
+        <Link
+          href={`/hotels/${hotel.slug}`}
+          className="mt-2 inline-flex h-7 w-full items-center justify-center rounded bg-[#0A79C1] px-3 text-xs font-semibold text-white transition-colors hover:bg-[#0969A8]"
+        >
+          Explore
+        </Link>
       </div>
-    </Link>
+    </article>
   );
 }
 
@@ -141,6 +142,7 @@ function BranchCard({ branch }: { branch: HotelBranch }) {
             )}
           </div>
         </div>
+
       </div>
     </div>
   );
@@ -163,7 +165,6 @@ export default function HotelDetailPage() {
   useEffect(() => {
     if (slug) {
       fetchHotel();
-      fetchRelatedHotels();
     }
   }, [slug]);
 
@@ -173,6 +174,7 @@ export default function HotelDetailPage() {
       setError(null);
       const data = await hotelsApi.getBySlug(slug);
       setHotel(data);
+      await fetchRelatedHotels(data);
 
       // Fetch branches after hotel is loaded
       setBranchesLoading(true);
@@ -192,15 +194,43 @@ export default function HotelDetailPage() {
     }
   };
 
-  const fetchRelatedHotels = async () => {
+  const fetchRelatedHotels = async (currentHotel: Hotel) => {
+    const targetCount = 8;
+    const selected: Hotel[] = [];
+    const usedIds = new Set<string>([currentHotel.id]);
+
+    const appendUnique = (items: Hotel[]) => {
+      for (const item of items) {
+        if (usedIds.has(item.id) || item.slug === currentHotel.slug) continue;
+        selected.push(item);
+        usedIds.add(item.id);
+        if (selected.length >= targetCount) break;
+      }
+    };
+
     try {
-      const response = await hotelsApi.list({
-        limit: 6,
-        status: "published",
-      });
-      setRelatedHotels(response.data.filter((h) => h.slug !== slug));
+      if (currentHotel.region_id) {
+        const regional = await hotelsApi.list({
+          limit: 20,
+          status: "published",
+          region_id: currentHotel.region_id,
+        });
+        appendUnique(regional.data);
+      }
+
+      if (selected.length < targetCount) {
+        const response = await hotelsApi.list({
+          limit: 60,
+          status: "published",
+        });
+        const randomPool = [...response.data].sort(() => Math.random() - 0.5);
+        appendUnique(randomPool);
+      }
+
+      setRelatedHotels(selected.slice(0, targetCount));
     } catch (err) {
       console.error("Failed to fetch related hotels:", err);
+      setRelatedHotels(selected);
     }
   };
 
@@ -272,6 +302,9 @@ export default function HotelDetailPage() {
           .filter((img): img is string => Boolean(img))
       : [];
   const normalizedCoverImage = normalizeMediaUrl(hotel.cover_image);
+  const sameRegionRelatedCount = hotel.region_id
+    ? relatedHotels.filter((item) => item.region_id === hotel.region_id).length
+    : 0;
 
   return (
     <div className="bg-[#F8F9FA] min-h-screen pt-20">
@@ -585,29 +618,36 @@ export default function HotelDetailPage() {
               </div>
             </div>
 
-            {/* Related Hotels */}
-            {relatedHotels.length > 0 && (
-              <>
-                <h3 className="font-display text-lg font-bold text-[#1A2B49] mb-6 uppercase tracking-wide">
-                  MORE HOTELS
-                </h3>
-                <div className="space-y-6">
-                  {relatedHotels.slice(0, 5).map((h) => (
-                    <RelatedHotelCard key={h.id} hotel={h} />
-                  ))}
-                </div>
-                {relatedHotels.length > 5 && (
-                  <Link
-                    href="/hotels"
-                    className="block mt-6 text-center text-[#0078C0] font-semibold hover:text-[#0068A0] transition-colors"
-                  >
-                    View All Hotels →
-                  </Link>
-                )}
-              </>
-            )}
           </div>
         </div>
+
+        {relatedHotels.length > 0 ? (
+          <section className="mt-12 border-t border-[#E5E7EB] pt-10">
+            <div className="flex items-center justify-between gap-4">
+              <h2 className="font-display text-2xl font-bold uppercase tracking-wide text-[#1A2B49] md:text-3xl">
+                EXPLORE MORE HOTELS
+              </h2>
+              <Link
+                href="/hotels"
+                className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#0078C0] hover:text-[#0068A0]"
+              >
+                View All
+              </Link>
+            </div>
+
+            <p className="mt-2 text-sm text-[#4A5876]">
+              {sameRegionRelatedCount > 0
+                ? `${sameRegionRelatedCount} hotels from the same region, plus additional picks you may like.`
+                : "Handpicked hotel recommendations you may also like."}
+            </p>
+
+            <div className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-4">
+              {relatedHotels.map((item) => (
+                <ExploreHotelCard key={item.id} hotel={item} />
+              ))}
+            </div>
+          </section>
+        ) : null}
       </div>
     </div>
   );

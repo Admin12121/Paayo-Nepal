@@ -30,8 +30,9 @@ import {
   jsonLdScriptProps,
 } from "@/lib/seo";
 import { getPostPublicPath } from "@/lib/post-routes";
+import { PUBLIC_APP_URL } from "@/lib/app-url";
 
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://paayonepal.com";
+const BASE_URL = PUBLIC_APP_URL;
 
 function formatDate(value: string | null) {
   if (!value) return "";
@@ -126,7 +127,9 @@ type GalleryPhotoItem = {
   image: string | null;
 };
 
-function buildPhotoGalleryItems(photoFeatures: PhotoFeature[]): GalleryPhotoItem[] {
+function buildPhotoGalleryItems(
+  photoFeatures: PhotoFeature[],
+): GalleryPhotoItem[] {
   const gallery: GalleryPhotoItem[] = [];
 
   for (const feature of photoFeatures) {
@@ -259,18 +262,23 @@ export default async function AttractionDetailPage({
     notFound();
   }
 
-  const [linksResult, attractionsResult, regionsResult, photosResult, videosResult] =
-    await Promise.allSettled([
-      contentLinksApi.listForSource("post", attraction.id),
-      attractionsApi.list({ limit: 40 }),
-      regionsApi.list({ limit: 250, status: "published" }),
-      photoFeaturesApi.list({ limit: 30, status: "published" }),
-      videosApi.list({
-        limit: 30,
-        status: "published",
-        region_id: attraction.region_id || undefined,
-      }),
-    ]);
+  const [
+    linksResult,
+    attractionsResult,
+    regionsResult,
+    photosResult,
+    videosResult,
+  ] = await Promise.allSettled([
+    contentLinksApi.listForSource("post", attraction.id),
+    attractionsApi.list({ limit: 40 }),
+    regionsApi.list({ limit: 250, status: "published" }),
+    photoFeaturesApi.list({ limit: 30, status: "published" }),
+    videosApi.list({
+      limit: 30,
+      status: "published",
+      region_id: attraction.region_id || undefined,
+    }),
+  ]);
 
   const linkedIds = {
     posts: [] as string[],
@@ -292,12 +300,15 @@ export default async function AttractionDetailPage({
 
   const region: Region | null =
     regionsResult.status === "fulfilled"
-      ? regionsResult.value.data.find((item) => item.id === attraction.region_id) ||
-        null
+      ? regionsResult.value.data.find(
+          (item) => item.id === attraction.region_id,
+        ) || null
       : null;
 
   const attractionPool =
-    attractionsResult.status === "fulfilled" ? attractionsResult.value.data : [];
+    attractionsResult.status === "fulfilled"
+      ? attractionsResult.value.data
+      : [];
   const sameRegionAttractions = attractionPool.filter(
     (item) =>
       item.id !== attraction.id &&
@@ -314,8 +325,11 @@ export default async function AttractionDetailPage({
     12,
   );
 
-  const videosPool = videosResult.status === "fulfilled" ? videosResult.value.data : [];
-  let regionVideos: Video[] = videosPool.filter((item) => item.id !== attraction.id);
+  const videosPool =
+    videosResult.status === "fulfilled" ? videosResult.value.data : [];
+  let regionVideos: Video[] = videosPool.filter(
+    (item) => item.id !== attraction.id,
+  );
 
   if (linkedIds.videos.length > 0) {
     const linkedVideoResult = await Promise.allSettled(
@@ -324,7 +338,8 @@ export default async function AttractionDetailPage({
     const order = new Map(linkedIds.videos.map((id, index) => [id, index]));
     const linkedVideos = linkedVideoResult
       .filter(
-        (entry): entry is PromiseFulfilledResult<Video> => entry.status === "fulfilled",
+        (entry): entry is PromiseFulfilledResult<Video> =>
+          entry.status === "fulfilled",
       )
       .map((entry) => entry.value)
       .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
@@ -334,7 +349,8 @@ export default async function AttractionDetailPage({
     }
   }
 
-  const photosPool = photosResult.status === "fulfilled" ? photosResult.value.data : [];
+  const photosPool =
+    photosResult.status === "fulfilled" ? photosResult.value.data : [];
   let regionPhotos = attraction.region_id
     ? photosPool.filter((item) => item.region_id === attraction.region_id)
     : photosPool;
@@ -406,8 +422,12 @@ export default async function AttractionDetailPage({
 
   const coverImage = normalizeMediaUrl(attraction.cover_image);
   const publisherName = resolvePublisherName(attraction);
-  const publishedDate = formatDate(attraction.published_at || attraction.created_at);
-  const overviewHtml = attraction.content ? prepareContent(attraction.content) : "";
+  const publishedDate = formatDate(
+    attraction.published_at || attraction.created_at,
+  );
+  const overviewHtml = attraction.content
+    ? prepareContent(attraction.content)
+    : "";
   const galleryPhotos = buildPhotoGalleryItems(regionPhotos);
   const leadPhoto = galleryPhotos[0]?.image || null;
   const leadPhotoTitle = galleryPhotos[0]?.title || `${attraction.title} photo`;
@@ -446,8 +466,8 @@ export default async function AttractionDetailPage({
       <ViewTracker targetType="post" targetId={attraction.id} />
 
       <div className="mx-auto max-w-[1400px] px-6 py-10">
-        <div className="grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1fr)_320px]">
-          <article className="min-w-0">
+        <div className="grid grid-cols-1 gap-10 lg:grid-cols-3">
+          <article className="min-w-0 lg:col-span-2">
             <header>
               <h1 className="font-display text-4xl font-semibold uppercase tracking-wide text-[#1A2B49] md:text-5xl">
                 {attraction.title}
@@ -501,7 +521,8 @@ export default async function AttractionDetailPage({
                 />
               ) : (
                 <p className="mt-5 leading-relaxed text-[#4B5563]">
-                  {attraction.short_description || "No overview content available."}
+                  {attraction.short_description ||
+                    "No overview content available."}
                 </p>
               )}
             </section>
@@ -525,7 +546,9 @@ export default async function AttractionDetailPage({
                   </div>
                 </div>
               ) : (
-                <p className="mt-5 text-sm text-[#6B7280]">No photos available.</p>
+                <p className="mt-5 text-sm text-[#6B7280]">
+                  No photos available.
+                </p>
               )}
 
               {gridPhotos.length > 0 ? (
@@ -593,7 +616,9 @@ export default async function AttractionDetailPage({
                   </div>
                 </Link>
               ) : (
-                <p className="mt-5 text-sm text-[#6B7280]">No videos available.</p>
+                <p className="mt-5 text-sm text-[#6B7280]">
+                  No videos available.
+                </p>
               )}
 
               {sideVideos.length > 0 ? (
@@ -654,16 +679,16 @@ export default async function AttractionDetailPage({
                     <Link
                       key={item.id}
                       href={`/attractions/${item.slug}`}
-                      className="overflow-hidden rounded-md border border-[#E5E7EB] bg-white"
+                      className="overflow-hidden"
                     >
                       {normalizeMediaUrl(item.cover_image) ? (
                         <img
                           src={normalizeMediaUrl(item.cover_image) || ""}
                           alt={item.title}
-                          className="h-28 w-full object-cover md:h-32"
+                          className="h-full w-full object-cover rounded-xl"
                         />
                       ) : (
-                        <div className="h-28 w-full bg-[#E5E7EB] md:h-32" />
+                        <div className="h-full w-full bg-gradient-to-br from-[#E9EEF7] to-[#CBD8EE]" />
                       )}
                       <p className="line-clamp-1 p-2 text-xs font-medium text-[#1A2B49]">
                         {item.title}
@@ -688,20 +713,22 @@ export default async function AttractionDetailPage({
                     <Link
                       key={item.id}
                       href={`/attractions/${item.slug}`}
-                      className="overflow-hidden rounded-md border border-[#E5E7EB] bg-white"
+                      className="overflow-hidden"
                     >
                       {normalizeMediaUrl(item.cover_image) ? (
                         <img
                           src={normalizeMediaUrl(item.cover_image) || ""}
                           alt={item.title}
-                          className="h-28 w-full object-cover md:h-32"
+                          className="h-full w-full object-cover rounded-xl"
                         />
                       ) : (
-                        <div className="h-28 w-full bg-[#E5E7EB] md:h-32" />
+                        <div className="h-full w-full bg-gradient-to-br from-[#E9EEF7] to-[#CBD8EE]" />
                       )}
-                      <p className="line-clamp-1 p-2 text-xs font-medium text-[#1A2B49]">
-                        {item.title}
-                      </p>
+                      <div className="px-3 py-2.5">
+                        <h3 className="line-clamp-2 text-sm font-semibold">
+                          {item.title}
+                        </h3>
+                      </div>
                     </Link>
                   ))}
                 </div>
@@ -714,20 +741,20 @@ export default async function AttractionDetailPage({
           </article>
 
           <aside className="lg:sticky lg:top-24 lg:self-start">
-            <div className="flex flex-col p-4 lg:h-[calc(100vh-7rem)]">
-              <h3 className="font-display text-xl font-semibold uppercase tracking-wide text-[#1A2B49]">
+            <div className="flex flex-col p-5 lg:h-[calc(100vh-7rem)]">
+              <h3 className="font-display text-lg font-bold text-[#1A2B49] mb-5 uppercase tracking-wide">
                 MORE ATTRACTIONS
               </h3>
 
-              <div className="mt-4 space-y-4 overflow-y-auto pr-1">
+              <div className="space-y-4 overflow-y-auto pr-1">
                 {moreAttractions.length > 0 ? (
                   moreAttractions.map((item) => (
                     <Link
                       key={item.id}
                       href={`/attractions/${item.slug}`}
-                      className="group block overflow-hidden rounded-lg border border-[#E5E7EB]"
+                      className="group block"
                     >
-                      <div className="h-28 w-full bg-[#E5E7EB]">
+                      <div className="rounded-[10px] overflow-hidden aspect-video mb-2 relative">
                         {normalizeMediaUrl(item.cover_image) ? (
                           <img
                             src={normalizeMediaUrl(item.cover_image) || ""}
@@ -740,23 +767,37 @@ export default async function AttractionDetailPage({
                           </div>
                         )}
                       </div>
-                      <div className="p-2.5">
-                        <p className="line-clamp-2 text-sm font-medium text-[#1A2B49]">
-                          {item.title}
-                        </p>
+                      <div className="flex items-center justify-between text-xs text-[#868383] mb-1">
+                        <span>
+                          {new Date(
+                            item.published_at || item.created_at,
+                          ).toLocaleDateString()}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Eye className="w-3 h-3" />
+                          <NumberTicker
+                            value={item.views || 0}
+                            className="tracking-normal text-current dark:text-current"
+                          />
+                        </span>
                       </div>
+                      <h4 className="font-display text-sm font-semibold text-[#F29C72] leading-snug uppercase tracking-wide line-clamp-2">
+                        {item.title}
+                      </h4>
                     </Link>
                   ))
                 ) : (
-                  <p className="text-sm text-[#6B7280]">No related attractions found.</p>
+                  <p className="text-sm text-[#6B7280]">
+                    No related attractions found.
+                  </p>
                 )}
               </div>
 
               <Link
                 href="/attractions"
-                className="mt-4 inline-flex items-center justify-center rounded-md px-3 py-2 text-sm font-semibold text-[#0078C0] hover:text-[#00629C]"
+                className="mt-4 block text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-[#0078C0] hover:text-[#0068A0]"
               >
-                VIEW ALL
+                View All
               </Link>
             </div>
           </aside>

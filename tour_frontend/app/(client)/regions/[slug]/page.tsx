@@ -21,8 +21,9 @@ import {
   jsonLdScriptProps,
 } from "@/lib/seo";
 import { getPostPublicPath } from "@/lib/post-routes";
+import { PUBLIC_APP_URL } from "@/lib/app-url";
 
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://paayonepal.com";
+const BASE_URL = PUBLIC_APP_URL;
 
 // Breadcrumbs Component
 function Breadcrumbs({ items }: { items: { label: string; href?: string }[] }) {

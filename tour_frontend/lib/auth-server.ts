@@ -34,11 +34,15 @@ function normalizeAbsoluteOrigin(
 }
 
 const appBaseUrl =
+  normalizeAbsoluteOrigin(process.env.APP_PUBLIC_ORIGIN) ||
   normalizeAbsoluteOrigin(process.env.NEXT_PUBLIC_APP_URL) ||
   normalizeAbsoluteOrigin(process.env.BETTER_AUTH_URL) ||
   "http://localhost:3000";
 
-const passkeyOrigin = normalizeAbsoluteOrigin(process.env.PASSKEY_ORIGIN);
+const passkeyOrigin =
+  normalizeAbsoluteOrigin(process.env.PASSKEY_ORIGIN) ||
+  normalizeAbsoluteOrigin(process.env.APP_PUBLIC_ORIGIN) ||
+  undefined;
 
 const passkeyRpId = (() => {
   if (process.env.PASSKEY_RP_ID?.trim()) return process.env.PASSKEY_RP_ID;
@@ -87,10 +91,9 @@ const envTrustedOrigins = (process.env.BETTER_AUTH_TRUSTED_ORIGINS || "")
   .map((value) => value.trim())
   .filter(Boolean);
 
-const staticTrustedOrigins = collectTrustedOrigins([
-  appBaseUrl,
-  process.env.NEXT_PUBLIC_APP_URL,
-  process.env.BETTER_AUTH_URL,
+const isProduction = process.env.NODE_ENV === "production";
+
+const localhostTrustedOrigins = [
   "http://localhost",
   "http://localhost:80",
   "http://localhost:3000",
@@ -116,6 +119,15 @@ const staticTrustedOrigins = collectTrustedOrigins([
   "https://127.0.0.1:*",
   "http://[::1]:*",
   "https://[::1]:*",
+];
+
+const staticTrustedOrigins = collectTrustedOrigins([
+  process.env.APP_PUBLIC_ORIGIN,
+  appBaseUrl,
+  process.env.NEXT_PUBLIC_APP_URL,
+  process.env.BETTER_AUTH_URL,
+  passkeyOrigin,
+  ...(isProduction ? [] : localhostTrustedOrigins),
   ...envTrustedOrigins,
 ]);
 
@@ -251,7 +263,7 @@ export const auth = betterAuth({
           google: {
             clientId: process.env.GOOGLE_CLIENT_ID!,
             clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-            redirectURI: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/callback/google`,
+            redirectURI: `${appBaseUrl}/api/auth/callback/google`,
           },
         }
       : {}),

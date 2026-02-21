@@ -67,7 +67,6 @@ export default function NotificationBell() {
     let eventSource: EventSource | null = null;
     let reconnectTimeout: NodeJS.Timeout;
     let pollInterval: NodeJS.Timeout | null = null;
-    let sseConnected = false;
 
     // Start fallback polling (only runs while SSE is down)
     const startPolling = () => {
@@ -88,8 +87,6 @@ export default function NotificationBell() {
       });
 
       eventSource.addEventListener("connected", () => {
-        console.log("SSE connected for notifications");
-        sseConnected = true;
         // SSE is live — stop fallback polling
         stopPolling();
       });
@@ -162,7 +159,6 @@ export default function NotificationBell() {
 
       eventSource.onerror = () => {
         eventSource?.close();
-        sseConnected = false;
         // SSE disconnected — start fallback polling and schedule reconnect
         startPolling();
         reconnectTimeout = setTimeout(connectSSE, 5000);

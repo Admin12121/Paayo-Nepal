@@ -3,6 +3,7 @@ import { Mulish, Cormorant_Garamond } from "next/font/google";
 import "./globals.css";
 import { ConditionalLayout } from "@/components/layout/ConditionalLayout";
 import { generateWebsiteJsonLd, jsonLdScriptProps } from "@/lib/seo";
+import { PUBLIC_APP_URL } from "@/lib/app-url";
 
 const mulish = Mulish({
   variable: "--font-mulish",
@@ -16,7 +17,7 @@ const cormorant = Cormorant_Garamond({
   weight: ["300", "400", "500", "600", "700"],
 });
 
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://paayonepal.com";
+const BASE_URL = PUBLIC_APP_URL;
 
 export const metadata: Metadata = {
   metadataBase: new URL(BASE_URL),

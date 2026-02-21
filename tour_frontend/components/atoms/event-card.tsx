@@ -22,16 +22,16 @@ export function EventCard({
     <Link
       href={href}
       className={cn(
-        "group block overflow-hidden rounded-xl border border-[#E7ECF4] bg-white shadow-[0_6px_16px_rgba(16,33,58,0.08)] transition-all duration-300 hover:shadow-[0_10px_24px_rgba(16,33,58,0.14)]",
+        "group block transition-all duration-300",
         className,
       )}
     >
-      <div className="h-[170px] overflow-hidden">
+      <div className="h-[270px] overflow-hidden">
         {normalizedImage ? (
           <img
             src={normalizedImage}
             alt={title}
-            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105 rounded-xl"
           />
         ) : (
           <div className="h-full w-full bg-gradient-to-br from-[#E9EEF7] to-[#CBD8EE]" />

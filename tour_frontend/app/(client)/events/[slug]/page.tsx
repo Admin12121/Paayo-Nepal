@@ -51,8 +51,8 @@ function RelatedEventCard({ event }: { event: Event }) {
 
   return (
     <Link href={`/events/${event.slug}`}>
-      <div className="flex gap-4 group cursor-pointer">
-        <div className="w-[140px] h-[90px] rounded-xl overflow-hidden shrink-0 relative">
+      <div className="group cursor-pointer mt-5">
+        <div className="rounded-[10px] overflow-hidden aspect-video mb-2 relative">
           {coverImage ? (
             <img
               src={coverImage}
@@ -65,14 +65,24 @@ function RelatedEventCard({ event }: { event: Event }) {
             </div>
           )}
         </div>
-        <div className="flex flex-col justify-center">
-          <p className="text-xs text-gray-500 mb-1">
-            {event.event_date ? formatDate(event.event_date) : "TBD"}
-          </p>
-          <h4 className="text-sm font-semibold text-[#1A2B49] leading-snug line-clamp-2 group-hover:text-[#0078C0] transition-colors">
-            {event.title}
-          </h4>
+        <div className="flex items-center justify-between text-xs text-[#868383] mb-1">
+          <span>
+            {event.event_date ? formatDate(event.event_date) : `${new Date(
+              event.published_at || event.created_at,
+            ).toLocaleDateString()}
+`}
+          </span>
+          <span className="flex items-center gap-1">
+            <Eye className="w-3 h-3" />
+            <NumberTicker
+              value={event.views || 0}
+              className="tracking-normal text-current dark:text-current"
+            />
+          </span>
         </div>
+        <h4 className="font-display text-sm font-semibold text-[#F29C72] leading-snug uppercase tracking-wide line-clamp-2">
+          {event.title}
+        </h4>
       </div>
     </Link>
   );
@@ -95,6 +105,30 @@ export default function EventDetailPage() {
       fetchEvent();
     }
   }, [slug]);
+
+  const fetchFallbackEvents = async (currentSlug: string) => {
+    const attempts = [
+      () => eventsApi.upcoming({ limit: 10 }),
+      () => eventsApi.list({ limit: 10, featured: true }),
+      () => eventsApi.list({ limit: 10 }),
+    ];
+
+    for (const attempt of attempts) {
+      try {
+        const response = await attempt();
+        const fallbackEvents = response.data.filter(
+          (item) => item.slug !== currentSlug,
+        );
+        if (fallbackEvents.length > 0) {
+          return fallbackEvents.slice(0, 10);
+        }
+      } catch {
+        // Try the next fallback source.
+      }
+    }
+
+    return [];
+  };
 
   const fetchEvent = async () => {
     try {
@@ -127,20 +161,19 @@ export default function EventDetailPage() {
         const linkedEvents = response.data
           .filter((item) => order.has(item.id) && item.slug !== currentSlug)
           .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
-        setRelatedEvents(linkedEvents.slice(0, 5));
-        return;
+
+        if (linkedEvents.length > 0) {
+          setRelatedEvents(linkedEvents.slice(0, 5));
+          return;
+        }
       }
 
-      const fallback = await eventsApi.upcoming({ limit: 5 });
-      setRelatedEvents(fallback.data.filter((e) => e.slug !== currentSlug));
+      const fallbackEvents = await fetchFallbackEvents(currentSlug);
+      setRelatedEvents(fallbackEvents);
     } catch (err) {
       console.error("Failed to fetch related events:", err);
-      try {
-        const fallback = await eventsApi.upcoming({ limit: 5 });
-        setRelatedEvents(fallback.data.filter((e) => e.slug !== currentSlug));
-      } catch {
-        setRelatedEvents([]);
-      }
+      const fallbackEvents = await fetchFallbackEvents(currentSlug);
+      setRelatedEvents(fallbackEvents);
     }
   };
 
@@ -186,9 +219,9 @@ export default function EventDetailPage() {
           ]}
         />
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
           {/* Main Content */}
-          <div className="lg:col-span-2">
+          <div className="min-w-0 lg:col-span-2">
             {/* Featured Image */}
             {eventCoverImage && (
               <div className="relative h-[500px] w-full rounded-2xl overflow-hidden mb-6">
@@ -206,14 +239,14 @@ export default function EventDetailPage() {
             )}
 
             {/* Event Header */}
-            <div className="bg-white rounded-2xl p-8 mb-6 shadow-sm">
+            <div className="mb-6">
               <h1 className="font-display text-3xl md:text-4xl font-bold text-[#1A2B49] mb-6">
                 {event.title}
               </h1>
 
               {/* Event Details Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-6 border-b border-gray-200">
-                <div className="flex items-start gap-3">
+                {event.event_date && <div className="flex items-start gap-3">
                   <Calendar className="w-5 h-5 text-[#0078C0] mt-1 shrink-0" />
                   <div>
                     <p className="text-sm text-gray-600 mb-1">Date</p>
@@ -227,7 +260,7 @@ export default function EventDetailPage() {
                         )}
                     </p>
                   </div>
-                </div>
+                </div>}
 
                 {event.start_time && (
                   <div className="flex items-start gap-3">
@@ -285,7 +318,7 @@ export default function EventDetailPage() {
 
             {/* Description */}
             {event.description && (
-              <div className="bg-white rounded-2xl p-8 mb-6 shadow-sm">
+              <div className="mb-6">
                 <h2 className="font-display text-2xl font-bold text-[#1A2B49] mb-4">
                   About This Event
                 </h2>
@@ -297,7 +330,7 @@ export default function EventDetailPage() {
 
             {/* Content */}
             {!!event.content && (
-              <div className="bg-white rounded-2xl p-8 mb-6 shadow-sm">
+              <div className="mb-6">
                 <h2 className="font-display text-2xl font-bold text-[#1A2B49] mb-4">
                   Event Details
                 </h2>
@@ -316,27 +349,26 @@ export default function EventDetailPage() {
 
           {/* Sidebar */}
           <aside className="lg:sticky lg:top-24 lg:self-start">
-            {relatedEvents.length > 0 && (
-              <div className="flex flex-col rounded-xl bg-white p-5 shadow-sm lg:h-[calc(100vh-7rem)]">
-                <h3 className="font-display text-lg font-bold text-[#1A2B49] mb-5 uppercase tracking-wide">
-                  Related Events
-                </h3>
+            <div className="flex flex-col p-5 lg:h-[calc(100vh-7rem)]">
+              <h3 className="font-display text-lg font-bold text-[#1A2B49] mb-5 uppercase tracking-wide">
+                More Events
+              </h3>
+              {relatedEvents.length > 0 ? (
                 <div className="space-y-4 overflow-y-auto pr-1">
                   {relatedEvents.slice(0, 10).map((relatedEvent) => (
-                    <RelatedEventCard
-                      key={relatedEvent.id}
-                      event={relatedEvent}
-                    />
+                    <RelatedEventCard key={relatedEvent.id} event={relatedEvent} />
                   ))}
                 </div>
-                <Link
-                  href="/events"
-                  className="mt-4 block text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-[#0078C0] hover:text-[#0068A0]"
-                >
-                  View All
-                </Link>
-              </div>
-            )}
+              ) : (
+                <p className="text-sm text-[#6B7280]">No related events available.</p>
+              )}
+              <Link
+                href="/events"
+                className="mt-4 block text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-[#0078C0] hover:text-[#0068A0]"
+              >
+                View All
+              </Link>
+            </div>
           </aside>
         </div>
       </div>

@@ -3,8 +3,13 @@
 import { apiFetch } from "@/lib/csrf";
 import { toast } from "@/lib/utils/toast";
 import type { PartialBlock } from "@blocknote/core";
-import { BlockNoteView } from "@blocknote/mantine";
-import { useCreateBlockNote } from "@blocknote/react";
+import * as BlockNoteMantine from "@blocknote/mantine";
+import { MantineProvider } from "@mantine/core";
+import {
+  BlockNoteViewRaw,
+  ComponentsContext,
+  useCreateBlockNote,
+} from "@blocknote/react";
 import "@blocknote/mantine/style.css";
 import "@blocknote/core/fonts/inter.css";
 import { useTheme } from "next-themes";
@@ -43,6 +48,7 @@ async function defaultUploadImage(file: File): Promise<string> {
 
 const EMPTY_DOC: PartialBlock[] = [{ type: "paragraph" }];
 const SERIALIZE_DEBOUNCE_MS = 300;
+const mantineComponents = BlockNoteMantine.components;
 
 export default function TiptapEditor({
   initialContent = "",
@@ -155,21 +161,34 @@ export default function TiptapEditor({
     }, SERIALIZE_DEBOUNCE_MS);
   }, [emitSerializedHtml]);
 
+  if (!mantineComponents) {
+    return (
+      <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        Editor UI failed to initialize. Please refresh.
+      </div>
+    );
+  }
+
   return (
-    <BlockNoteView
-      editor={editor}
-      theme={resolvedTheme === "dark" ? "dark" : "light"}
-      className="!bg-transparent"
-      editable={editable}
-      formattingToolbar={!classicToolbar}
-      sideMenu={!classicToolbar}
-      slashMenu
-      linkToolbar
-      filePanel
-      tableHandles
-      emojiPicker={false}
-      comments={false}
-      onChange={handleEditorChange}
-    />
+    <MantineProvider withCssVariables={false}>
+      <ComponentsContext.Provider value={mantineComponents}>
+        <BlockNoteViewRaw
+          editor={editor}
+          theme={resolvedTheme === "dark" ? "dark" : "light"}
+          className="bn-mantine !bg-transparent"
+          data-mantine-color-scheme={resolvedTheme === "dark" ? "dark" : "light"}
+          editable={editable}
+          formattingToolbar={!classicToolbar}
+          sideMenu={!classicToolbar}
+          slashMenu
+          linkToolbar
+          filePanel
+          tableHandles
+          emojiPicker={false}
+          comments={false}
+          onChange={handleEditorChange}
+        />
+      </ComponentsContext.Provider>
+    </MantineProvider>
   );
 }

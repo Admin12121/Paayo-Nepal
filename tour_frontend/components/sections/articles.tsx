@@ -12,7 +12,6 @@ export async function ArticlesSection() {
       status: "published",
       type: "article",
     });
-    console.log("Fetched articles:", res);
     articles = res.data.filter((item) => item.post_type === "article");
   } catch {
     articles = [];

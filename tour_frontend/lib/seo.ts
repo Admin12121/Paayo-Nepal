@@ -8,8 +8,10 @@
 //   />
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { PUBLIC_APP_URL } from "@/lib/app-url";
+
 const SITE_NAME = "Paayo Nepal";
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://paayonepal.com";
+const BASE_URL = PUBLIC_APP_URL;
 
 // ─── Website (appears on all pages via root layout) ─────────────────────────
 
