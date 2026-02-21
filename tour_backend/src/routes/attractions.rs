@@ -10,7 +10,7 @@ pub fn routes() -> Router<AppState> {
         )
         .route("/top", get(handlers::attractions::top))
         .route(
-            "/:slug",
+            "/{slug}",
             get(handlers::attractions::get_by_slug)
                 .put(handlers::attractions::update)
                 .delete(handlers::attractions::delete),

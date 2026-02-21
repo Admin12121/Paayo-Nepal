@@ -22,13 +22,37 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 ENV_FILE="${ENV_FILE:-${REPO_ROOT}/.env}"
 
-# Load .env early (if present) so all vars can come from environment files.
-if [[ -f "${ENV_FILE}" ]]; then
-  set -a
-  # shellcheck disable=SC1090
-  source "${ENV_FILE}"
-  set +a
-fi
+# Load .env safely (without shell execution). Supports KEY=value and
+# single/double-quoted values.
+safe_load_env_file() {
+  local env_file="$1"
+  [[ -f "${env_file}" ]] || return 0
+
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    line="${line%$'\r'}"
+    [[ -z "${line}" ]] && continue
+    [[ "${line}" =~ ^[[:space:]]*# ]] && continue
+
+    if [[ "${line}" =~ ^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+      local key="${BASH_REMATCH[1]}"
+      local value="${BASH_REMATCH[2]}"
+
+      # Trim leading spaces in value.
+      value="${value#"${value%%[![:space:]]*}"}"
+
+      # Remove wrapping quotes if present.
+      if [[ "${value}" =~ ^\"(.*)\"$ ]]; then
+        value="${BASH_REMATCH[1]}"
+      elif [[ "${value}" =~ ^\'(.*)\'$ ]]; then
+        value="${BASH_REMATCH[1]}"
+      fi
+
+      export "${key}=${value}"
+    fi
+  done < "${env_file}"
+}
+
+safe_load_env_file "${ENV_FILE}"
 
 # User/domain settings (sensitive vars must be provided via env/.env)
 APP_USER="${APP_USER:-clerk}"
@@ -45,6 +69,18 @@ DATABASE_MIN_CONNECTIONS="${DATABASE_MIN_CONNECTIONS:-5}"
 
 REDIS_PASSWORD="${REDIS_PASSWORD:-}"
 
+# Media storage (local filesystem or S3-compatible object storage)
+MEDIA_STORAGE="${MEDIA_STORAGE:-local}"
+S3_BUCKET="${S3_BUCKET:-}"
+S3_REGION="${S3_REGION:-us-east-1}"
+S3_ENDPOINT="${S3_ENDPOINT:-}"
+S3_PUBLIC_BASE_URL="${S3_PUBLIC_BASE_URL:-}"
+S3_ACCESS_KEY_ID="${S3_ACCESS_KEY_ID:-}"
+S3_SECRET_ACCESS_KEY="${S3_SECRET_ACCESS_KEY:-}"
+S3_SESSION_TOKEN="${S3_SESSION_TOKEN:-}"
+S3_FORCE_PATH_STYLE="${S3_FORCE_PATH_STYLE:-false}"
+S3_KEY_PREFIX="${S3_KEY_PREFIX:-uploads}"
+
 # Compatibility vars requested by user (not used by stack)
 MYSQL_ROOT_PASSWORD="${MYSQL_ROOT_PASSWORD:-}"
 MYSQL_EXPOSE_PORT="${MYSQL_EXPOSE_PORT:-127.0.0.1:3306}"
@@ -53,10 +89,17 @@ MYSQL_EXPOSE_PORT="${MYSQL_EXPOSE_PORT:-127.0.0.1:3306}"
 SMTP_HOST="${SMTP_HOST:-}"
 SMTP_PORT="${SMTP_PORT:-587}"
 SMTP_USER="${SMTP_USER:-}"
-SMTP_PASSWORD="${SMTP_PASSWORD:-}"
+SMTP_PASS="${SMTP_PASS:-${SMTP_PASSWORD:-}}"
 SMTP_FROM="${SMTP_FROM:-${ALERT_EMAIL}}"
+SMTP_REPLY_TO="${SMTP_REPLY_TO:-${ALERT_EMAIL}}"
 SMTP_TLS="${SMTP_TLS:-on}"
 SMTP_STARTTLS="${SMTP_STARTTLS:-on}"
+
+if [[ "${SMTP_HOST,,}" == "google.com" ]]; then
+  printf "[%s] WARN: %s\n" "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+    "SMTP_HOST=google.com is not a valid Gmail SMTP relay endpoint. Using smtp.gmail.com." >&2
+  SMTP_HOST="smtp.gmail.com"
+fi
 
 CPU_THRESHOLD="${ALERT_CPU_THRESHOLD:-90}"
 MEM_THRESHOLD="${ALERT_MEM_THRESHOLD:-90}"
@@ -79,6 +122,12 @@ validate_required_env() {
   require_env_var "ALERT_EMAIL"
   require_env_var "DATABASE_PASSWORD"
   require_env_var "REDIS_PASSWORD"
+
+  if [[ "${MEDIA_STORAGE,,}" == "s3" ]]; then
+    require_env_var "S3_BUCKET"
+    require_env_var "S3_ACCESS_KEY_ID"
+    require_env_var "S3_SECRET_ACCESS_KEY"
+  fi
 }
 
 log() {
@@ -144,6 +193,7 @@ install_required_tools() {
     ca-certificates curl gnupg lsb-release jq unzip \
     ufw fail2ban unattended-upgrades apt-listchanges \
     apparmor apparmor-utils auditd rsyslog cron logrotate \
+    openssl \
     postgresql postgresql-contrib redis-server \
     mailutils msmtp msmtp-mta bsd-mailx \
     sysstat htop net-tools
@@ -307,8 +357,8 @@ configure_msmtp_if_requested() {
   echo "root: ${ALERT_EMAIL}" | sudo tee /etc/aliases >/dev/null
   sudo newaliases || true
 
-  if [[ -z "${SMTP_HOST}" || -z "${SMTP_USER}" || -z "${SMTP_PASSWORD}" ]]; then
-    warn "SMTP relay vars not set (SMTP_HOST/SMTP_USER/SMTP_PASSWORD)."
+  if [[ -z "${SMTP_HOST}" || -z "${SMTP_USER}" || -z "${SMTP_PASS}" ]]; then
+    warn "SMTP relay vars not set (SMTP_HOST/SMTP_USER/SMTP_PASS)."
     warn "Alert emails may not be delivered off-host until SMTP is configured."
     return 0
   fi
@@ -325,12 +375,35 @@ account        default
 host           ${SMTP_HOST}
 port           ${SMTP_PORT}
 user           ${SMTP_USER}
-password       ${SMTP_PASSWORD}
+password       ${SMTP_PASS}
 from           ${SMTP_FROM}
 EOF
 
   sudo chmod 600 /etc/msmtprc
   sudo chown root:root /etc/msmtprc
+}
+
+ensure_tls_certs() {
+  local cert_dir="${REPO_ROOT}/docker/nginx/certs"
+  local fullchain="${cert_dir}/fullchain.pem"
+  local privkey="${cert_dir}/privkey.pem"
+
+  mkdir -p "${cert_dir}"
+
+  if [[ -s "${fullchain}" && -s "${privkey}" ]]; then
+    log "Using existing TLS certificates from ${cert_dir}"
+    return 0
+  fi
+
+  warn "No TLS certificates found in ${cert_dir}. Generating self-signed certificates."
+  openssl req -x509 -nodes -newkey rsa:4096 -sha256 -days 365 \
+    -keyout "${privkey}" \
+    -out "${fullchain}" \
+    -subj "/CN=${APP_DOMAIN}" >/dev/null 2>&1
+
+  chmod 600 "${privkey}"
+  chmod 644 "${fullchain}"
+  warn "Self-signed certificate generated. Replace with a real certificate before public launch."
 }
 
 configure_alerting_jobs() {
@@ -510,10 +583,26 @@ update_env_for_production() {
 
   set_env_var "REDIS_PASSWORD" "${REDIS_PASSWORD}"
   set_env_var "REDIS_PASSWORD_URLENC" "${redis_pass_urlenc}"
+  set_env_var "MEDIA_STORAGE" "${MEDIA_STORAGE}"
+  set_env_var "S3_BUCKET" "${S3_BUCKET}"
+  set_env_var "S3_REGION" "${S3_REGION}"
+  set_env_var "S3_ENDPOINT" "${S3_ENDPOINT}"
+  set_env_var "S3_PUBLIC_BASE_URL" "${S3_PUBLIC_BASE_URL}"
+  set_env_var "S3_ACCESS_KEY_ID" "${S3_ACCESS_KEY_ID}"
+  set_env_var "S3_SECRET_ACCESS_KEY" "${S3_SECRET_ACCESS_KEY}"
+  set_env_var "S3_SESSION_TOKEN" "${S3_SESSION_TOKEN}"
+  set_env_var "S3_FORCE_PATH_STYLE" "${S3_FORCE_PATH_STYLE}"
+  set_env_var "S3_KEY_PREFIX" "${S3_KEY_PREFIX}"
   set_env_var "REDIS_URL" "redis://:${redis_pass_urlenc}@redis:6379"
 
   set_env_var "CORS_ALLOWED_ORIGINS" "${cors_origins}"
   set_env_var "NEXT_PUBLIC_CONTACT_EMAIL" "${ALERT_EMAIL}"
+  set_env_var "SMTP_HOST" "${SMTP_HOST}"
+  set_env_var "SMTP_PORT" "${SMTP_PORT}"
+  set_env_var "SMTP_USER" "${SMTP_USER}"
+  set_env_var "SMTP_PASS" "${SMTP_PASS}"
+  set_env_var "SMTP_FROM" "${SMTP_FROM}"
+  set_env_var "SMTP_REPLY_TO" "${SMTP_REPLY_TO}"
   set_env_var "ALERT_EMAIL" "${ALERT_EMAIL}"
   set_env_var "ALERT_CPU_THRESHOLD" "${CPU_THRESHOLD}"
   set_env_var "ALERT_MEM_THRESHOLD" "${MEM_THRESHOLD}"
@@ -564,7 +653,7 @@ Important:
    sudo docker compose --profile prod ps
    sudo docker compose --profile prod logs -f nginx backend frontend
 
-4) SMTP (recommended): set SMTP_HOST/SMTP_USER/SMTP_PASSWORD and re-run script
+4) SMTP (recommended): set SMTP_HOST/SMTP_USER/SMTP_PASS and re-run script
    to enable reliable external email alerts.
 
 EOF
@@ -585,6 +674,7 @@ main() {
   configure_firewall_and_fail2ban
   configure_periodic_security
   configure_msmtp_if_requested
+  ensure_tls_certs
   configure_alerting_jobs
   update_env_for_production
   deploy_compose_stack

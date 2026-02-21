@@ -44,7 +44,7 @@
 # --------------------------------------------------------------------------
 
 x-postgres-common: &postgres-common
-    image: postgres:16-alpine
+    image: ${POSTGRES_IMAGE:-postgres:alpine}
     restart: unless-stopped
     environment:
         POSTGRES_DB: ${DATABASE_NAME:-tourism}
@@ -66,14 +66,18 @@ x-postgres-common: &postgres-common
         - paayo_net
 
 x-redis-common: &redis-common
-    image: redis:7.4-alpine
+    image: ${REDIS_IMAGE:-redis:alpine}
     restart: unless-stopped
-    command: >
-        redis-server
-        --appendonly yes
-        --requirepass ${REDIS_PASSWORD:-redis_dev_password}
-        --maxmemory ${REDIS_MAX_MEMORY:-256mb}
-        --maxmemory-policy allkeys-lru
+    command:
+        - redis-server
+        - --appendonly
+        - "yes"
+        - --requirepass
+        - ${REDIS_PASSWORD:-redis_dev_password}
+        - --maxmemory
+        - ${REDIS_MAX_MEMORY:-256mb}
+        - --maxmemory-policy
+        - allkeys-lru
     volumes:
         - redis_data:/data
     healthcheck:
@@ -118,6 +122,8 @@ x-frontend-env: &frontend-env
     SMTP_PASS: ${SMTP_PASS:-}
     SMTP_FROM: ${SMTP_FROM:-no-reply@${APP_DOMAIN:-localhost}}
     SMTP_REPLY_TO: ${SMTP_REPLY_TO:-}
+    S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL:-}
+    S3_ENDPOINT: ${S3_ENDPOINT:-}
 
 x-backend-common: &backend-common
     build:
@@ -132,6 +138,16 @@ x-backend-common: &backend-common
         - DATABASE_MIN_CONNECTIONS=${DATABASE_MIN_CONNECTIONS:-5}
         - REDIS_URL=${REDIS_URL:-redis://:${REDIS_PASSWORD_URLENC:-redis_dev_password}@redis:6379}
         - UPLOAD_PATH=/app/uploads
+        - MEDIA_STORAGE=${MEDIA_STORAGE:-local}
+        - S3_BUCKET=${S3_BUCKET:-}
+        - S3_REGION=${S3_REGION:-us-east-1}
+        - S3_ENDPOINT=${S3_ENDPOINT:-}
+        - S3_PUBLIC_BASE_URL=${S3_PUBLIC_BASE_URL:-}
+        - S3_ACCESS_KEY_ID=${S3_ACCESS_KEY_ID:-}
+        - S3_SECRET_ACCESS_KEY=${S3_SECRET_ACCESS_KEY:-}
+        - S3_SESSION_TOKEN=${S3_SESSION_TOKEN:-}
+        - S3_FORCE_PATH_STYLE=${S3_FORCE_PATH_STYLE:-false}
+        - S3_KEY_PREFIX=${S3_KEY_PREFIX:-uploads}
         - MAX_UPLOAD_SIZE=${MAX_UPLOAD_SIZE:-52428800}
         - MAX_IMAGE_WIDTH=${MAX_IMAGE_WIDTH:-1920}
         - THUMBNAIL_WIDTH=${THUMBNAIL_WIDTH:-400}
@@ -202,25 +218,65 @@ services:
             - "6379"
 
     # -----------------------------------------------------------------------
-    # Nginx — Reverse proxy & TLS termination (prod + dev)
+    # Nginx — Reverse proxy & TLS termination (prod)
     # -----------------------------------------------------------------------
     nginx:
-        image: nginx:1.27-alpine
+        image: ${NGINX_IMAGE:-nginx:alpine}
         restart: unless-stopped
-        profiles: ["prod", "dev"]
+        profiles: ["prod"]
         environment:
             APP_DOMAIN: ${APP_DOMAIN:-localhost}
+            S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL:-}
+            S3_ENDPOINT: ${S3_ENDPOINT:-}
         ports:
             - "${NGINX_HTTP_PORT:-80}:80"
             - "${NGINX_HTTPS_PORT:-443}:443"
         volumes:
             - ./docker/nginx/nginx.conf.template:/etc/nginx/templates/default.conf.template:ro
-            # Uncomment for TLS:
-            # - ./docker/nginx/certs:/etc/nginx/certs:ro
+            - ./docker/nginx/certs:/etc/nginx/certs:ro
             - nginx_cache:/var/cache/nginx
         depends_on:
             backend:
                 condition: service_healthy
+            frontend:
+                condition: service_started
+        networks:
+            - paayo_net
+        healthcheck:
+            test:
+                [
+                    "CMD",
+                    "wget",
+                    "--no-verbose",
+                    "--tries=1",
+                    "--spider",
+                    "http://127.0.0.1/nginx-health",
+                ]
+            interval: 15s
+            timeout: 5s
+            retries: 3
+
+    # -----------------------------------------------------------------------
+    # Nginx — Reverse proxy (dev, HTTP only)
+    # -----------------------------------------------------------------------
+    nginx-dev:
+        image: ${NGINX_IMAGE:-nginx:alpine}
+        restart: unless-stopped
+        profiles: ["dev"]
+        environment:
+            APP_DOMAIN: ${DEV_APP_DOMAIN:-localhost}
+            S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL:-}
+            S3_ENDPOINT: ${S3_ENDPOINT:-}
+        ports:
+            - "${NGINX_HTTP_PORT:-80}:80"
+        volumes:
+            - ./docker/nginx/nginx.dev.conf.template:/etc/nginx/templates/default.conf.template:ro
+            - nginx_cache:/var/cache/nginx
+        depends_on:
+            backend:
+                condition: service_healthy
+            frontend-dev:
+                condition: service_started
         networks:
             - paayo_net
         healthcheck:
@@ -259,6 +315,8 @@ services:
             args:
                 BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-dev-secret-change-in-production}
                 NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-${APP_PUBLIC_ORIGIN:-https://${APP_DOMAIN:-localhost}}}
+                S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL:-}
+                S3_ENDPOINT: ${S3_ENDPOINT:-}
         restart: unless-stopped
         profiles: ["prod"]
         environment:
@@ -282,9 +340,15 @@ services:
     #   ./tour_frontend -> /app
     # This gives immediate code updates and quick `docker compose restart
     # frontend-dev` recovery when the dev server hangs.
+    #
+    # IMPORTANT:
+    # Keep `.next` on a Docker-managed volume instead of the host bind mount.
+    # Turbopack writes platform-specific external module links under
+    # `.next/node_modules`; host-created Windows junctions can break when the
+    # app runs in Linux containers and cause ENOENT module load failures.
     # -----------------------------------------------------------------------
     frontend-dev:
-        image: oven/bun:1.2
+        image: ${BUN_IMAGE:-oven/bun:latest}
         restart: unless-stopped
         profiles: ["dev"]
         working_dir: /app
@@ -293,11 +357,19 @@ services:
         environment:
             <<: *frontend-env
             NODE_ENV: development
+            APP_DOMAIN: ${DEV_APP_DOMAIN:-localhost}
+            APP_PUBLIC_ORIGIN: ${DEV_APP_PUBLIC_ORIGIN:-http://localhost}
+            NEXT_PUBLIC_APP_URL: ${DEV_NEXT_PUBLIC_APP_URL:-http://localhost}
+            BETTER_AUTH_URL: ${DEV_BETTER_AUTH_URL:-http://localhost}
+            PASSKEY_ORIGIN: ${DEV_PASSKEY_ORIGIN:-http://localhost}
+            PASSKEY_RP_ID: ${DEV_PASSKEY_RP_ID:-localhost}
             NEXT_TELEMETRY_DISABLED: "1"
-            WATCHPACK_POLLING: "true"
+            DEV_DASHBOARD_WARMUP: ${DEV_DASHBOARD_WARMUP:-true}
+            WATCHPACK_POLLING: ${DEV_WATCHPACK_POLLING:-false}
         volumes:
             - ./tour_frontend:/app
             - frontend_node_modules:/app/node_modules
+            - frontend_next:/app/.next
             - frontend_bun_cache:/root/.bun/install/cache
         expose:
             - "3000"
@@ -324,6 +396,8 @@ volumes:
     nginx_cache:
         driver: local
     frontend_node_modules:
+        driver: local
+    frontend_next:
         driver: local
     frontend_bun_cache:
         driver: local

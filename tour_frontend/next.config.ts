@@ -1,16 +1,43 @@
 import type { NextConfig } from "next";
 
+const storageRemotePatterns: Array<{
+  protocol: "http" | "https";
+  hostname: string;
+  port?: string;
+  pathname: string;
+}> = [];
+
+const allowLocalImageUpstream =
+  process.env.NEXT_IMAGE_ALLOW_LOCAL_IP === "true" ||
+  process.env.NODE_ENV !== "production";
+
+for (const raw of [process.env.S3_PUBLIC_BASE_URL, process.env.S3_ENDPOINT]) {
+  if (!raw || !raw.trim()) continue;
+  try {
+    const parsed = new URL(raw.startsWith("http") ? raw : `https://${raw}`);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") continue;
+    storageRemotePatterns.push({
+      protocol: parsed.protocol.slice(0, -1) as "http" | "https",
+      hostname: parsed.hostname,
+      ...(parsed.port ? { port: parsed.port } : {}),
+      pathname: "/**",
+    });
+  } catch {
+    // Ignore malformed values.
+  }
+}
+
 const nextConfig: NextConfig = {
   // Output standalone build for Docker
   output: "standalone",
 
-  // Server-only packages — prevent bundling Node.js modules (pg, redis, etc.)
-  // into the client bundle. These are used by auth-server.ts which is
-  // dynamically imported by api-client.ts for server-side session extraction.
-  serverExternalPackages: ["pg", "redis"],
+  // Bun + Turbopack can fail to resolve hashed external module aliases
+  // for some server deps in dev. Force bundling for these packages.
+  transpilePackages: ["pg", "redis"],
 
   // Image optimization configuration
   images: {
+    dangerouslyAllowLocalIP: allowLocalImageUpstream,
     localPatterns: [
       {
         // Allow all local assets from /public (e.g. /logo.webp) and rewritten uploads.
@@ -21,21 +48,27 @@ const nextConfig: NextConfig = {
       {
         protocol: "https",
         hostname: "images.unsplash.com",
+        pathname: "/**",
       },
       {
         protocol: "http",
         hostname: "localhost",
+        port: "9000",
+        pathname: "/**",
       },
       {
         // Allow images from the nginx reverse proxy
         protocol: "http",
         hostname: "nginx",
+        pathname: "/**",
       },
       {
         // Allow images from the backend service (Docker internal)
         protocol: "http",
         hostname: "backend",
+        pathname: "/**",
       },
+      ...storageRemotePatterns,
     ],
     // Optimize for common device sizes
     deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
@@ -51,6 +84,17 @@ const nextConfig: NextConfig = {
     // Optimize package imports
     optimizePackageImports: ["lucide-react", "@reduxjs/toolkit"],
   },
+
+  // Keep more pages in memory during local dev so dashboard routes don't
+  // get disposed and recompiled as frequently between navigations.
+  ...(process.env.NODE_ENV === "development"
+    ? {
+        onDemandEntries: {
+          maxInactiveAge: 1000 * 60 * 60, // 1 hour
+          pagesBufferLength: 200,
+        },
+      }
+    : {}),
 
   // Logging configuration
   logging: {

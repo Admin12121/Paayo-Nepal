@@ -262,10 +262,7 @@ pub async fn update(
     if existing.author_id != user.id && user.role != crate::models::user::UserRole::Admin {
         return Err(ApiError::Forbidden);
     }
-    let normalized_region_id = input
-        .region_id
-        .as_deref()
-        .map(str::trim);
+    let normalized_region_id = input.region_id.as_deref().map(str::trim);
 
     let video = service
         .update(

@@ -308,10 +308,7 @@ pub async fn update(
         }
     }
 
-    let normalized_region_id = input
-        .region_id
-        .as_deref()
-        .map(str::trim);
+    let normalized_region_id = input.region_id.as_deref().map(str::trim);
 
     // Sanitize rich HTML description before storage (defence-in-depth)
     let sanitized_description = input.description.as_deref().map(sanitize_rich_html);
@@ -463,10 +460,9 @@ pub async fn list_branches(
         .await?
         .ok_or_else(|| ApiError::NotFound("Hotel not found".to_string()))?;
 
-    let is_privileged = user
-        .0
-        .as_ref()
-        .map_or(false, |u| u.role == UserRole::Admin || u.role == UserRole::Editor);
+    let is_privileged = user.0.as_ref().map_or(false, |u| {
+        u.role == UserRole::Admin || u.role == UserRole::Editor
+    });
     if !is_privileged && hotel.status != ContentStatus::Published {
         return Err(ApiError::NotFound("Hotel not found".to_string()));
     }

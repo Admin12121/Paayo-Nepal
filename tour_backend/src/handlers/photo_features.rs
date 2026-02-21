@@ -257,10 +257,7 @@ pub async fn update(
         .await?
         .ok_or_else(|| ApiError::NotFound("Photo feature not found".to_string()))?;
 
-    let normalized_region_id = input
-        .region_id
-        .as_deref()
-        .map(str::trim);
+    let normalized_region_id = input.region_id.as_deref().map(str::trim);
 
     let photo = service
         .update(
@@ -398,10 +395,9 @@ pub async fn list_images(
         .ok_or_else(|| ApiError::NotFound("Photo feature not found".to_string()))?;
 
     // Prevent draft image leakage to public callers.
-    let is_privileged = user
-        .0
-        .as_ref()
-        .map_or(false, |u| u.role == UserRole::Admin || u.role == UserRole::Editor);
+    let is_privileged = user.0.as_ref().map_or(false, |u| {
+        u.role == UserRole::Admin || u.role == UserRole::Editor
+    });
     if !is_privileged && photo.status != ContentStatus::Published {
         return Err(ApiError::NotFound("Photo feature not found".to_string()));
     }

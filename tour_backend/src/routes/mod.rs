@@ -74,8 +74,8 @@ pub fn api_routes(
     // -----------------------------------------------------------------
     // Engagement routes — public but tightly rate-limited (60/min per device)
     //   • POST /views           (record view)
-    //   • POST /content/:t/:id/like (toggle like)
-    //   • GET  /content/:t/:id/like-status
+    //   • POST /content/{t}/{id}/like (toggle like)
+    //   • GET  /content/{t}/{id}/like-status
     //   • POST /comments        (create guest comment)
     //
     // Uses per-device keying: X-Device-Id header (frontend fingerprint)

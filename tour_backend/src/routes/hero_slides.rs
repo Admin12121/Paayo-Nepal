@@ -14,8 +14,8 @@ pub fn routes() -> Router<AppState> {
         .route("/admin/counts", get(handlers::hero_slides::counts))
         .route("/admin/reorder", put(handlers::hero_slides::reorder))
         .route("/", post(handlers::hero_slides::create))
-        .route("/:id", get(handlers::hero_slides::get_by_id))
-        .route("/:id", put(handlers::hero_slides::update))
-        .route("/:id", delete(handlers::hero_slides::delete))
-        .route("/:id/toggle", post(handlers::hero_slides::toggle_active))
+        .route("/{id}", get(handlers::hero_slides::get_by_id))
+        .route("/{id}", put(handlers::hero_slides::update))
+        .route("/{id}", delete(handlers::hero_slides::delete))
+        .route("/{id}/toggle", post(handlers::hero_slides::toggle_active))
 }

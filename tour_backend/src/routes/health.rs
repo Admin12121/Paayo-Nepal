@@ -37,7 +37,7 @@ pub async fn health_check(State(state): State<AppState>) -> Json<HealthResponse>
 
     // Check Redis connection
     let redis_status = match redis::cmd("PING")
-        .query_async::<_, String>(&mut state.redis.clone())
+        .query_async::<String>(&mut state.redis.clone())
         .await
     {
         Ok(_) => "connected".to_string(),

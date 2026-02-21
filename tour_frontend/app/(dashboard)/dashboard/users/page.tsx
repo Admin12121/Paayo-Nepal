@@ -1,14 +1,10 @@
 import { redirect } from "next/navigation";
-import { auth } from "@/lib/auth-server";
-import { headers } from "next/headers";
 import UsersManagement from "@/components/dashboard/UsersManagement";
+import { getServerSession } from "@/lib/server-session";
 
 export default async function UsersPage() {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (
-    !session ||
-    (session.user as Record<string, unknown>).role !== "admin"
-  ) {
+  const session = await getServerSession();
+  if (!session || session.user.role !== "admin") {
     redirect("/dashboard");
   }
 

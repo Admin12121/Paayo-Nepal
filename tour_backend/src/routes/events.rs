@@ -10,7 +10,7 @@ pub fn routes() -> Router<AppState> {
         )
         .route("/upcoming", get(handlers::events::upcoming))
         .route(
-            "/:slug",
+            "/{slug}",
             get(handlers::events::get_by_slug)
                 .put(handlers::events::update)
                 .delete(handlers::events::delete),

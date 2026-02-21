@@ -50,6 +50,35 @@ server {
     listen 80;
     server_name ${APP_DOMAIN} www.${APP_DOMAIN} _;
 
+    # Keep a plain HTTP health endpoint for container healthchecks.
+    location /nginx-health {
+        access_log off;
+        return 200 "ok\n";
+        add_header Content-Type text/plain;
+    }
+
+    # ACME HTTP-01 challenge path (optional; useful if certbot writes here).
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    # Redirect all other traffic to HTTPS.
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    server_name ${APP_DOMAIN} www.${APP_DOMAIN} _;
+
+    ssl_certificate     /etc/nginx/certs/fullchain.pem;
+    ssl_certificate_key /etc/nginx/certs/privkey.pem;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_session_timeout 1d;
+    ssl_session_cache   shared:SSL:10m;
+    ssl_session_tickets off;
+
     # Increase body size for file uploads
     client_max_body_size 50M;
 
@@ -70,7 +99,7 @@ server {
     # frame-src: whitelisted video embed domains (must match the frontend
     # DOMPurify ALLOWED_IFRAME_DOMAINS list in lib/sanitize.ts).
     add_header Content-Security-Policy
-        "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://images.unsplash.com https://*.tile.openstreetmap.org; font-src 'self'; connect-src 'self' https://*.tile.openstreetmap.org; frame-src https://www.youtube.com https://www.youtube-nocookie.com https://player.vimeo.com https://open.spotify.com; media-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';"
+        "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://images.unsplash.com https://*.tile.openstreetmap.org ${S3_PUBLIC_BASE_URL} ${S3_ENDPOINT} https://*.your-objectstorage.com; font-src 'self'; connect-src 'self' https://*.tile.openstreetmap.org; frame-src https://www.youtube.com https://www.youtube-nocookie.com https://player.vimeo.com https://open.spotify.com; media-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';"
         always;
 
     # ------------------------------------------------------------------
@@ -180,7 +209,7 @@ server {
         add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
         add_header Permissions-Policy     "camera=(), microphone=(), geolocation=(self)" always;
         add_header Content-Security-Policy
-            "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://images.unsplash.com https://*.tile.openstreetmap.org; font-src 'self'; connect-src 'self' https://*.tile.openstreetmap.org; frame-src https://www.youtube.com https://www.youtube-nocookie.com https://player.vimeo.com https://open.spotify.com; media-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';"
+            "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://images.unsplash.com https://*.tile.openstreetmap.org ${S3_PUBLIC_BASE_URL} ${S3_ENDPOINT} https://*.your-objectstorage.com; font-src 'self'; connect-src 'self' https://*.tile.openstreetmap.org; frame-src https://www.youtube.com https://www.youtube-nocookie.com https://player.vimeo.com https://open.spotify.com; media-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';"
             always;
 
         proxy_read_timeout  30s;
@@ -210,7 +239,7 @@ server {
         add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
         add_header Permissions-Policy     "camera=(), microphone=(), geolocation=(self)" always;
         add_header Content-Security-Policy
-            "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://images.unsplash.com https://*.tile.openstreetmap.org; font-src 'self'; connect-src 'self' https://*.tile.openstreetmap.org; frame-src https://www.youtube.com https://www.youtube-nocookie.com https://player.vimeo.com https://open.spotify.com; media-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';"
+            "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://images.unsplash.com https://*.tile.openstreetmap.org ${S3_PUBLIC_BASE_URL} ${S3_ENDPOINT} https://*.your-objectstorage.com; font-src 'self'; connect-src 'self' https://*.tile.openstreetmap.org; frame-src https://www.youtube.com https://www.youtube-nocookie.com https://player.vimeo.com https://open.spotify.com; media-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';"
             always;
     }
 
@@ -254,7 +283,7 @@ server {
         add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
         add_header Permissions-Policy     "camera=(), microphone=(), geolocation=(self)" always;
         add_header Content-Security-Policy
-            "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://images.unsplash.com https://*.tile.openstreetmap.org; font-src 'self'; connect-src 'self' https://*.tile.openstreetmap.org; frame-src https://www.youtube.com https://www.youtube-nocookie.com https://player.vimeo.com https://open.spotify.com; media-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';"
+            "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://images.unsplash.com https://*.tile.openstreetmap.org ${S3_PUBLIC_BASE_URL} ${S3_ENDPOINT} https://*.your-objectstorage.com; font-src 'self'; connect-src 'self' https://*.tile.openstreetmap.org; frame-src https://www.youtube.com https://www.youtube-nocookie.com https://player.vimeo.com https://open.spotify.com; media-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';"
             always;
     }
 
@@ -274,15 +303,6 @@ server {
     }
 
     # ------------------------------------------------------------------
-    # Health check for the nginx instance itself
-    # ------------------------------------------------------------------
-    location /nginx-health {
-        access_log off;
-        return 200 "ok\n";
-        add_header Content-Type text/plain;
-    }
-
-    # ------------------------------------------------------------------
     # Error pages
     # ------------------------------------------------------------------
     error_page 502 503 504 /50x.html;
@@ -291,3 +311,4 @@ server {
         internal;
     }
 }
+

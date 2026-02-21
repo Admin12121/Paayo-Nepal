@@ -1,6 +1,25 @@
 use super::{DatabaseConfig, RedisConfig};
 use anyhow::Result;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MediaStorage {
+    Local,
+    S3,
+}
+
+#[derive(Debug, Clone)]
+pub struct S3Config {
+    pub bucket: String,
+    pub region: String,
+    pub endpoint: Option<String>,
+    pub public_base_url: Option<String>,
+    pub access_key_id: String,
+    pub secret_access_key: String,
+    pub session_token: Option<String>,
+    pub force_path_style: bool,
+    pub key_prefix: String,
+}
+
 #[derive(Debug, Clone)]
 pub struct ServerConfig {
     pub port: u16,
@@ -9,10 +28,12 @@ pub struct ServerConfig {
 
 #[derive(Debug, Clone)]
 pub struct MediaConfig {
+    pub storage: MediaStorage,
     pub upload_path: String,
     pub max_upload_size: usize,
     pub max_image_width: u32,
     pub thumbnail_width: u32,
+    pub s3: Option<S3Config>,
 }
 
 #[derive(Debug, Clone)]
@@ -41,6 +62,13 @@ impl Settings {
     pub fn new() -> Result<Self> {
         dotenvy::dotenv().ok();
 
+        let media_storage_raw =
+            std::env::var("MEDIA_STORAGE").unwrap_or_else(|_| "local".to_string());
+        let media_storage = match media_storage_raw.trim().to_ascii_lowercase().as_str() {
+            "s3" => MediaStorage::S3,
+            _ => MediaStorage::Local,
+        };
+
         Ok(Self {
             server: ServerConfig {
                 port: std::env::var("PORT")
@@ -65,6 +93,7 @@ impl Settings {
                     .unwrap_or_else(|_| "redis://localhost:6379".to_string()),
             },
             media: MediaConfig {
+                storage: media_storage.clone(),
                 upload_path: std::env::var("UPLOAD_PATH")
                     .unwrap_or_else(|_| "./uploads".to_string()),
                 max_upload_size: std::env::var("MAX_UPLOAD_SIZE")
@@ -79,6 +108,37 @@ impl Settings {
                     .unwrap_or_else(|_| "400".to_string())
                     .parse()
                     .unwrap_or(400),
+                s3: if media_storage == MediaStorage::S3 {
+                    Some(S3Config {
+                        bucket: std::env::var("S3_BUCKET")
+                            .expect("S3_BUCKET must be set when MEDIA_STORAGE=s3"),
+                        region: std::env::var("S3_REGION")
+                            .unwrap_or_else(|_| "us-east-1".to_string()),
+                        endpoint: std::env::var("S3_ENDPOINT")
+                            .ok()
+                            .map(|s| s.trim().to_string())
+                            .filter(|s| !s.is_empty()),
+                        public_base_url: std::env::var("S3_PUBLIC_BASE_URL")
+                            .ok()
+                            .map(|s| s.trim().to_string())
+                            .filter(|s| !s.is_empty()),
+                        access_key_id: std::env::var("S3_ACCESS_KEY_ID")
+                            .expect("S3_ACCESS_KEY_ID must be set when MEDIA_STORAGE=s3"),
+                        secret_access_key: std::env::var("S3_SECRET_ACCESS_KEY")
+                            .expect("S3_SECRET_ACCESS_KEY must be set when MEDIA_STORAGE=s3"),
+                        session_token: std::env::var("S3_SESSION_TOKEN")
+                            .ok()
+                            .map(|s| s.trim().to_string())
+                            .filter(|s| !s.is_empty()),
+                        force_path_style: parse_env_bool("S3_FORCE_PATH_STYLE", false),
+                        key_prefix: std::env::var("S3_KEY_PREFIX")
+                            .unwrap_or_else(|_| "uploads".to_string())
+                            .trim_matches('/')
+                            .to_string(),
+                    })
+                } else {
+                    None
+                },
             },
             cors: CorsConfig {
                 allowed_origins: std::env::var("CORS_ALLOWED_ORIGINS")
@@ -95,5 +155,15 @@ impl Settings {
                 name: std::env::var("ADMIN_NAME").unwrap_or_else(|_| "Admin".to_string()),
             },
         })
+    }
+}
+
+fn parse_env_bool(name: &str, default: bool) -> bool {
+    match std::env::var(name) {
+        Ok(value) => matches!(
+            value.trim().to_ascii_lowercase().as_str(),
+            "1" | "true" | "yes" | "on"
+        ),
+        Err(_) => default,
     }
 }

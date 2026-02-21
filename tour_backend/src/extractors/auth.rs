@@ -1,5 +1,4 @@
 use axum::{
-    async_trait,
     extract::FromRequestParts,
     http::{request::Parts, StatusCode},
 };
@@ -16,7 +15,6 @@ pub struct AuthenticatedUser {
     pub is_active: bool,
 }
 
-#[async_trait]
 impl<S> FromRequestParts<S> for AuthenticatedUser
 where
     S: Send + Sync,
@@ -36,7 +34,6 @@ where
 #[derive(Debug, Clone)]
 pub struct OptionalUser(pub Option<AuthenticatedUser>);
 
-#[async_trait]
 impl<S> FromRequestParts<S> for OptionalUser
 where
     S: Send + Sync,
@@ -54,7 +51,6 @@ where
 #[derive(Debug, Clone)]
 pub struct AdminUser(pub AuthenticatedUser);
 
-#[async_trait]
 impl<S> FromRequestParts<S> for AdminUser
 where
     S: Send + Sync,
@@ -80,7 +76,6 @@ where
 #[derive(Debug, Clone)]
 pub struct EditorUser(pub AuthenticatedUser);
 
-#[async_trait]
 impl<S> FromRequestParts<S> for EditorUser
 where
     S: Send + Sync,
@@ -106,7 +101,6 @@ where
 #[derive(Debug, Clone)]
 pub struct ActiveEditorUser(pub AuthenticatedUser);
 
-#[async_trait]
 impl<S> FromRequestParts<S> for ActiveEditorUser
 where
     S: Send + Sync,

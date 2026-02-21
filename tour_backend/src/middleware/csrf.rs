@@ -26,7 +26,7 @@ use axum::{
     middleware::Next,
     response::Response,
 };
-use rand::RngCore;
+use rand::RngExt;
 
 /// Cookie name — deliberately NOT HttpOnly so client JS can read it.
 const CSRF_COOKIE_NAME: &str = "paayo_csrf";
@@ -169,7 +169,7 @@ fn extract_csrf_cookie(request: &Request) -> Option<String> {
 /// Generate a cryptographically random CSRF token (hex-encoded).
 fn generate_token() -> String {
     let mut buf = [0u8; TOKEN_BYTES];
-    rand::thread_rng().fill_bytes(&mut buf);
+    rand::rng().fill(&mut buf);
     hex::encode(buf)
 }
 

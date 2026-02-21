@@ -26,13 +26,13 @@ export function ConditionalLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <TransitionProviders>
-      <StoreProvider>
-        <Header />
+    <StoreProvider>
+      <Header />
+      <TransitionProviders>
         <main className="pt-20">{children}</main>
-        <Footer />
-        <Toaster position="top-right" richColors closeButton />
-      </StoreProvider>
-    </TransitionProviders>
+      </TransitionProviders>
+      <Footer />
+      <Toaster position="top-right" richColors closeButton />
+    </StoreProvider>
   );
 }

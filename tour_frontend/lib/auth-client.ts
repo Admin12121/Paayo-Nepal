@@ -12,6 +12,12 @@ function resolveBaseUrl(): string {
 const authClient = createAuthClient({
   baseURL: resolveBaseUrl(),
   plugins: [twoFactorClient(), passkeyClient()],
+  sessionOptions: {
+    // Avoid background re-fetches on tab focus; explicit auth actions and
+    // route-level server checks are enough for this app.
+    refetchOnWindowFocus: false,
+    refetchInterval: 0,
+  },
 });
 
 export const { signIn, signUp, signOut, useSession, twoFactor, passkey } =

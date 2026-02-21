@@ -9,7 +9,7 @@ pub fn routes() -> Router<AppState> {
             get(handlers::activities::list).post(handlers::activities::create),
         )
         .route(
-            "/:slug",
+            "/{slug}",
             get(handlers::activities::get_by_slug)
                 .put(handlers::activities::update)
                 .delete(handlers::activities::delete),

@@ -98,8 +98,7 @@ impl ContentLinkService {
         Self::validate_no_self_link(source_type, source_id, target_type, target_id)?;
         self.validate_source_exists(source_type, source_id).await?;
         self.validate_target_exists(target_type, target_id).await?;
-        self
-            .validate_no_duplicate(source_type, source_id, target_type, target_id)
+        self.validate_no_duplicate(source_type, source_id, target_type, target_id)
             .await?;
 
         let id = Uuid::new_v4().to_string();
@@ -380,16 +379,20 @@ impl ContentLinkService {
     ) -> Result<(), ApiError> {
         let exists: (bool,) = match source_type {
             "post" => {
-                sqlx::query_as("SELECT EXISTS(SELECT 1 FROM posts WHERE id = $1 AND deleted_at IS NULL)")
-                    .bind(source_id)
-                    .fetch_one(&self.db)
-                    .await?
+                sqlx::query_as(
+                    "SELECT EXISTS(SELECT 1 FROM posts WHERE id = $1 AND deleted_at IS NULL)",
+                )
+                .bind(source_id)
+                .fetch_one(&self.db)
+                .await?
             }
             "region" => {
-                sqlx::query_as("SELECT EXISTS(SELECT 1 FROM regions WHERE id = $1 AND deleted_at IS NULL)")
-                    .bind(source_id)
-                    .fetch_one(&self.db)
-                    .await?
+                sqlx::query_as(
+                    "SELECT EXISTS(SELECT 1 FROM regions WHERE id = $1 AND deleted_at IS NULL)",
+                )
+                .bind(source_id)
+                .fetch_one(&self.db)
+                .await?
             }
             _ => {
                 return Err(ApiError::ValidationError(format!(
@@ -416,24 +419,26 @@ impl ContentLinkService {
     ) -> Result<(), ApiError> {
         let exists: (bool,) = match target_type {
             "post" => {
-                sqlx::query_as("SELECT EXISTS(SELECT 1 FROM posts WHERE id = $1 AND deleted_at IS NULL)")
-                    .bind(target_id)
-                    .fetch_one(&self.db)
-                    .await?
-            }
-            "photo" => {
                 sqlx::query_as(
-                    "SELECT EXISTS(SELECT 1 FROM photo_features WHERE id = $1 AND deleted_at IS NULL)",
+                    "SELECT EXISTS(SELECT 1 FROM posts WHERE id = $1 AND deleted_at IS NULL)",
                 )
                 .bind(target_id)
                 .fetch_one(&self.db)
                 .await?
             }
+            "photo" => sqlx::query_as(
+                "SELECT EXISTS(SELECT 1 FROM photo_features WHERE id = $1 AND deleted_at IS NULL)",
+            )
+            .bind(target_id)
+            .fetch_one(&self.db)
+            .await?,
             "video" => {
-                sqlx::query_as("SELECT EXISTS(SELECT 1 FROM videos WHERE id = $1 AND deleted_at IS NULL)")
-                    .bind(target_id)
-                    .fetch_one(&self.db)
-                    .await?
+                sqlx::query_as(
+                    "SELECT EXISTS(SELECT 1 FROM videos WHERE id = $1 AND deleted_at IS NULL)",
+                )
+                .bind(target_id)
+                .fetch_one(&self.db)
+                .await?
             }
             _ => {
                 return Err(ApiError::ValidationError(format!(

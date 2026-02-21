@@ -286,11 +286,15 @@ pub async fn cleanup(
         }));
     }
 
-    // Full cleanup: find orphans, delete DB records, then delete files
+    // Full cleanup:
+    // 1) find orphan candidates
+    // 2) delete files from storage
+    // 3) delete DB rows only for successfully deleted files
     let (orphans, mut report) = cleanup_service.cleanup(grace_hours).await?;
 
     let mut files_deleted = 0usize;
     let mut errors = Vec::new();
+    let mut deleted_file_media_ids = Vec::new();
 
     for orphan in &orphans {
         let thumb = orphan.thumbnail_path.as_deref().unwrap_or("");
@@ -300,6 +304,7 @@ pub async fn cleanup(
             .await
         {
             Ok(_) => {
+                deleted_file_media_ids.push(orphan.id.clone());
                 files_deleted += 1;
                 if !thumb.is_empty() {
                     files_deleted += 1;
@@ -311,6 +316,12 @@ pub async fn cleanup(
                 errors.push(msg);
             }
         }
+    }
+
+    if !deleted_file_media_ids.is_empty() {
+        report.orphans_deleted = cleanup_service
+            .delete_orphan_records(&deleted_file_media_ids)
+            .await?;
     }
 
     report.files_deleted = files_deleted;
@@ -360,10 +371,14 @@ pub async fn delete(
         .delete_image(&existing.filename, thumbnail)
         .await
         .map_err(|e| {
-            tracing::warn!("Failed to delete image files: {}", e);
-            // Continue even if file deletion fails
-        })
-        .ok();
+            tracing::error!(
+                "Failed to delete media files for {} ({}): {}",
+                existing.id,
+                existing.filename,
+                e
+            );
+            ApiError::InternalServerError
+        })?;
 
     // Delete from database
     service.delete(&id).await?;

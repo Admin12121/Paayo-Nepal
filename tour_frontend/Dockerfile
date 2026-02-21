@@ -1,7 +1,7 @@
 # Multi-stage Dockerfile for Next.js Frontend using Bun
 
 # Development stage
-FROM oven/bun:1.2 AS development
+FROM oven/bun:1 AS development
 
 WORKDIR /app
 
@@ -19,7 +19,7 @@ EXPOSE 3000
 CMD ["bun", "run", "dev"]
 
 # Builder stage
-FROM oven/bun:1.2 AS builder
+FROM oven/bun:1 AS builder
 
 WORKDIR /app
 
@@ -34,13 +34,17 @@ ENV NODE_ENV=production
 # Build-time settings for BetterAuth (required for Next.js static generation)
 ARG BETTER_AUTH_SECRET=build-time-placeholder-secret-change-in-production
 ARG NEXT_PUBLIC_APP_URL=http://localhost:3000
+ARG S3_PUBLIC_BASE_URL=
+ARG S3_ENDPOINT=
 ENV BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
 ENV NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}
+ENV S3_PUBLIC_BASE_URL=${S3_PUBLIC_BASE_URL}
+ENV S3_ENDPOINT=${S3_ENDPOINT}
 
 RUN bun run build
 
 # Production stage
-FROM oven/bun:1.2-slim AS production
+FROM oven/bun:1-slim AS production
 
 WORKDIR /app
 

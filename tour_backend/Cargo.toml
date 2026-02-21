@@ -7,10 +7,10 @@ authors = ["Paayo Nepal Team"]
 
 [dependencies]
 # Web Framework
-axum = { version = "0.7", features = ["multipart", "macros"] }
+axum = { version = "0.8", features = ["multipart", "macros"] }
 tokio = { version = "1.49", features = ["full"] }
-tower = { version = "0.4", features = ["full"] }
-tower-http = { version = "0.5", features = ["cors", "trace", "compression-gzip", "limit", "timeout", "fs"] }
+tower = { version = "0.5", features = ["full"] }
+tower-http = { version = "0.6", features = ["cors", "trace", "compression-gzip", "limit", "timeout", "fs"] }
 
 # Database
 # - disable default features to avoid unused drivers in the dependency graph
@@ -18,7 +18,10 @@ tower-http = { version = "0.5", features = ["cors", "trace", "compression-gzip",
 sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio", "postgres", "chrono", "uuid", "json", "macros", "migrate"] }
 
 # Redis
-redis = { version = "0.25", features = ["tokio-comp", "connection-manager"] }
+redis = { version = "1.0", features = ["tokio-comp", "connection-manager"] }
+aws-config = "1.8"
+aws-sdk-s3 = "1.124"
+aws-credential-types = "1.2"
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
@@ -34,12 +37,12 @@ chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.21", features = ["v4", "serde"] }
 
 # Password hashing (BetterAuth compatible)
-bcrypt = "0.15"
+bcrypt = "0.18"
 
 # Image Processing - AVIF support
 image = { version = "0.25", features = ["avif", "jpeg", "png", "webp"] }
 blurhash = "0.2"
-ravif = { version = "0.12", default-features = false, features = ["threading"] } # Disable asm to avoid NASM requirement
+ravif = { version = "0.13", default-features = false, features = ["threading"] } # Disable asm to avoid NASM requirement
 
 # Async utilities
 futures = "0.3"
@@ -49,18 +52,18 @@ tokio-stream = "0.1"
 
 # Environment & Config
 dotenvy = "0.15"
-config = "0.14"
+config = "0.15"
 
 # Logging & Tracing
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
 # Error handling
-thiserror = "1.0"
+thiserror = "2.0"
 anyhow = "1.0"
 
 # Rate limiting
-governor = "0.6"
+governor = "0.10"
 
 # Slug generation
 slug = "0.1"
@@ -69,11 +72,11 @@ slug = "0.1"
 sha2 = "0.10"
 
 # CSRF token generation
-rand = "0.8"
+rand = "0.10"
 hex = "0.4"
 
 # HTML sanitization (XSS prevention for user-submitted content)
-ammonia = "3"
+ammonia = "4"
 
 # MIME type detection
 mime_guess = "2.0"

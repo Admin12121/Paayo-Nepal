@@ -42,7 +42,11 @@ function resolveSmtpConfig(): SmtpConfig | null {
     return cachedConfig;
   }
 
-  const host = process.env.SMTP_HOST?.trim() || "";
+  let host = process.env.SMTP_HOST?.trim() || "";
+  if (host.toLowerCase() === "google.com") {
+    // Common misconfiguration for Gmail SMTP.
+    host = "smtp.gmail.com";
+  }
   const from = process.env.SMTP_FROM?.trim() || "";
 
   if (!host || !from) {

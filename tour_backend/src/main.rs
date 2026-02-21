@@ -68,11 +68,14 @@ async fn main() -> anyhow::Result<()> {
     let cache = CacheService::new(redis.clone());
 
     // Initialize image service
-    let image_service = ImageService::new(settings.media.upload_path.clone().into());
+    let image_service = ImageService::from_config(&settings.media)
+        .await
+        .expect("Failed to initialize image service");
     image_service
         .ensure_upload_dir()
         .await
         .expect("Failed to create upload directory");
+    let use_local_upload_service = image_service.uses_local_filesystem();
     let image_service = Arc::new(image_service);
 
     tracing::info!("Image service initialized");
@@ -202,17 +205,21 @@ async fn main() -> anyhow::Result<()> {
 
     let api_limiter_for_layer = api_limiter.clone();
 
-    let app = Router::new()
-        .nest(
-            "/api",
-            routes::api_routes(
-                state.clone(),
-                engagement_limiter,
-                write_limiter,
-                upload_limiter,
-            ),
-        )
-        .nest_service("/uploads", upload_service)
+    let mut app = Router::new().nest(
+        "/api",
+        routes::api_routes(
+            state.clone(),
+            engagement_limiter,
+            write_limiter,
+            upload_limiter,
+        ),
+    );
+
+    if use_local_upload_service {
+        app = app.nest_service("/uploads", upload_service);
+    }
+
+    app = app
         // --- innermost layers first ---
         .layer(from_fn(auto_cache_middleware))
         // Optional auth on ALL routes — populates AuthenticatedUser extension
@@ -231,8 +238,7 @@ async fn main() -> anyhow::Result<()> {
         .layer(from_fn(request_id_middleware))
         .layer(TraceLayer::new_for_http())
         .layer(CompressionLayer::new())
-        .layer(cors)
-        .with_state(state);
+        .layer(cors);
 
     let addr = format!("{}:{}", settings.server.host, settings.server.port);
     let listener = tokio::net::TcpListener::bind(&addr).await?;
@@ -241,7 +247,8 @@ async fn main() -> anyhow::Result<()> {
 
     axum::serve(
         listener,
-        app.into_make_service_with_connect_info::<SocketAddr>(),
+        app.with_state(state)
+            .into_make_service_with_connect_info::<SocketAddr>(),
     )
     .await?;
 

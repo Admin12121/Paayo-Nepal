@@ -99,13 +99,8 @@ pub async fn create(
     let normalized_target_type = input.target_type.trim().to_lowercase();
     let normalized_target_id = input.target_id.trim();
 
-    ensure_source_write_permission(
-        &state,
-        &user,
-        &normalized_source_type,
-        normalized_source_id,
-    )
-    .await?;
+    ensure_source_write_permission(&state, &user, &normalized_source_type, normalized_source_id)
+        .await?;
 
     let service = state.content_link_service();
     let link = service
@@ -218,7 +213,11 @@ pub async fn set_links(
 
     let service = state.content_link_service();
     let links = service
-        .set_links(&normalized_source_type, &normalized_source_id, &normalized_links)
+        .set_links(
+            &normalized_source_type,
+            &normalized_source_id,
+            &normalized_links,
+        )
         .await?;
     Ok(Json(links))
 }
@@ -241,13 +240,8 @@ pub async fn delete_all_for_source(
         ));
     }
 
-    ensure_source_write_permission(
-        &state,
-        &user,
-        &normalized_source_type,
-        normalized_source_id,
-    )
-    .await?;
+    ensure_source_write_permission(&state, &user, &normalized_source_type, normalized_source_id)
+        .await?;
 
     let service = state.content_link_service();
     let count = service

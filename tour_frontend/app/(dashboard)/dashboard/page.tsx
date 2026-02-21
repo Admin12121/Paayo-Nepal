@@ -677,7 +677,13 @@ export default function DashboardPage() {
                 content={
                   <ChartTooltipContent
                     labelFormatter={(value) =>
-                      new Date(value).toLocaleDateString("en-US", {
+                      new Date(
+                        typeof value === "string" ||
+                          typeof value === "number" ||
+                          value instanceof Date
+                          ? value
+                          : Date.now(),
+                      ).toLocaleDateString("en-US", {
                         month: "short",
                         day: "numeric",
                       })

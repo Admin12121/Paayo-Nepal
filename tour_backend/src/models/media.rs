@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use std::sync::OnceLock;
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type)]
 #[sqlx(type_name = "media_type", rename_all = "lowercase")]
@@ -59,7 +60,7 @@ pub struct Media {
 impl Media {
     /// Build the public-facing URL for the main image file.
     pub fn url(&self) -> String {
-        format!("/uploads/{}", self.filename)
+        media_public_url(&self.filename)
     }
 
     /// Build the public-facing URL for the thumbnail, if one exists.
@@ -67,7 +68,102 @@ impl Media {
         self.thumbnail_path
             .as_ref()
             .filter(|p| !p.is_empty())
-            .map(|p| format!("/uploads/{}", p))
+            .map(|p| media_public_url(p))
+    }
+}
+
+#[derive(Debug, Clone)]
+struct MediaUrlSettings {
+    storage: String,
+    prefix: String,
+    base_url: String,
+}
+
+fn media_public_url(filename: &str) -> String {
+    let settings = media_url_settings();
+    if settings.storage == "s3" {
+        let base = settings.base_url.trim_end_matches('/');
+        if settings.prefix.is_empty() || base.ends_with(&format!("/{}", settings.prefix)) {
+            format!("{}/{}", base, filename)
+        } else {
+            format!("{}/{}/{}", base, settings.prefix, filename)
+        }
+    } else {
+        format!("/uploads/{}", filename)
+    }
+}
+
+fn media_url_settings() -> &'static MediaUrlSettings {
+    static SETTINGS: OnceLock<MediaUrlSettings> = OnceLock::new();
+    SETTINGS.get_or_init(|| {
+        let storage = std::env::var("MEDIA_STORAGE")
+            .unwrap_or_else(|_| "local".to_string())
+            .trim()
+            .to_ascii_lowercase();
+
+        if storage != "s3" {
+            return MediaUrlSettings {
+                storage: "local".to_string(),
+                prefix: "uploads".to_string(),
+                base_url: String::new(),
+            };
+        }
+
+        let bucket = std::env::var("S3_BUCKET").unwrap_or_default();
+        let prefix = std::env::var("S3_KEY_PREFIX")
+            .unwrap_or_else(|_| "uploads".to_string())
+            .trim_matches('/')
+            .to_string();
+        let force_path_style = parse_env_bool("S3_FORCE_PATH_STYLE", false);
+
+        let base_url = std::env::var("S3_PUBLIC_BASE_URL")
+            .ok()
+            .map(|v| v.trim().trim_end_matches('/').to_string())
+            .filter(|v| !v.is_empty())
+            .or_else(|| {
+                std::env::var("S3_ENDPOINT")
+                    .ok()
+                    .map(|v| normalize_endpoint(&v))
+                    .map(|endpoint| {
+                        if force_path_style || bucket.is_empty() {
+                            if bucket.is_empty() {
+                                endpoint
+                            } else {
+                                format!("{}/{}", endpoint, bucket)
+                            }
+                        } else if let Some((scheme, rest)) = endpoint.split_once("://") {
+                            format!("{}://{}.{}", scheme, bucket, rest)
+                        } else {
+                            endpoint
+                        }
+                    })
+            })
+            .unwrap_or_default();
+
+        MediaUrlSettings {
+            storage: "s3".to_string(),
+            prefix,
+            base_url,
+        }
+    })
+}
+
+fn parse_env_bool(name: &str, default: bool) -> bool {
+    match std::env::var(name) {
+        Ok(value) => matches!(
+            value.trim().to_ascii_lowercase().as_str(),
+            "1" | "true" | "yes" | "on"
+        ),
+        Err(_) => default,
+    }
+}
+
+fn normalize_endpoint(raw: &str) -> String {
+    let endpoint = raw.trim().trim_end_matches('/');
+    if endpoint.starts_with("http://") || endpoint.starts_with("https://") {
+        endpoint.to_string()
+    } else {
+        format!("https://{}", endpoint)
     }
 }
 
@@ -132,11 +228,12 @@ mod tests {
             created_at: Utc::now(),
         };
 
-        assert_eq!(media.url(), "/uploads/abc123.avif");
-        assert_eq!(
-            media.thumbnail_url(),
-            Some("/uploads/abc123_thumb.avif".to_string())
-        );
+        assert!(media.url().ends_with("abc123.avif"));
+        assert!(media
+            .thumbnail_url()
+            .as_deref()
+            .unwrap_or_default()
+            .ends_with("abc123_thumb.avif"));
     }
 
     #[test]
@@ -203,8 +300,14 @@ mod tests {
         };
 
         let json = serde_json::to_value(&media).unwrap();
-        assert_eq!(json["url"], "/uploads/abc123.avif");
-        assert_eq!(json["thumbnail_url"], "/uploads/abc123_thumb.avif");
+        assert!(json["url"]
+            .as_str()
+            .unwrap_or_default()
+            .ends_with("abc123.avif"));
+        assert!(json["thumbnail_url"]
+            .as_str()
+            .unwrap_or_default()
+            .ends_with("abc123_thumb.avif"));
         // Original fields still present
         assert_eq!(json["filename"], "abc123.avif");
         assert_eq!(json["id"], "test-id");

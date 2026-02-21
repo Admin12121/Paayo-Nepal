@@ -278,9 +278,7 @@ impl PostService {
 
         let final_title = title.unwrap_or(&existing.title).to_string();
         let existing_post_type = existing.post_type.to_string();
-        let final_post_type = post_type
-            .unwrap_or(existing_post_type.as_str())
-            .to_string();
+        let final_post_type = post_type.unwrap_or(existing_post_type.as_str()).to_string();
 
         // Regenerate slug only when title changes; handle slug collision with retry loop.
         // Each call to `generate_slug` appends a random UUID fragment, so collisions

@@ -1,7 +1,7 @@
 # Multi-stage Dockerfile for Rust Backend
 
 # Development stage
-FROM rust:1.88-bookworm AS development
+FROM rust:1-bookworm AS development
 
 WORKDIR /app
 
@@ -25,7 +25,7 @@ EXPOSE 8080
 CMD ["cargo", "run"]
 
 # Builder stage
-FROM rust:1.88-bookworm AS builder
+FROM rust:1-bookworm AS builder
 
 WORKDIR /app
 

@@ -1,20 +1,15 @@
 import { redirect } from "next/navigation";
-import { auth } from "@/lib/auth-server";
-import { headers } from "next/headers";
 import AdminSidebar from "@/components/dashboard/AdminSidebar";
-import AdminHeader from "@/components/dashboard/AdminHeader";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { DashboardProvider } from "@/lib/contexts/DashboardContext";
+import { getServerSession } from "@/lib/server-session";
 
 export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  // Get session
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  });
+  const session = await getServerSession();
 
   // Redirect to login if not authenticated
   if (!session) {
@@ -22,11 +17,8 @@ export default async function DashboardLayout({
   }
 
   // Check if user has editor or admin role
-  const userRole = (session.user as Record<string, unknown>).role as string;
-  const isActive =
-    userRole === "admin"
-      ? true
-      : !!(session.user as Record<string, unknown>).isActive;
+  const userRole = session.user.role;
+  const isActive = userRole === "admin" ? true : !!session.user.isActive;
 
   if (userRole !== "admin" && userRole !== "editor") {
     redirect("/");

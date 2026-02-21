@@ -185,12 +185,10 @@ impl MediaCleanupService {
         Ok(total_deleted)
     }
 
-    /// Full cleanup: find orphans, delete DB records, and return a report.
+    /// Cleanup phase 1: find orphan candidates and prepare an initial report.
     ///
-    /// File deletion is NOT done here — the caller should use the returned
-    /// `OrphanedMedia` list to delete files via `ImageService::delete_image`.
-    /// This separation allows the caller to handle file deletion errors
-    /// gracefully without rolling back DB changes.
+    /// Callers should delete files from storage first and only then delete
+    /// DB rows for media whose files were successfully removed.
     pub async fn cleanup(
         &self,
         grace_period_hours: i64,
@@ -200,28 +198,17 @@ impl MediaCleanupService {
 
         if orphans.is_empty() {
             info!("No orphaned media to clean up");
-            return Ok((
-                vec![],
-                CleanupReport {
-                    orphans_found: 0,
-                    orphans_deleted: 0,
-                    files_deleted: 0,
-                    errors: vec![],
-                },
-            ));
         }
 
-        let ids: Vec<String> = orphans.iter().map(|o| o.id.clone()).collect();
-        let deleted = self.delete_orphan_records(&ids).await?;
-
-        let report = CleanupReport {
-            orphans_found,
-            orphans_deleted: deleted,
-            files_deleted: 0, // Caller fills this in after deleting files
-            errors: vec![],
-        };
-
-        Ok((orphans, report))
+        Ok((
+            orphans,
+            CleanupReport {
+                orphans_found,
+                orphans_deleted: 0,
+                files_deleted: 0,
+                errors: vec![],
+            },
+        ))
     }
 
     /// Count orphaned media without deleting (for dashboard/monitoring).
@@ -313,11 +300,13 @@ pub fn spawn_media_cleanup_task(
             match service.cleanup(grace_period_hours).await {
                 Ok((orphans, mut report)) => {
                     let mut files_deleted = 0usize;
+                    let mut deleted_file_media_ids = Vec::new();
 
                     for orphan in &orphans {
                         let thumb = orphan.thumbnail_path.as_deref().unwrap_or("");
                         match image_service.delete_image(&orphan.filename, thumb).await {
                             Ok(_) => {
+                                deleted_file_media_ids.push(orphan.id.clone());
                                 files_deleted += 1;
                                 // Count thumbnail as a separate file if it existed
                                 if !thumb.is_empty() {
@@ -336,6 +325,19 @@ pub fn spawn_media_cleanup_task(
                     }
 
                     report.files_deleted = files_deleted;
+                    if !deleted_file_media_ids.is_empty() {
+                        match service.delete_orphan_records(&deleted_file_media_ids).await {
+                            Ok(deleted) => {
+                                report.orphans_deleted = deleted;
+                            }
+                            Err(e) => {
+                                let msg =
+                                    format!("Failed to delete orphan media DB records: {}", e);
+                                warn!("{}", msg);
+                                report.errors.push(msg);
+                            }
+                        }
+                    }
 
                     if report.orphans_found > 0 {
                         info!(

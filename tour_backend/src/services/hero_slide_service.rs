@@ -81,16 +81,17 @@ impl HeroSlideService {
 
         match slide.content_type {
             HeroContentType::Post => {
-                let row: Option<(String, Option<String>, Option<String>, String, String)> = sqlx::query_as(
-                    r#"
+                let row: Option<(String, Option<String>, Option<String>, String, String)> =
+                    sqlx::query_as(
+                        r#"
                         SELECT title, short_description, cover_image, slug, type::text
                         FROM posts
                         WHERE id = $1 AND deleted_at IS NULL AND status = 'published'
                         "#,
-                )
-                .bind(content_id)
-                .fetch_optional(&self.db)
-                .await?;
+                    )
+                    .bind(content_id)
+                    .fetch_optional(&self.db)
+                    .await?;
 
                 match row {
                     Some((title, desc, image, slug, post_type)) => {

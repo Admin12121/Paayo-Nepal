@@ -15,7 +15,7 @@ pub fn routes() -> Router<AppState> {
         .route("/gallery", get(handlers::media::gallery))
         .route("/cleanup", post(handlers::media::cleanup))
         .route(
-            "/:id",
+            "/{id}",
             get(handlers::media::get).delete(handlers::media::delete),
         )
         // Allow uploads up to 22MB (20MB file + multipart overhead)

@@ -23,6 +23,16 @@ function isLikelyMediaField(fieldName: string): boolean {
   return false;
 }
 
+function isInternalMediaHost(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  return (
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host === "backend" ||
+    host === "nginx"
+  );
+}
+
 function isUploadPathString(value: string): boolean {
   return (
     value.startsWith("uploads/") ||
@@ -50,11 +60,17 @@ export function normalizeMediaUrl(url: string | null | undefined): string | null
   if (/^https?:\/\//i.test(value)) {
     try {
       const parsed = new URL(value);
-      if (parsed.pathname.startsWith(API_UPLOADS_PATH_PREFIX)) {
+      if (
+        parsed.pathname.startsWith(API_UPLOADS_PATH_PREFIX) &&
+        isInternalMediaHost(parsed.hostname)
+      ) {
         const pathname = parsed.pathname.replace(/^\/api/, "");
         return `${pathname}${parsed.search}${parsed.hash}`;
       }
-      if (parsed.pathname.startsWith(UPLOADS_PATH_PREFIX)) {
+      if (
+        parsed.pathname.startsWith(UPLOADS_PATH_PREFIX) &&
+        isInternalMediaHost(parsed.hostname)
+      ) {
         return `${parsed.pathname}${parsed.search}${parsed.hash}`;
       }
       return value;
