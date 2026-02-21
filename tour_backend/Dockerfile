@@ -71,6 +71,7 @@ RUN useradd -m -u 1001 -s /bin/bash appuser
 
 # Copy binary from builder
 COPY --from=builder /app/target/release/tour_backend /app/tour_backend
+COPY --from=builder /app/migrations /app/migrations
 
 # Create uploads directory
 RUN mkdir -p /app/uploads && chown -R appuser:appuser /app

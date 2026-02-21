@@ -13,7 +13,8 @@ export function ConditionalLayout({ children }: { children: React.ReactNode }) {
   const isAuth =
     pathname === "/login" ||
     pathname === "/register" ||
-    pathname === "/forgot-password";
+    pathname === "/forgot-password" ||
+    pathname === "/reset-password";
 
   if (isDashboard || isAuth) {
     return (

@@ -8,6 +8,7 @@ import { createClient, type RedisClientType } from "redis";
 import { db } from "./db";
 import * as schema from "./db/schema";
 import { notifications } from "./db/schema/notifications";
+import { sendPasswordResetEmail } from "./auth-mailer";
 
 // ---------------------------------------------------------------------------
 // Shared Redis client (Phase 0.9 — one connection, not per-registration)
@@ -241,6 +242,13 @@ export const auth = betterAuth({
     requireEmailVerification: process.env.NODE_ENV === "production",
     minPasswordLength: 8,
     maxPasswordLength: 128,
+    sendResetPassword: async ({ user, url }) => {
+      await sendPasswordResetEmail({
+        to: user.email,
+        name: user.name,
+        resetUrl: url,
+      });
+    },
     password: {
       hash: async (password: string) => {
         return bcrypt.hash(password, 10);

@@ -69,8 +69,6 @@ pub async fn auth_middleware(
         .and_then(|c| c.to_str().ok())
         .unwrap_or("");
 
-    tracing::debug!("Auth middleware - Cookie header: {:?}", cookie_header);
-
     let session_token = match extract_session_token(cookie_header) {
         Some(token) if !token.is_empty() => token,
         _ => {
@@ -78,8 +76,6 @@ pub async fn auth_middleware(
             return Err(StatusCode::UNAUTHORIZED);
         }
     };
-
-    tracing::debug!("Auth middleware - Extracted token: {:?}", session_token);
 
     let session = sqlx::query_as::<_, SessionRow>(
         r#"
@@ -105,7 +101,7 @@ pub async fn auth_middleware(
         }
     };
 
-    tracing::debug!("Auth middleware - User authenticated: {}", session.email);
+    tracing::debug!("Auth middleware - User authenticated");
 
     // Reject banned users immediately
     if session.banned_at.is_some() {
