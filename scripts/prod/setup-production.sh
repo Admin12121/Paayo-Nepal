@@ -970,8 +970,11 @@ main() {
 
   if is_true "${DEPLOY_ONLY}"; then
     log "DEPLOY_ONLY=${DEPLOY_ONLY}: skipping system bootstrap/hardening steps and running deploy-only flow."
+    resolve_postgres_container_cidr
+    pre_deploy_postgres_cidr="${POSTGRES_CONTAINER_CIDR}"
     update_env_for_production
     deploy_compose_stack
+    tighten_postgres_network_access_after_deploy "${pre_deploy_postgres_cidr}"
     if is_true "${RUN_DRIZZLE_PULL}"; then
       run_drizzle_pull
     else
