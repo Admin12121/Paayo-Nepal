@@ -968,6 +968,11 @@ run_drizzle_pull() {
     --add-host "host.docker.internal:host-gateway" \
     -v "${REPO_ROOT}/tour_frontend:/workspace" \
     -w /workspace \
+    -e DATABASE_HOST="${DATABASE_HOST}" \
+    -e DATABASE_PORT="${DATABASE_PORT}" \
+    -e DATABASE_USER="${DATABASE_USER}" \
+    -e DATABASE_PASSWORD="${DATABASE_PASSWORD}" \
+    -e DATABASE_NAME="${DATABASE_NAME}" \
     -e DATABASE_URL="postgresql://${DATABASE_USER}:$(urlencode "${DATABASE_PASSWORD}")@${DATABASE_HOST}:${DATABASE_PORT}/${DATABASE_NAME}" \
     oven/bun:1.3 sh -lc "bun install --frozen-lockfile && bun run db:pull" || \
     warn "drizzle pull failed. Verify drizzle config/database reachability."
