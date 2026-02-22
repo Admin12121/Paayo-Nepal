@@ -151,6 +151,19 @@ die() {
   exit 1
 }
 
+prompt_skip_or_override() {
+  local item="$1"
+  local choice
+  while true; do
+    read -r -p "${item} already exists. [s]kip/[o]verride? [s]: " choice
+    case "${choice,,}" in
+      ""|s|skip) return 1 ;;
+      o|override) return 0 ;;
+      *) warn "Invalid choice '${choice}'. Enter 's' to skip or 'o' to override." ;;
+    esac
+  done
+}
+
 require_non_root_with_sudo() {
   [[ "${EUID}" -ne 0 ]] || die "Run this script as a normal user, not root."
   sudo -v
@@ -219,37 +232,49 @@ configure_postgres() {
   log "Configuring PostgreSQL (localhost only)..."
   local pg_conf
   local hba_conf
+  local role_exists
+  local db_exists
+  local update_role_and_db="true"
+  local db_user_sql
+  local db_user_ident
+  local db_name_sql
+  local db_name_ident
+  local db_pass_sql
   pg_conf="$(sudo -u postgres psql -tAc 'SHOW config_file;' | xargs)"
   hba_conf="$(sudo -u postgres psql -tAc 'SHOW hba_file;' | xargs)"
 
   sudo sed -ri "s/^#?\s*listen_addresses\s*=.*/listen_addresses = '127.0.0.1'/" "${pg_conf}"
 
-  if ! grep -q "host all all 127.0.0.1/32 scram-sha-256" "${hba_conf}"; then
+  if ! sudo grep -q "host all all 127.0.0.1/32 scram-sha-256" "${hba_conf}"; then
     echo "host all all 127.0.0.1/32 scram-sha-256" | sudo tee -a "${hba_conf}" >/dev/null
   fi
 
-  local db_pass_sql
+  db_user_sql="${DATABASE_USER//\'/\'\'}"
+  db_user_ident="${DATABASE_USER//\"/\"\"}"
+  db_name_sql="${DATABASE_NAME//\'/\'\'}"
+  db_name_ident="${DATABASE_NAME//\"/\"\"}"
   db_pass_sql="${DATABASE_PASSWORD//\'/\'\'}"
 
-  sudo -u postgres psql <<SQL
-DO \$\$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${DATABASE_USER}') THEN
-    EXECUTE 'CREATE ROLE ${DATABASE_USER} LOGIN PASSWORD ''${db_pass_sql}''';
-  ELSE
-    EXECUTE 'ALTER ROLE ${DATABASE_USER} WITH LOGIN PASSWORD ''${db_pass_sql}''';
-  END IF;
-END
-\$\$;
+  role_exists="$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname = '${db_user_sql}'" | xargs || true)"
+  db_exists="$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname = '${db_name_sql}'" | xargs || true)"
 
-DO \$\$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = '${DATABASE_NAME}') THEN
-    EXECUTE 'CREATE DATABASE ${DATABASE_NAME} OWNER ${DATABASE_USER}';
-  END IF;
-END
-\$\$;
-SQL
+  if [[ "${role_exists}" == "1" || "${db_exists}" == "1" ]]; then
+    if ! prompt_skip_or_override "PostgreSQL role/database (${DATABASE_USER}/${DATABASE_NAME})"; then
+      update_role_and_db="false"
+      log "Skipping PostgreSQL role/database update by user choice."
+    fi
+  fi
+
+  if [[ "${update_role_and_db}" == "true" ]]; then
+    if [[ "${role_exists}" != "1" ]]; then
+      sudo -u postgres psql -v ON_ERROR_STOP=1 -c "CREATE ROLE \"${db_user_ident}\" LOGIN PASSWORD '${db_pass_sql}'"
+    fi
+    sudo -u postgres psql -v ON_ERROR_STOP=1 -c "ALTER ROLE \"${db_user_ident}\" WITH LOGIN PASSWORD '${db_pass_sql}'"
+
+    if [[ "${db_exists}" != "1" ]]; then
+      sudo -u postgres psql -v ON_ERROR_STOP=1 -c "CREATE DATABASE \"${db_name_ident}\" OWNER \"${db_user_ident}\""
+    fi
+  fi
 
   sudo systemctl enable --now postgresql
   sudo systemctl restart postgresql
@@ -259,14 +284,27 @@ configure_redis() {
   log "Configuring Redis (localhost only + requirepass)..."
   local redis_conf="/etc/redis/redis.conf"
   local redis_escaped
+  local existing_requirepass="false"
+  local update_requirepass="true"
   redis_escaped="$(printf "%s" "${REDIS_PASSWORD}" | sed -e 's/[\\/&]/\\&/g')"
 
   sudo sed -ri "s/^#?\s*bind\s+.*/bind 127.0.0.1 ::1/" "${redis_conf}"
   sudo sed -ri "s/^#?\s*protected-mode\s+.*/protected-mode yes/" "${redis_conf}"
-  if grep -qE "^#?\s*requirepass\s+" "${redis_conf}"; then
-    sudo sed -ri "s|^#?\s*requirepass\s+.*|requirepass ${redis_escaped}|" "${redis_conf}"
-  else
-    echo "requirepass ${REDIS_PASSWORD}" | sudo tee -a "${redis_conf}" >/dev/null
+
+  if sudo grep -qE "^#?\s*requirepass\s+" "${redis_conf}"; then
+    existing_requirepass="true"
+    if ! prompt_skip_or_override "Redis requirepass in ${redis_conf}"; then
+      update_requirepass="false"
+      log "Skipping Redis password override by user choice."
+    fi
+  fi
+
+  if [[ "${update_requirepass}" == "true" ]]; then
+    if [[ "${existing_requirepass}" == "true" ]]; then
+      sudo sed -ri "s|^#?\s*requirepass\s+.*|requirepass ${redis_escaped}|" "${redis_conf}"
+    else
+      echo "requirepass ${REDIS_PASSWORD}" | sudo tee -a "${redis_conf}" >/dev/null
+    fi
   fi
 
   sudo systemctl enable --now redis-server
@@ -274,44 +312,65 @@ configure_redis() {
 }
 
 configure_user_and_ssh() {
+  local update_user="true"
+  local sshd="/etc/ssh/sshd_config"
+  local override_ssh_hardening="true"
+
   if [[ "${MANAGE_APP_USER,,}" != "false" ]]; then
     log "Creating/updating '${APP_USER}' user and hardening SSH..."
 
     if ! id -u "${APP_USER}" >/dev/null 2>&1; then
       sudo useradd -m -s /bin/bash "${APP_USER}"
+    else
+      if ! prompt_skip_or_override "User settings for '${APP_USER}'"; then
+        update_user="false"
+        log "Skipping user password/group/key update by user choice."
+      fi
     fi
 
-    echo "${APP_USER}:${APP_USER_PASSWORD}" | sudo chpasswd
-    sudo usermod -aG sudo,docker "${APP_USER}" || true
+    if [[ "${update_user}" == "true" ]]; then
+      echo "${APP_USER}:${APP_USER_PASSWORD}" | sudo chpasswd
+      sudo usermod -aG sudo,docker "${APP_USER}" || true
 
-    if [[ -f "${HOME}/.ssh/authorized_keys" ]]; then
-      sudo mkdir -p "/home/${APP_USER}/.ssh"
-      sudo cp "${HOME}/.ssh/authorized_keys" "/home/${APP_USER}/.ssh/authorized_keys"
-      sudo chown -R "${APP_USER}:${APP_USER}" "/home/${APP_USER}/.ssh"
-      sudo chmod 700 "/home/${APP_USER}/.ssh"
-      sudo chmod 600 "/home/${APP_USER}/.ssh/authorized_keys"
+      if [[ -f "${HOME}/.ssh/authorized_keys" ]]; then
+        sudo mkdir -p "/home/${APP_USER}/.ssh"
+        sudo cp "${HOME}/.ssh/authorized_keys" "/home/${APP_USER}/.ssh/authorized_keys"
+        sudo chown -R "${APP_USER}:${APP_USER}" "/home/${APP_USER}/.ssh"
+        sudo chmod 700 "/home/${APP_USER}/.ssh"
+        sudo chmod 600 "/home/${APP_USER}/.ssh/authorized_keys"
+      fi
     fi
   else
     log "Skipping user creation/update (MANAGE_APP_USER=false). Hardening SSH for existing user '${APP_USER}'..."
     id -u "${APP_USER}" >/dev/null 2>&1 || die "APP_USER '${APP_USER}' does not exist."
   fi
 
-  local sshd="/etc/ssh/sshd_config"
-  sudo cp "${sshd}" "${sshd}.bak.$(date +%s)"
+  if sudo grep -qiE "^\s*(PermitRootLogin|PasswordAuthentication|AllowUsers)\s+" "${sshd}"; then
+    if ! prompt_skip_or_override "SSH hardening options in ${sshd}"; then
+      override_ssh_hardening="false"
+      log "Skipping SSH hardening override by user choice."
+    fi
+  fi
 
-  set_sshd_option "${sshd}" "PermitRootLogin" "no"
-  set_sshd_option "${sshd}" "PasswordAuthentication" "yes"
-  set_sshd_option "${sshd}" "PubkeyAuthentication" "yes"
-  set_sshd_option "${sshd}" "ChallengeResponseAuthentication" "no"
-  set_sshd_option "${sshd}" "UsePAM" "yes"
-  set_sshd_option "${sshd}" "AllowUsers" "${APP_USER}"
-  set_sshd_option "${sshd}" "MaxAuthTries" "3"
-  set_sshd_option "${sshd}" "LoginGraceTime" "30"
+  if [[ "${override_ssh_hardening}" == "true" ]]; then
+    sudo cp "${sshd}" "${sshd}.bak.$(date +%s)"
 
-  if systemctl list-unit-files | grep -q "^ssh.service"; then
-    sudo systemctl restart ssh
-  else
-    sudo systemctl restart sshd
+    set_sshd_option "${sshd}" "PermitRootLogin" "no"
+    set_sshd_option "${sshd}" "PasswordAuthentication" "yes"
+    set_sshd_option "${sshd}" "PubkeyAuthentication" "yes"
+    set_sshd_option "${sshd}" "ChallengeResponseAuthentication" "no"
+    set_sshd_option "${sshd}" "UsePAM" "yes"
+    set_sshd_option "${sshd}" "AllowUsers" "${APP_USER}"
+    set_sshd_option "${sshd}" "MaxAuthTries" "3"
+    set_sshd_option "${sshd}" "LoginGraceTime" "30"
+
+    if sudo systemctl list-unit-files --type=service | grep -q "^ssh\.service"; then
+      sudo systemctl restart ssh
+    elif sudo systemctl list-unit-files --type=service | grep -q "^sshd\.service"; then
+      sudo systemctl restart sshd
+    else
+      warn "Could not restart SSH service automatically (tried ssh and sshd). Install openssh-server or restart SSH manually."
+    fi
   fi
 }
 
@@ -328,6 +387,22 @@ set_sshd_option() {
 
 configure_firewall_and_fail2ban() {
   log "Configuring UFW and fail2ban..."
+  local ufw_active="false"
+  local fail2ban_conf_exists="false"
+
+  if sudo ufw status | grep -q "Status: active"; then
+    ufw_active="true"
+  fi
+  if sudo test -f /etc/fail2ban/jail.local; then
+    fail2ban_conf_exists="true"
+  fi
+  if [[ "${ufw_active}" == "true" || "${fail2ban_conf_exists}" == "true" ]]; then
+    if ! prompt_skip_or_override "UFW/fail2ban configuration"; then
+      log "Skipping UFW/fail2ban configuration by user choice."
+      return 0
+    fi
+  fi
+
   sudo ufw default deny incoming
   sudo ufw default allow outgoing
   sudo ufw allow OpenSSH
@@ -355,6 +430,13 @@ EOF
 configure_periodic_security() {
   log "Enabling unattended upgrades, AppArmor, auditd..."
 
+  if sudo test -f /etc/apt/apt.conf.d/20auto-upgrades; then
+    if ! prompt_skip_or_override "Unattended-upgrades policy (/etc/apt/apt.conf.d/20auto-upgrades)"; then
+      log "Skipping periodic security config by user choice."
+      return 0
+    fi
+  fi
+
   sudo tee /etc/apt/apt.conf.d/20auto-upgrades >/dev/null <<'EOF'
 APT::Periodic::Update-Package-Lists "1";
 APT::Periodic::Unattended-Upgrade "1";
@@ -374,6 +456,13 @@ configure_msmtp_if_requested() {
     warn "SMTP relay vars not set (SMTP_HOST/SMTP_USER/SMTP_PASS)."
     warn "Alert emails may not be delivered off-host until SMTP is configured."
     return 0
+  fi
+
+  if sudo test -f /etc/msmtprc; then
+    if ! prompt_skip_or_override "msmtp relay config (/etc/msmtprc)"; then
+      log "Skipping msmtp relay override by user choice."
+      return 0
+    fi
   fi
 
   log "Configuring msmtp relay..."
@@ -421,6 +510,13 @@ ensure_tls_certs() {
 
 configure_alerting_jobs() {
   log "Installing monitoring and maintenance scripts + cron jobs..."
+
+  if sudo test -f /etc/cron.d/paayo-ops || sudo test -f /etc/paayo/alerts.conf || sudo test -f /usr/local/lib/paayo/resource-alert.sh; then
+    if ! prompt_skip_or_override "Monitoring scripts/cron jobs"; then
+      log "Skipping monitoring script + cron override by user choice."
+      return 0
+    fi
+  fi
 
   sudo mkdir -p /etc/paayo /usr/local/lib/paayo
   sudo tee /etc/paayo/alerts.conf >/dev/null <<EOF
@@ -568,6 +664,13 @@ EOF
 update_env_for_production() {
   log "Updating ${ENV_FILE} with production values..."
   ensure_file_exists "${ENV_FILE}"
+
+  if grep -qE "^(NODE_ENV|APP_DOMAIN|DATABASE_URL|REDIS_URL)=" "${ENV_FILE}"; then
+    if ! prompt_skip_or_override "Production env entries in ${ENV_FILE}"; then
+      log "Skipping production env override by user choice."
+      return 0
+    fi
+  fi
 
   local db_pass_urlenc redis_pass_urlenc
   db_pass_urlenc="$(urlencode "${DATABASE_PASSWORD}")"
