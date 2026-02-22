@@ -104,7 +104,7 @@ x-frontend-env: &frontend-env
     NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-/api}
     BETTER_AUTH_URL: ${BETTER_AUTH_URL:-${APP_PUBLIC_ORIGIN:-https://${APP_DOMAIN:-localhost}}}
     PASSKEY_ORIGIN: ${PASSKEY_ORIGIN:-${APP_PUBLIC_ORIGIN:-https://${APP_DOMAIN:-localhost}}}
-    DATABASE_URL: ${DATABASE_URL:-postgresql://${DATABASE_USER:-tourism}:${DATABASE_PASSWORD_URLENC:-tourism_dev_password}@postgres:5432/${DATABASE_NAME:-tourism}}
+    DATABASE_URL: ${DATABASE_URL:-postgresql://${DATABASE_USER:-tourism}:${DATABASE_PASSWORD_URLENC:-tourism_dev_password}@${DATABASE_HOST:-postgres}:${DATABASE_PORT:-5432}/${DATABASE_NAME:-tourism}}
     BACKEND_API_URL: http://backend:8080/api
     BACKEND_URL: http://backend:8080
     REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD_URLENC:-redis_dev_password}@redis:6379}
@@ -133,7 +133,7 @@ x-backend-common: &backend-common
     environment:
         - HOST=0.0.0.0
         - PORT=8080
-        - DATABASE_URL=${DATABASE_URL:-postgresql://${DATABASE_USER:-tourism}:${DATABASE_PASSWORD_URLENC:-tourism_dev_password}@postgres:5432/${DATABASE_NAME:-tourism}}
+        - DATABASE_URL=${DATABASE_URL:-postgresql://${DATABASE_USER:-tourism}:${DATABASE_PASSWORD_URLENC:-tourism_dev_password}@${DATABASE_HOST:-postgres}:${DATABASE_PORT:-5432}/${DATABASE_NAME:-tourism}}
         - DATABASE_MAX_CONNECTIONS=${DATABASE_MAX_CONNECTIONS:-20}
         - DATABASE_MIN_CONNECTIONS=${DATABASE_MIN_CONNECTIONS:-5}
         - REDIS_URL=${REDIS_URL:-redis://:${REDIS_PASSWORD_URLENC:-redis_dev_password}@redis:6379}
@@ -161,6 +161,8 @@ x-backend-common: &backend-common
         - RUST_LOG=${BACKEND_LOG_FILTER:-tour_backend=info,tower_http=warn,sqlx=warn}
     volumes:
         - upload_data:/app/uploads
+    extra_hosts:
+        - "host.docker.internal:host-gateway"
     expose:
         - "8080"
     networks:
@@ -195,7 +197,7 @@ services:
     # -----------------------------------------------------------------------
     postgres:
         <<: *postgres-common
-        profiles: ["prod", "dev"]
+        profiles: ["dev"]
         expose:
             - "5432"
 
@@ -300,8 +302,6 @@ services:
         <<: *backend-common
         profiles: ["prod", "dev"]
         depends_on:
-            postgres:
-                condition: service_healthy
             redis:
                 condition: service_healthy
 
@@ -324,9 +324,9 @@ services:
             NODE_ENV: production
         expose:
             - "3000"
+        extra_hosts:
+            - "host.docker.internal:host-gateway"
         depends_on:
-            postgres:
-                condition: service_healthy
             redis:
                 condition: service_healthy
         networks:
@@ -373,6 +373,8 @@ services:
             - frontend_bun_cache:/root/.bun/install/cache
         expose:
             - "3000"
+        extra_hosts:
+            - "host.docker.internal:host-gateway"
         depends_on:
             postgres:
                 condition: service_healthy

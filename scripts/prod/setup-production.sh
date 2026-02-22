@@ -11,7 +11,7 @@ set -Eeuo pipefail
 # 1) apt update/upgrade + installs required tools
 # 2) creates/clamps SSH access to APP_USER (default: clerk)
 # 3) hardens SSH, UFW, fail2ban, unattended upgrades, AppArmor, auditd
-# 4) installs/configures PostgreSQL + Redis (localhost-only)
+# 4) installs/configures host PostgreSQL and disables host Redis (Redis runs in Docker)
 # 5) writes/updates .env with production values
 # 6) builds and starts docker compose prod stack
 # 7) runs drizzle schema pull in an ephemeral Bun container
@@ -70,6 +70,11 @@ ALERT_EMAIL="${ALERT_EMAIL:-}"
 DATABASE_NAME="${DATABASE_NAME:-tourism}"
 DATABASE_USER="${DATABASE_USER:-tourism}"
 DATABASE_PASSWORD="${DATABASE_PASSWORD:-}"
+DATABASE_HOST="${DATABASE_HOST:-host.docker.internal}"
+DATABASE_PORT="${DATABASE_PORT:-5432}"
+POSTGRES_LISTEN_ADDRESSES="${POSTGRES_LISTEN_ADDRESSES:-*}"
+POSTGRES_CONTAINER_CIDR="${POSTGRES_CONTAINER_CIDR:-172.16.0.0/12}"
+AUTO_DETECT_POSTGRES_CONTAINER_CIDR="${AUTO_DETECT_POSTGRES_CONTAINER_CIDR:-true}"
 DATABASE_MAX_CONNECTIONS="${DATABASE_MAX_CONNECTIONS:-20}"
 DATABASE_MIN_CONNECTIONS="${DATABASE_MIN_CONNECTIONS:-5}"
 
@@ -110,6 +115,18 @@ fi
 CPU_THRESHOLD="${ALERT_CPU_THRESHOLD:-90}"
 MEM_THRESHOLD="${ALERT_MEM_THRESHOLD:-90}"
 DISK_THRESHOLD="${ALERT_DISK_THRESHOLD:-90}"
+
+# Build/resource tuning (auto-detected if unset)
+CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-}"
+FRONTEND_BUILD_NODE_OPTIONS="${FRONTEND_BUILD_NODE_OPTIONS:-}"
+COMPOSE_BUILD_PARALLEL_LIMIT="${COMPOSE_BUILD_PARALLEL_LIMIT:-1}"
+COMPOSE_BAKE_DISABLED="${COMPOSE_BAKE_DISABLED:-true}"
+
+# Runtime modes
+DEPLOY_ONLY="${DEPLOY_ONLY:-false}"
+SKIP_APT_UPGRADE="${SKIP_APT_UPGRADE:-false}"
+SKIP_APT_INSTALL="${SKIP_APT_INSTALL:-false}"
+RUN_DRIZZLE_PULL="${RUN_DRIZZLE_PULL:-true}"
 
 COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-tourism}"
 export COMPOSE_PROJECT_NAME
@@ -164,6 +181,81 @@ prompt_skip_or_override() {
   done
 }
 
+is_true() {
+  local v="${1:-}"
+  case "${v,,}" in
+    1|true|yes|y|on) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+detect_compose_network_subnet() {
+  local network_name="${COMPOSE_PROJECT_NAME}_paayo_net"
+  local subnet=""
+
+  subnet="$(sudo docker network inspect "${network_name}" \
+    --format '{{range .IPAM.Config}}{{if .Subnet}}{{.Subnet}}{{end}}{{end}}' \
+    2>/dev/null | tr -d '[:space:]' || true)"
+  if [[ -n "${subnet}" ]]; then
+    printf "%s" "${subnet}"
+    return 0
+  fi
+  return 1
+}
+
+resolve_postgres_container_cidr() {
+  local detected=""
+  if ! is_true "${AUTO_DETECT_POSTGRES_CONTAINER_CIDR}"; then
+    log "Using configured POSTGRES_CONTAINER_CIDR=${POSTGRES_CONTAINER_CIDR} (auto-detect disabled)."
+    return 0
+  fi
+
+  detected="$(detect_compose_network_subnet || true)"
+  if [[ -n "${detected}" ]]; then
+    if [[ "${POSTGRES_CONTAINER_CIDR}" != "${detected}" ]]; then
+      log "Detected Docker subnet ${detected}; updating POSTGRES_CONTAINER_CIDR (was ${POSTGRES_CONTAINER_CIDR})."
+      POSTGRES_CONTAINER_CIDR="${detected}"
+    else
+      log "Detected Docker subnet ${detected}; POSTGRES_CONTAINER_CIDR already aligned."
+    fi
+  else
+    warn "Could not detect Docker subnet for ${COMPOSE_PROJECT_NAME}_paayo_net yet; using POSTGRES_CONTAINER_CIDR=${POSTGRES_CONTAINER_CIDR}."
+  fi
+}
+
+tighten_postgres_network_access_after_deploy() {
+  local previous_cidr="$1"
+  local hba_conf
+  local previous_cidr_escaped
+
+  if ! is_true "${AUTO_DETECT_POSTGRES_CONTAINER_CIDR}"; then
+    return 0
+  fi
+
+  resolve_postgres_container_cidr
+  if [[ -z "${previous_cidr}" || "${previous_cidr}" == "${POSTGRES_CONTAINER_CIDR}" ]]; then
+    return 0
+  fi
+
+  log "Tightening PostgreSQL/UFW access from '${previous_cidr}' to '${POSTGRES_CONTAINER_CIDR}'."
+  hba_conf="$(sudo -u postgres psql -tAc 'SHOW hba_file;' | xargs)"
+  if ! sudo grep -Fq "host all all ${POSTGRES_CONTAINER_CIDR} scram-sha-256" "${hba_conf}"; then
+    echo "host all all ${POSTGRES_CONTAINER_CIDR} scram-sha-256" | sudo tee -a "${hba_conf}" >/dev/null
+  fi
+  previous_cidr_escaped="${previous_cidr//\//\\/}"
+  sudo sed -ri "/^host all all ${previous_cidr_escaped} scram-sha-256$/d" "${hba_conf}" || true
+  sudo systemctl restart postgresql || true
+
+  if sudo ufw status | grep -q "Status: active"; then
+    sudo ufw allow from "${POSTGRES_CONTAINER_CIDR}" to any port 5432 proto tcp >/dev/null 2>&1 || true
+    sudo ufw --force delete allow from "${previous_cidr}" to any port 5432 proto tcp >/dev/null 2>&1 || true
+  fi
+
+  if [[ -f "${ENV_FILE}" ]]; then
+    set_env_var "POSTGRES_CONTAINER_CIDR" "${POSTGRES_CONTAINER_CIDR}"
+  fi
+}
+
 require_non_root_with_sudo() {
   [[ "${EUID}" -ne 0 ]] || die "Run this script as a normal user, not root."
   sudo -v
@@ -204,20 +296,86 @@ set_env_var() {
   fi
 }
 
-install_required_tools() {
-  log "Updating apt index and upgrading packages..."
-  sudo apt-get update -y
-  sudo DEBIAN_FRONTEND=noninteractive apt-get upgrade -y
+auto_tune_build_resources() {
+  local cpu_count mem_kb mem_mb mem_gb
+  local suggested_jobs suggested_node_mb max_jobs
 
-  log "Installing required system packages..."
-  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
-    ca-certificates curl gnupg lsb-release jq unzip \
-    ufw fail2ban unattended-upgrades apt-listchanges \
-    apparmor apparmor-utils auditd rsyslog cron logrotate \
-    openssl \
-    postgresql postgresql-contrib redis-server \
-    mailutils msmtp msmtp-mta bsd-mailx \
-    sysstat htop net-tools
+  cpu_count="$(nproc 2>/dev/null || echo 1)"
+  mem_kb="$(awk '/MemTotal:/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)"
+  mem_mb=$(( mem_kb / 1024 ))
+  mem_gb=$(( mem_mb / 1024 ))
+
+  if [[ -z "${CARGO_BUILD_JOBS}" ]]; then
+    if (( mem_mb >= 14336 )); then
+      suggested_jobs=4
+    elif (( mem_mb >= 8192 )); then
+      suggested_jobs=3
+    elif (( mem_mb >= 6144 )); then
+      suggested_jobs=2
+    else
+      suggested_jobs=1
+    fi
+
+    max_jobs=$(( cpu_count > 1 ? cpu_count - 1 : 1 ))
+    if (( suggested_jobs > max_jobs )); then
+      suggested_jobs="${max_jobs}"
+    fi
+    if (( suggested_jobs < 1 )); then
+      suggested_jobs=1
+    fi
+    CARGO_BUILD_JOBS="${suggested_jobs}"
+  fi
+
+  if [[ -z "${FRONTEND_BUILD_NODE_OPTIONS}" ]]; then
+    if (( mem_mb >= 14336 )); then
+      suggested_node_mb=4096
+    elif (( mem_mb >= 8192 )); then
+      suggested_node_mb=3072
+    elif (( mem_mb >= 6144 )); then
+      suggested_node_mb=2560
+    else
+      suggested_node_mb=1536
+    fi
+    FRONTEND_BUILD_NODE_OPTIONS="--max-old-space-size=${suggested_node_mb}"
+  fi
+
+  if ! [[ "${COMPOSE_BUILD_PARALLEL_LIMIT}" =~ ^[0-9]+$ ]]; then
+    warn "Invalid COMPOSE_BUILD_PARALLEL_LIMIT='${COMPOSE_BUILD_PARALLEL_LIMIT}'. Using 1."
+    COMPOSE_BUILD_PARALLEL_LIMIT=1
+  elif (( COMPOSE_BUILD_PARALLEL_LIMIT < 1 )); then
+    COMPOSE_BUILD_PARALLEL_LIMIT=1
+  fi
+
+  if [[ "${COMPOSE_BAKE_DISABLED,,}" != "true" && "${COMPOSE_BAKE_DISABLED,,}" != "false" ]]; then
+    warn "Invalid COMPOSE_BAKE_DISABLED='${COMPOSE_BAKE_DISABLED}'. Using 'true'."
+    COMPOSE_BAKE_DISABLED="true"
+  fi
+
+  log "Build tuning: host ~${cpu_count} vCPU / ~${mem_gb} GiB RAM; CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}; FRONTEND_BUILD_NODE_OPTIONS='${FRONTEND_BUILD_NODE_OPTIONS}'; COMPOSE_BAKE_DISABLED=${COMPOSE_BAKE_DISABLED}; COMPOSE_BUILD_PARALLEL_LIMIT=${COMPOSE_BUILD_PARALLEL_LIMIT}"
+}
+
+install_required_tools() {
+  if is_true "${SKIP_APT_UPGRADE}"; then
+    log "Skipping apt update/upgrade (SKIP_APT_UPGRADE=${SKIP_APT_UPGRADE})."
+  else
+    log "Updating apt index and upgrading packages..."
+    sudo apt-get update -y
+    sudo DEBIAN_FRONTEND=noninteractive apt-get upgrade -y
+  fi
+
+  if is_true "${SKIP_APT_INSTALL}"; then
+    log "Skipping apt package install (SKIP_APT_INSTALL=${SKIP_APT_INSTALL})."
+  else
+    log "Installing required system packages..."
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+      ca-certificates curl gnupg lsb-release jq unzip \
+      ufw fail2ban unattended-upgrades apt-listchanges \
+      apparmor apparmor-utils auditd rsyslog cron logrotate \
+      openssl \
+      postgresql postgresql-contrib \
+      mailutils msmtp msmtp-mta bsd-mailx \
+      sysstat htop net-tools
+  fi
 
   if ! command -v docker >/dev/null 2>&1; then
     log "Installing Docker..."
@@ -229,7 +387,7 @@ install_required_tools() {
 }
 
 configure_postgres() {
-  log "Configuring PostgreSQL (localhost only)..."
+  log "Configuring host PostgreSQL (local + Docker access)..."
   local pg_conf
   local hba_conf
   local role_exists
@@ -240,13 +398,18 @@ configure_postgres() {
   local db_name_sql
   local db_name_ident
   local db_pass_sql
+  local docker_cidr="${POSTGRES_CONTAINER_CIDR:-172.16.0.0/12}"
+  local listen_addresses="${POSTGRES_LISTEN_ADDRESSES:-*}"
   pg_conf="$(sudo -u postgres psql -tAc 'SHOW config_file;' | xargs)"
   hba_conf="$(sudo -u postgres psql -tAc 'SHOW hba_file;' | xargs)"
 
-  sudo sed -ri "s/^#?\s*listen_addresses\s*=.*/listen_addresses = '127.0.0.1'/" "${pg_conf}"
+  sudo sed -ri "s/^#?\s*listen_addresses\s*=.*/listen_addresses = '${listen_addresses}'/" "${pg_conf}"
 
-  if ! sudo grep -q "host all all 127.0.0.1/32 scram-sha-256" "${hba_conf}"; then
+  if ! sudo grep -Fq "host all all 127.0.0.1/32 scram-sha-256" "${hba_conf}"; then
     echo "host all all 127.0.0.1/32 scram-sha-256" | sudo tee -a "${hba_conf}" >/dev/null
+  fi
+  if ! sudo grep -Fq "host all all ${docker_cidr} scram-sha-256" "${hba_conf}"; then
+    echo "host all all ${docker_cidr} scram-sha-256" | sudo tee -a "${hba_conf}" >/dev/null
   fi
 
   db_user_sql="${DATABASE_USER//\'/\'\'}"
@@ -278,37 +441,17 @@ configure_postgres() {
 
   sudo systemctl enable --now postgresql
   sudo systemctl restart postgresql
+  if sudo ufw status | grep -q "Status: active"; then
+    sudo ufw allow from "${docker_cidr}" to any port 5432 proto tcp >/dev/null 2>&1 || true
+  fi
+  log "PostgreSQL ready: listen_addresses='${listen_addresses}', allowed Docker CIDR='${docker_cidr}'."
 }
 
 configure_redis() {
-  log "Configuring Redis (localhost only + requirepass)..."
-  local redis_conf="/etc/redis/redis.conf"
-  local redis_escaped
-  local existing_requirepass="false"
-  local update_requirepass="true"
-  redis_escaped="$(printf "%s" "${REDIS_PASSWORD}" | sed -e 's/[\\/&]/\\&/g')"
-
-  sudo sed -ri "s/^#?\s*bind\s+.*/bind 127.0.0.1 ::1/" "${redis_conf}"
-  sudo sed -ri "s/^#?\s*protected-mode\s+.*/protected-mode yes/" "${redis_conf}"
-
-  if sudo grep -qE "^#?\s*requirepass\s+" "${redis_conf}"; then
-    existing_requirepass="true"
-    if ! prompt_skip_or_override "Redis requirepass in ${redis_conf}"; then
-      update_requirepass="false"
-      log "Skipping Redis password override by user choice."
-    fi
+  log "Redis runs in Docker for production; ensuring host redis-server service is disabled..."
+  if sudo systemctl list-unit-files --type=service | grep -q "^redis-server\.service"; then
+    sudo systemctl disable --now redis-server || true
   fi
-
-  if [[ "${update_requirepass}" == "true" ]]; then
-    if [[ "${existing_requirepass}" == "true" ]]; then
-      sudo sed -ri "s|^#?\s*requirepass\s+.*|requirepass ${redis_escaped}|" "${redis_conf}"
-    else
-      echo "requirepass ${REDIS_PASSWORD}" | sudo tee -a "${redis_conf}" >/dev/null
-    fi
-  fi
-
-  sudo systemctl enable --now redis-server
-  sudo systemctl restart redis-server
 }
 
 configure_user_and_ssh() {
@@ -389,6 +532,7 @@ configure_firewall_and_fail2ban() {
   log "Configuring UFW and fail2ban..."
   local ufw_active="false"
   local fail2ban_conf_exists="false"
+  local docker_cidr="${POSTGRES_CONTAINER_CIDR:-172.16.0.0/12}"
 
   if sudo ufw status | grep -q "Status: active"; then
     ufw_active="true"
@@ -408,6 +552,8 @@ configure_firewall_and_fail2ban() {
   sudo ufw allow OpenSSH
   sudo ufw allow 80/tcp
   sudo ufw allow 443/tcp
+  # Allow Docker containers to reach host PostgreSQL, without exposing 5432 publicly.
+  sudo ufw allow from "${docker_cidr}" to any port 5432 proto tcp
   sudo ufw --force enable
 
   sudo tee /etc/fail2ban/jail.local >/dev/null <<'EOF'
@@ -693,9 +839,14 @@ update_env_for_production() {
   set_env_var "DATABASE_USER" "${DATABASE_USER}"
   set_env_var "DATABASE_PASSWORD" "${DATABASE_PASSWORD}"
   set_env_var "DATABASE_PASSWORD_URLENC" "${db_pass_urlenc}"
+  set_env_var "DATABASE_HOST" "${DATABASE_HOST}"
+  set_env_var "DATABASE_PORT" "${DATABASE_PORT}"
+  set_env_var "POSTGRES_LISTEN_ADDRESSES" "${POSTGRES_LISTEN_ADDRESSES}"
+  set_env_var "POSTGRES_CONTAINER_CIDR" "${POSTGRES_CONTAINER_CIDR}"
+  set_env_var "AUTO_DETECT_POSTGRES_CONTAINER_CIDR" "${AUTO_DETECT_POSTGRES_CONTAINER_CIDR}"
   set_env_var "DATABASE_MAX_CONNECTIONS" "${DATABASE_MAX_CONNECTIONS}"
   set_env_var "DATABASE_MIN_CONNECTIONS" "${DATABASE_MIN_CONNECTIONS}"
-  set_env_var "DATABASE_URL" "postgresql://${DATABASE_USER}:${db_pass_urlenc}@postgres:5432/${DATABASE_NAME}"
+  set_env_var "DATABASE_URL" "postgresql://${DATABASE_USER}:${db_pass_urlenc}@${DATABASE_HOST}:${DATABASE_PORT}/${DATABASE_NAME}"
 
   set_env_var "REDIS_PASSWORD" "${REDIS_PASSWORD}"
   set_env_var "REDIS_PASSWORD_URLENC" "${redis_pass_urlenc}"
@@ -723,16 +874,50 @@ update_env_for_production() {
   set_env_var "ALERT_CPU_THRESHOLD" "${CPU_THRESHOLD}"
   set_env_var "ALERT_MEM_THRESHOLD" "${MEM_THRESHOLD}"
   set_env_var "ALERT_DISK_THRESHOLD" "${DISK_THRESHOLD}"
+  set_env_var "CARGO_BUILD_JOBS" "${CARGO_BUILD_JOBS}"
+  set_env_var "FRONTEND_BUILD_NODE_OPTIONS" "${FRONTEND_BUILD_NODE_OPTIONS}"
+  set_env_var "COMPOSE_BUILD_PARALLEL_LIMIT" "${COMPOSE_BUILD_PARALLEL_LIMIT}"
+  set_env_var "COMPOSE_BAKE_DISABLED" "${COMPOSE_BAKE_DISABLED}"
 
   set_env_var "MYSQL_ROOT_PASSWORD" "${MYSQL_ROOT_PASSWORD}"
   set_env_var "MYSQL_EXPOSE_PORT" "${MYSQL_EXPOSE_PORT}"
 }
 
+compose_build_prod_service() {
+  local service="$1"
+  shift || true
+  local compose_bake_value="true"
+
+  if [[ "${COMPOSE_BAKE_DISABLED,,}" == "true" ]]; then
+    compose_bake_value="false"
+  fi
+
+  if sudo env \
+    COMPOSE_BAKE="${compose_bake_value}" \
+    COMPOSE_PARALLEL_LIMIT="${COMPOSE_BUILD_PARALLEL_LIMIT}" \
+    docker compose --profile prod build "$@" "${service}"; then
+    return 0
+  fi
+
+  warn "Build failed for '${service}' with current builder settings. Retrying with legacy builder (DOCKER_BUILDKIT=0)."
+  sudo env \
+    COMPOSE_BAKE=false \
+    COMPOSE_PARALLEL_LIMIT=1 \
+    DOCKER_BUILDKIT=0 \
+    docker compose --profile prod build "$@" "${service}"
+}
+
 deploy_compose_stack() {
   log "Deploying docker compose production stack..."
   cd "${REPO_ROOT}"
-  sudo docker compose --profile prod build backend frontend
-  sudo docker compose --profile prod up -d postgres redis backend frontend nginx
+
+  log "Building backend image (CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS})..."
+  compose_build_prod_service backend --build-arg "CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}"
+
+  log "Building frontend image (FRONTEND_BUILD_NODE_OPTIONS=${FRONTEND_BUILD_NODE_OPTIONS})..."
+  compose_build_prod_service frontend --build-arg "FRONTEND_BUILD_NODE_OPTIONS=${FRONTEND_BUILD_NODE_OPTIONS}"
+
+  sudo docker compose --profile prod up -d --no-build --remove-orphans redis backend frontend nginx
   sudo docker compose --profile prod ps
 }
 
@@ -746,9 +931,10 @@ run_drizzle_pull() {
 
   sudo docker run --rm \
     --network "${network_name}" \
+    --add-host "host.docker.internal:host-gateway" \
     -v "${REPO_ROOT}/tour_frontend:/workspace" \
     -w /workspace \
-    -e DATABASE_URL="postgresql://${DATABASE_USER}:$(urlencode "${DATABASE_PASSWORD}")@postgres:5432/${DATABASE_NAME}" \
+    -e DATABASE_URL="postgresql://${DATABASE_USER}:$(urlencode "${DATABASE_PASSWORD}")@${DATABASE_HOST}:${DATABASE_PORT}/${DATABASE_NAME}" \
     oven/bun:1.3 sh -lc "bun install --frozen-lockfile && bun run db:pull" || \
     warn "drizzle pull failed. Verify drizzle config/database reachability."
 }
@@ -776,14 +962,32 @@ EOF
 }
 
 main() {
+  local pre_deploy_postgres_cidr="${POSTGRES_CONTAINER_CIDR}"
+
   require_non_root_with_sudo
   validate_required_env
+  auto_tune_build_resources
+
+  if is_true "${DEPLOY_ONLY}"; then
+    log "DEPLOY_ONLY=${DEPLOY_ONLY}: skipping system bootstrap/hardening steps and running deploy-only flow."
+    update_env_for_production
+    deploy_compose_stack
+    if is_true "${RUN_DRIZZLE_PULL}"; then
+      run_drizzle_pull
+    else
+      log "Skipping drizzle schema pull (RUN_DRIZZLE_PULL=${RUN_DRIZZLE_PULL})."
+    fi
+    print_next_steps
+    return 0
+  fi
 
   log "This script will harden SSH to allow only user '${APP_USER}' and disable root SSH login."
   read -r -p "Continue? [y/N]: " confirm
   [[ "${confirm}" =~ ^[Yy]$ ]] || die "Aborted by user."
 
   install_required_tools
+  resolve_postgres_container_cidr
+  pre_deploy_postgres_cidr="${POSTGRES_CONTAINER_CIDR}"
   configure_postgres
   configure_redis
   configure_user_and_ssh
@@ -794,7 +998,12 @@ main() {
   configure_alerting_jobs
   update_env_for_production
   deploy_compose_stack
-  run_drizzle_pull
+  tighten_postgres_network_access_after_deploy "${pre_deploy_postgres_cidr}"
+  if is_true "${RUN_DRIZZLE_PULL}"; then
+    run_drizzle_pull
+  else
+    log "Skipping drizzle schema pull (RUN_DRIZZLE_PULL=${RUN_DRIZZLE_PULL})."
+  fi
   print_next_steps
 }
 

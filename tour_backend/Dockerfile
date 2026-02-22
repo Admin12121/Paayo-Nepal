@@ -28,6 +28,9 @@ CMD ["cargo", "run"]
 FROM rust:1-bookworm AS builder
 
 WORKDIR /app
+ARG CARGO_BUILD_JOBS=2
+ENV CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}
+ENV CARGO_INCREMENTAL=0
 
 # Install build dependencies (nasm required by rav1e/AVIF encoder)
 RUN apt-get update && apt-get install -y \
