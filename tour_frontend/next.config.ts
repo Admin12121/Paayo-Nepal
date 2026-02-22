@@ -168,6 +168,9 @@ const nextConfig: NextConfig = {
   // take priority automatically.
   // -------------------------------------------------------------------------
   async rewrites() {
+    const isDockerEnv = process.env.DOCKER_ENV === "true";
+    const isProduction = process.env.NODE_ENV === "production";
+
     // Allow explicit opt-out when an external reverse-proxy is guaranteed.
     // Keeping rewrites enabled by default avoids localhost `/api/*` 404s
     // when Next.js is accessed directly (without nginx in front).
@@ -176,11 +179,15 @@ const nextConfig: NextConfig = {
     // Rewriting `/api/*` inside Next in that mode can hijack `/api/auth/*`
     // flows and cause incorrect upstream behavior.
     // Resolve backend origin for rewrites.
+    const defaultBackendBase =
+      isDockerEnv || isProduction
+        ? "http://backend:8080"
+        : "http://localhost:8080";
     const backendBase =
       process.env.BACKEND_URL ||
       (process.env.INTERNAL_API_URL
         ? process.env.INTERNAL_API_URL.replace(/\/api\/?$/, "")
-        : "http://localhost:8080");
+        : defaultBackendBase);
 
     const rewrites = [
       // Static uploads → Rust backend
@@ -192,10 +199,7 @@ const nextConfig: NextConfig = {
 
     // In Docker mode (or explicit opt-out), keep only uploads rewrite.
     // This protects /api/auth/* routing while still fixing image loads.
-    if (
-      process.env.DISABLE_DEV_API_REWRITES === "true" ||
-      process.env.DOCKER_ENV === "true"
-    ) {
+    if (process.env.DISABLE_DEV_API_REWRITES === "true" || isDockerEnv || isProduction) {
       return rewrites;
     }
 

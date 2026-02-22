@@ -21,6 +21,10 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 ENV_FILE="${ENV_FILE:-${REPO_ROOT}/.env}"
+DEFAULT_COMPOSE_PROJECT_NAME="$(basename "${REPO_ROOT}" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9_-' '-')"
+DEFAULT_COMPOSE_PROJECT_NAME="${DEFAULT_COMPOSE_PROJECT_NAME#-}"
+DEFAULT_COMPOSE_PROJECT_NAME="${DEFAULT_COMPOSE_PROJECT_NAME%-}"
+DEFAULT_COMPOSE_PROJECT_NAME="${DEFAULT_COMPOSE_PROJECT_NAME:-tourism}"
 
 # Load .env safely (without shell execution). Supports KEY=value and
 # single/double-quoted values.
@@ -105,6 +109,7 @@ SMTP_FROM="${SMTP_FROM:-${ALERT_EMAIL}}"
 SMTP_REPLY_TO="${SMTP_REPLY_TO:-${ALERT_EMAIL}}"
 SMTP_TLS="${SMTP_TLS:-on}"
 SMTP_STARTTLS="${SMTP_STARTTLS:-on}"
+SMTP_CONFIGURED="false"
 
 if [[ "${SMTP_HOST,,}" == "google.com" ]]; then
   printf "[%s] WARN: %s\n" "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
@@ -128,7 +133,13 @@ SKIP_APT_UPGRADE="${SKIP_APT_UPGRADE:-false}"
 SKIP_APT_INSTALL="${SKIP_APT_INSTALL:-false}"
 RUN_DRIZZLE_PULL="${RUN_DRIZZLE_PULL:-true}"
 
-COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-tourism}"
+COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-${DEFAULT_COMPOSE_PROJECT_NAME}}"
+if [[ "${COMPOSE_PROJECT_NAME}" == "tourism" && "${DEFAULT_COMPOSE_PROJECT_NAME}" != "tourism" ]]; then
+  printf "[%s] WARN: %s\n" "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+    "Legacy COMPOSE_PROJECT_NAME='tourism' detected. Using '${DEFAULT_COMPOSE_PROJECT_NAME}' for this repo." >&2
+  COMPOSE_PROJECT_NAME="${DEFAULT_COMPOSE_PROJECT_NAME}"
+fi
+COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME,,}"
 export COMPOSE_PROJECT_NAME
 
 require_env_var() {
@@ -187,6 +198,10 @@ is_true() {
     1|true|yes|y|on) return 0 ;;
     *) return 1 ;;
   esac
+}
+
+sudo_compose() {
+  sudo docker compose --project-name "${COMPOSE_PROJECT_NAME}" "$@"
 }
 
 detect_compose_network_subnet() {
@@ -598,15 +613,24 @@ configure_msmtp_if_requested() {
   echo "root: ${ALERT_EMAIL}" | sudo tee /etc/aliases >/dev/null
   sudo newaliases || true
 
+  if sudo test -s /etc/msmtprc; then
+    SMTP_CONFIGURED="true"
+  fi
+
   if [[ -z "${SMTP_HOST}" || -z "${SMTP_USER}" || -z "${SMTP_PASS}" ]]; then
-    warn "SMTP relay vars not set (SMTP_HOST/SMTP_USER/SMTP_PASS)."
-    warn "Alert emails may not be delivered off-host until SMTP is configured."
+    if [[ "${SMTP_CONFIGURED}" == "true" ]]; then
+      log "Existing msmtp relay config detected at /etc/msmtprc."
+    else
+      warn "SMTP relay vars not set (SMTP_HOST/SMTP_USER/SMTP_PASS)."
+      warn "Alert emails may not be delivered off-host until SMTP is configured."
+    fi
     return 0
   fi
 
   if sudo test -f /etc/msmtprc; then
     if ! prompt_skip_or_override "msmtp relay config (/etc/msmtprc)"; then
       log "Skipping msmtp relay override by user choice."
+      SMTP_CONFIGURED="true"
       return 0
     fi
   fi
@@ -629,6 +653,7 @@ EOF
 
   sudo chmod 600 /etc/msmtprc
   sudo chown root:root /etc/msmtprc
+  SMTP_CONFIGURED="true"
 }
 
 ensure_tls_certs() {
@@ -769,7 +794,7 @@ bundle="${tmp_dir}/logs-$(hostname -s)-$(date +%Y-%m).tar.gz"
   echo
   echo "=== docker compose ps ==="
   cd "${REPO_ROOT}"
-  docker compose --profile prod ps || true
+  docker compose --project-name "${COMPOSE_PROJECT_NAME}" --profile prod ps || true
 } > "${report}"
 
 tar -czf "${bundle}" \
@@ -821,6 +846,12 @@ update_env_for_production() {
   local db_pass_urlenc redis_pass_urlenc
   db_pass_urlenc="$(urlencode "${DATABASE_PASSWORD}")"
   redis_pass_urlenc="$(urlencode "${REDIS_PASSWORD}")"
+
+  # Production uses host PostgreSQL (not a postgres container in the prod profile).
+  if [[ "${DATABASE_HOST}" == "postgres" || "${DATABASE_HOST}" == "postgres-local" ]]; then
+    warn "DATABASE_HOST='${DATABASE_HOST}' points to a container hostname. Using host.docker.internal for host PostgreSQL."
+    DATABASE_HOST="host.docker.internal"
+  fi
 
   local app_origin="https://${APP_DOMAIN}"
   local cors_origins="https://${APP_DOMAIN},https://www.${APP_DOMAIN}"
@@ -878,6 +909,7 @@ update_env_for_production() {
   set_env_var "FRONTEND_BUILD_NODE_OPTIONS" "${FRONTEND_BUILD_NODE_OPTIONS}"
   set_env_var "COMPOSE_BUILD_PARALLEL_LIMIT" "${COMPOSE_BUILD_PARALLEL_LIMIT}"
   set_env_var "COMPOSE_BAKE_DISABLED" "${COMPOSE_BAKE_DISABLED}"
+  set_env_var "COMPOSE_PROJECT_NAME" "${COMPOSE_PROJECT_NAME}"
 
   set_env_var "MYSQL_ROOT_PASSWORD" "${MYSQL_ROOT_PASSWORD}"
   set_env_var "MYSQL_EXPOSE_PORT" "${MYSQL_EXPOSE_PORT}"
@@ -895,7 +927,8 @@ compose_build_prod_service() {
   if sudo env \
     COMPOSE_BAKE="${compose_bake_value}" \
     COMPOSE_PARALLEL_LIMIT="${COMPOSE_BUILD_PARALLEL_LIMIT}" \
-    docker compose --profile prod build "$@" "${service}"; then
+    COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME}" \
+    docker compose --project-name "${COMPOSE_PROJECT_NAME}" --profile prod build "$@" "${service}"; then
     return 0
   fi
 
@@ -903,8 +936,9 @@ compose_build_prod_service() {
   sudo env \
     COMPOSE_BAKE=false \
     COMPOSE_PARALLEL_LIMIT=1 \
+    COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME}" \
     DOCKER_BUILDKIT=0 \
-    docker compose --profile prod build "$@" "${service}"
+    docker compose --project-name "${COMPOSE_PROJECT_NAME}" --profile prod build "$@" "${service}"
 }
 
 deploy_compose_stack() {
@@ -917,8 +951,8 @@ deploy_compose_stack() {
   log "Building frontend image (FRONTEND_BUILD_NODE_OPTIONS=${FRONTEND_BUILD_NODE_OPTIONS})..."
   compose_build_prod_service frontend --build-arg "FRONTEND_BUILD_NODE_OPTIONS=${FRONTEND_BUILD_NODE_OPTIONS}"
 
-  sudo docker compose --profile prod up -d --no-build --remove-orphans redis backend frontend nginx
-  sudo docker compose --profile prod ps
+  sudo_compose --profile prod up -d --no-build --remove-orphans redis backend frontend nginx
+  sudo_compose --profile prod ps
 }
 
 run_drizzle_pull() {
@@ -940,6 +974,13 @@ run_drizzle_pull() {
 }
 
 print_next_steps() {
+  local smtp_instruction
+  if [[ "${SMTP_CONFIGURED}" == "true" ]]; then
+    smtp_instruction="4) SMTP relay is configured."
+  else
+    smtp_instruction="4) SMTP (recommended): set SMTP_HOST/SMTP_USER/SMTP_PASS and re-run script to enable reliable external email alerts."
+  fi
+
   cat <<EOF
 
 Completed production bootstrap/deploy.
@@ -952,11 +993,10 @@ Important:
    ssh ${APP_USER}@${APP_DOMAIN}
 
 3) Check app and services:
-   sudo docker compose --profile prod ps
-   sudo docker compose --profile prod logs -f nginx backend frontend
+   sudo docker compose --project-name ${COMPOSE_PROJECT_NAME} --profile prod ps
+   sudo docker compose --project-name ${COMPOSE_PROJECT_NAME} --profile prod logs -f nginx backend frontend
 
-4) SMTP (recommended): set SMTP_HOST/SMTP_USER/SMTP_PASS and re-run script
-   to enable reliable external email alerts.
+${smtp_instruction}
 
 EOF
 }
